@@ -1,0 +1,10 @@
+version: "2"
+domain: io
+repo: primehub-controller
+resources:
+- group: primehub
+  version: v1alpha1
+  kind: ImageSpec
+- group: primehub
+  version: v1alpha1
+  kind: ImageSpecJob

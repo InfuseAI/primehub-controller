@@ -1,0 +1,7 @@
+apiVersion: primehub.io/v1alpha1
+kind: ImageSpecJob
+metadata:
+  name: imagespecjob-sample
+spec:
+  # Add fields here
+  foo: bar
