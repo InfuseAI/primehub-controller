@@ -52,10 +52,6 @@ spec:
                   items:
                     type: string
                   type: array
-              required:
-              - apt
-              - conda
-              - pip
               type: object
             pullSecret:
               type: string
