@@ -57,14 +57,20 @@ spec:
               - conda
               - pip
               type: object
+            pullSecret:
+              type: string
             pushSecret:
+              type: string
+            repoPrefix:
               type: string
             targetImage:
               type: string
           required:
           - baseImage
           - packages
+          - pullSecret
           - pushSecret
+          - repoPrefix
           - targetImage
           type: object
         status:

@@ -32,8 +32,8 @@ type ImageSpecSpecPackages struct {
 type ImageSpecSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	BaseImage string `json:"baseImage"`
-	//PullSecret string `json:"pullSecret"`
+	BaseImage  string `json:"baseImage"`
+	PullSecret string `json:"pullSecret"`
 
 	Packages ImageSpecSpecPackages `json:"packages"`
 }

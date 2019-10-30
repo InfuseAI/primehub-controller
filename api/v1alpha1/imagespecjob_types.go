@@ -26,12 +26,13 @@ import (
 type ImageSpecJobSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	BaseImage string `json:"baseImage"`
-	//PullSecret string `json:"pullSecret"`
+	BaseImage  string `json:"baseImage"`
+	PullSecret string `json:"pullSecret"`
 
 	Packages    ImageSpecSpecPackages `json:"packages"`
 	TargetImage string                `json:"targetImage"`
 	PushSecret  string                `json:"pushSecret"`
+	RepoPrefix  string                `json:"repoPrefix"`
 }
 
 // ImageSpecJobStatus defines the observed state of ImageSpecJob
