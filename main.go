@@ -82,6 +82,13 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "ImageSpecJob")
 		os.Exit(1)
 	}
+	if err = (&controllers.PhJobReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("PhJob"),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "PhJob")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	setupLog.Info("starting manager")

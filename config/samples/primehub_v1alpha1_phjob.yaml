@@ -1,0 +1,13 @@
+apiVersion: primehub.io/v1alpha1
+kind: PhJob
+metadata:
+  name: phjob-sample
+spec:
+  # Add fields here
+  foo: bar
+  command: []
+  group: "test"
+  user: "test"
+  jobType: "Job"
+  instanceType: "test"
+  image: "test"
