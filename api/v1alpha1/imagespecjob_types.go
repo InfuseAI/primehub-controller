@@ -27,7 +27,7 @@ type ImageSpecJobSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 	BaseImage  string `json:"baseImage"`
-	PullSecret string `json:"pullSecret"`
+	PullSecret string `json:"pullSecret,omitempty"`
 
 	Packages    ImageSpecSpecPackages `json:"packages"`
 	TargetImage string                `json:"targetImage"`

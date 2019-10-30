@@ -64,7 +64,6 @@ spec:
           required:
           - baseImage
           - packages
-          - pullSecret
           - pushSecret
           - repoPrefix
           - targetImage

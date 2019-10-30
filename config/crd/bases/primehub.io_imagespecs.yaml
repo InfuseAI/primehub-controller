@@ -58,7 +58,6 @@ spec:
           required:
           - baseImage
           - packages
-          - pullSecret
           type: object
         status:
           description: ImageSpecStatus defines the observed state of ImageSpec
