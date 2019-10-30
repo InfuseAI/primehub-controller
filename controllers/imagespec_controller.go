@@ -53,17 +53,17 @@ func (r *ImageSpecReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, nil
 	}
 
-	revision := computeHash(imageSpec)
-	repoPrefix := os.Getenv("BUILD_IMAGE_REPO_PREFIX")
+	hash := computeHash(imageSpec)
 
-	log.Info("Computed hash:", "hash", revision)
+	log.Info("Computed hash:", "hash", hash)
 
 	imageSpecJob := primehubv1alpha1.ImageSpecJob{}
-	err := r.Get(ctx, client.ObjectKey{Namespace: imageSpec.Namespace, Name: imageSpec.ObjectMeta.Name + "-" + revision}, &imageSpecJob)
+	name := imageSpec.ObjectMeta.Name + "-" + hash
+	err := r.Get(ctx, client.ObjectKey{Namespace: imageSpec.Namespace, Name: name}, &imageSpecJob)
 	if apierrors.IsNotFound(err) {
 		log.Info("could not find existing ImageSpecJob for ImageSpec, creating one...")
 
-		imageSpecJob = *buildImageSpecJob(imageSpec, revision, repoPrefix)
+		imageSpecJob = *buildImageSpecJob(imageSpec, hash)
 		if err := ctrl.SetControllerReference(&imageSpec, &imageSpecJob, r.Scheme); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -88,7 +88,8 @@ func (r *ImageSpecReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	imageSpecClone.Status.JobName = imageSpecJob.Name
 	imageSpecClone.Status.Phase = string(imageSpecJob.Status.Phase)
 	if imageSpecClone.Status.Phase == "Succeeded" {
-		imageSpecClone.Status.Image = fmt.Sprintf("%s/%s:%s", repoPrefix, imageSpec.ObjectMeta.Name, revision)
+		image := imageSpecJob.Spec.RepoPrefix + "/" + imageSpecJob.Spec.TargetImage
+		imageSpecClone.Status.Image = image
 	}
 
 	if r.Status().Update(ctx, imageSpecClone); err != nil {
@@ -125,25 +126,21 @@ func (r *ImageSpecReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func buildImageSpecJob(imageSpec primehubv1alpha1.ImageSpec, hash string, repoPrefix string) *primehubv1alpha1.ImageSpecJob {
+func buildImageSpecJob(imageSpec primehubv1alpha1.ImageSpec, hash string) *primehubv1alpha1.ImageSpecJob {
 	imageSpecJob := primehubv1alpha1.ImageSpecJob{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      imageSpec.ObjectMeta.Name + "-" + hash,
-			Namespace: imageSpec.Namespace,
-			Annotations: map[string]string{
-				"imagespecs.primehub.io/hash": hash,
-			},
-			Labels: map[string]string{
-				"imagespecs.primehub.io/name": imageSpec.ObjectMeta.Name,
-			},
+			Name:        imageSpec.ObjectMeta.Name + "-" + hash,
+			Namespace:   imageSpec.Namespace,
+			Annotations: map[string]string{"imagespecs.primehub.io/hash": hash},
+			Labels:      map[string]string{"imagespecs.primehub.io/name": imageSpec.ObjectMeta.Name},
 		},
 		Spec: primehubv1alpha1.ImageSpecJobSpec{
 			BaseImage:   imageSpec.Spec.BaseImage,
 			PullSecret:  imageSpec.Spec.PullSecret,
 			Packages:    imageSpec.Spec.Packages,
-			TargetImage: fmt.Sprintf("%s:%s", imageSpec.ObjectMeta.Name, hash),
+			TargetImage: imageSpec.ObjectMeta.Name + ":" + hash,
 			PushSecret:  os.Getenv("BUILD_IMAGE_SECRET_NAME"),
-			RepoPrefix:  repoPrefix,
+			RepoPrefix:  os.Getenv("BUILD_IMAGE_REPO_PREFIX"),
 		},
 	}
 

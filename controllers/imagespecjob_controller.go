@@ -18,7 +18,6 @@ package controllers
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"text/template"
 
 	"github.com/go-logr/logr"
@@ -57,6 +56,15 @@ func (r *ImageSpecJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	err := r.Client.Get(ctx, client.ObjectKey{Namespace: imageSpecJob.Namespace, Name: imageSpecJob.ObjectMeta.Name}, &pod)
 	if apierrors.IsNotFound(err) {
 		log.Info("could not find existing Pod for ImageSpecJob, creating one...")
+
+		if imageSpecJob.Spec.PullSecret != "" {
+			pullSecret := corev1.Secret{}
+			if err := r.Client.Get(ctx, client.ObjectKey{Namespace: imageSpecJob.Namespace, Name: imageSpecJob.Spec.PullSecret}, &pullSecret); err != nil {
+				log.Error(err, "failed to get pull secret: "+imageSpecJob.Spec.PullSecret)
+				return ctrl.Result{}, err
+			}
+
+		}
 
 		dockerfile := generateDockerfile(imageSpecJob)
 		pod = *buildPod(imageSpecJob, dockerfile)
@@ -127,8 +135,9 @@ func (r *ImageSpecJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func generateDockerfile(imageSpecJob primehubv1alpha1.ImageSpecJob) string {
 	dockerfileTmpl := `FROM {{ .BaseImage }}
+
 USER root
-{{- if .Packages.Apt }}
+{{ if .Packages.Apt }}
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       {{- range $index, $element := .Packages.Apt }}
@@ -136,23 +145,23 @@ RUN apt-get update && \
       {{- end }}
       && \
     apt-get purge && apt-get clean
-{{- end }}
+{{ end }}
 
-{{- if .Packages.Pip }}
+{{ if .Packages.Pip }}
 RUN pip install --no-cache-dir
       {{- range $index, $element := .Packages.Pip }}
       {{- printf " %s" $element }}
       {{- end }}
-{{- end }}
+{{ end }}
 
-{{- if .Packages.Conda }}
+{{ if .Packages.Conda }}
 RUN conda install --quiet --yes \
       {{- range $index, $element := .Packages.Conda }}
       {{ $element }} \
       {{- end }}
       && \
     conda clean --all -f -y
-{{- end }}`
+{{ end }}`
 
 	var res bytes.Buffer
 	tmpl, _ := template.New("dockerfile").Parse(dockerfileTmpl)
@@ -162,7 +171,10 @@ RUN conda install --quiet --yes \
 }
 
 func buildPod(imageSpecJob primehubv1alpha1.ImageSpecJob, dockerfile string) *corev1.Pod {
+	containerName := "build-and-push"
+	containerImage := "quay.io/buildah/stable:v1.11.3"
 	privileged := true
+
 	pod := corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        imageSpecJob.ObjectMeta.Name,
@@ -173,8 +185,8 @@ func buildPod(imageSpecJob primehubv1alpha1.ImageSpecJob, dockerfile string) *co
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{
 				{
-					Name:    "build-and-push",
-					Image:   "quay.io/buildah/stable:v1.11.3",
+					Name:    containerName,
+					Image:   containerImage,
 					Command: []string{"/bin/sh", "/scripts/build-and-push.sh"},
 					Env: []corev1.EnvVar{
 						{
@@ -187,7 +199,7 @@ func buildPod(imageSpecJob primehubv1alpha1.ImageSpecJob, dockerfile string) *co
 						},
 						{
 							Name:  "TARGET_IMAGE",
-							Value: fmt.Sprintf("%s/%s", imageSpecJob.Spec.RepoPrefix, imageSpecJob.Spec.TargetImage),
+							Value: imageSpecJob.Spec.RepoPrefix + "/" + imageSpecJob.Spec.TargetImage,
 						},
 					},
 					VolumeMounts: []corev1.VolumeMount{
@@ -199,11 +211,6 @@ func buildPod(imageSpecJob primehubv1alpha1.ImageSpecJob, dockerfile string) *co
 						{
 							Name:      "push-secret",
 							MountPath: "/push-secret",
-							ReadOnly:  true,
-						},
-						{
-							Name:      "pull-secret",
-							MountPath: "/pull-secret",
 							ReadOnly:  true,
 						},
 					},
@@ -232,16 +239,24 @@ func buildPod(imageSpecJob primehubv1alpha1.ImageSpecJob, dockerfile string) *co
 						},
 					},
 				},
-				{
-					Name: "pull-secret",
-					VolumeSource: corev1.VolumeSource{
-						Secret: &corev1.SecretVolumeSource{
-							SecretName: imageSpecJob.Spec.PullSecret,
-						},
-					},
-				},
 			},
 		},
+	}
+
+	if imageSpecJob.Spec.PullSecret != "" {
+		pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
+			Name: "pull-secret",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: imageSpecJob.Spec.PullSecret,
+				},
+			},
+		})
+		pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts, corev1.VolumeMount{
+			Name:      "pull-secret",
+			MountPath: "/pull-secret",
+			ReadOnly:  true,
+		})
 	}
 
 	return &pod
