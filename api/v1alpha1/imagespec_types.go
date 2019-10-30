@@ -23,9 +23,9 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 type ImageSpecSpecPackages struct {
-	Apt   []string `json:"apt"`
-	Pip   []string `json:"pip"`
-	Conda []string `json:"conda"`
+	Apt   []string `json:"apt,omitempty"`
+	Pip   []string `json:"pip,omitempty"`
+	Conda []string `json:"conda,omitempty"`
 }
 
 // ImageSpecSpec defines the desired state of ImageSpec
