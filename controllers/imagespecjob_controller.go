@@ -16,7 +16,10 @@ limitations under the License.
 package controllers
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"text/template"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -57,6 +60,9 @@ func (r *ImageSpecJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 
 		dockerfile := generateDockerfile(imageSpecJob)
 		pod = *buildPod(imageSpecJob, dockerfile)
+		if err := ctrl.SetControllerReference(&imageSpecJob, &pod, r.Scheme); err != nil {
+			return ctrl.Result{}, err
+		}
 		if err := r.Client.Create(ctx, &pod); err != nil {
 			log.Error(err, "failed to create Pod resource")
 			return ctrl.Result{}, err
@@ -120,19 +126,49 @@ func (r *ImageSpecJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func generateDockerfile(imageSpecJob primehubv1alpha1.ImageSpecJob) string {
-	dockerfile := "FROM ubuntu:bionic\nRUN echo hello"
-	return dockerfile
+	dockerfileTmpl := `FROM {{ .BaseImage }}
+USER root
+{{- if .Packages.Apt }}
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      {{- range $index, $element := .Packages.Apt }}
+      {{ $element }} \
+      {{- end }}
+      && \
+    apt-get purge && apt-get clean
+{{- end }}
+
+{{- if .Packages.Pip }}
+RUN pip install --no-cache-dir
+      {{- range $index, $element := .Packages.Pip }}
+      {{- printf " %s" $element }}
+      {{- end }}
+{{- end }}
+
+{{- if .Packages.Conda }}
+RUN conda install --quiet --yes \
+      {{- range $index, $element := .Packages.Conda }}
+      {{ $element }} \
+      {{- end }}
+      && \
+    conda clean --all -f -y
+{{- end }}`
+
+	var res bytes.Buffer
+	tmpl, _ := template.New("dockerfile").Parse(dockerfileTmpl)
+	_ = tmpl.Execute(&res, imageSpecJob.Spec)
+
+	return res.String()
 }
 
 func buildPod(imageSpecJob primehubv1alpha1.ImageSpecJob, dockerfile string) *corev1.Pod {
 	privileged := true
 	pod := corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            imageSpecJob.ObjectMeta.Name,
-			Namespace:       imageSpecJob.Namespace,
-			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(&imageSpecJob, primehubv1alpha1.GroupVersion.WithKind("ImageSpecJob"))},
-			Annotations:     imageSpecJob.ObjectMeta.Annotations,
-			Labels:          imageSpecJob.ObjectMeta.Labels,
+			Name:        imageSpecJob.ObjectMeta.Name,
+			Namespace:   imageSpecJob.Namespace,
+			Annotations: imageSpecJob.ObjectMeta.Annotations,
+			Labels:      imageSpecJob.ObjectMeta.Labels,
 		},
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{
@@ -146,12 +182,12 @@ func buildPod(imageSpecJob primehubv1alpha1.ImageSpecJob, dockerfile string) *co
 							Value: dockerfile,
 						},
 						{
-							Name:  "IMAGE_NAME",
-							Value: imageSpecJob.ObjectMeta.Labels["imagespecs.primehub.io/name"],
+							Name:  "BASE_IMAGE",
+							Value: imageSpecJob.Spec.BaseImage,
 						},
 						{
-							Name:  "IMAGE_TAG",
-							Value: imageSpecJob.ObjectMeta.Annotations["imagespecs.primehub.io/hash"],
+							Name:  "TARGET_IMAGE",
+							Value: fmt.Sprintf("%s/%s", imageSpecJob.Spec.RepoPrefix, imageSpecJob.Spec.TargetImage),
 						},
 					},
 					VolumeMounts: []corev1.VolumeMount{
@@ -161,8 +197,13 @@ func buildPod(imageSpecJob primehubv1alpha1.ImageSpecJob, dockerfile string) *co
 							ReadOnly:  true,
 						},
 						{
-							Name:      "registry",
-							MountPath: "/var/run/secrets/registry",
+							Name:      "push-secret",
+							MountPath: "/push-secret",
+							ReadOnly:  true,
+						},
+						{
+							Name:      "pull-secret",
+							MountPath: "/pull-secret",
 							ReadOnly:  true,
 						},
 					},
@@ -184,10 +225,18 @@ func buildPod(imageSpecJob primehubv1alpha1.ImageSpecJob, dockerfile string) *co
 					},
 				},
 				{
-					Name: "registry",
+					Name: "push-secret",
 					VolumeSource: corev1.VolumeSource{
 						Secret: &corev1.SecretVolumeSource{
 							SecretName: imageSpecJob.Spec.PushSecret,
+						},
+					},
+				},
+				{
+					Name: "pull-secret",
+					VolumeSource: corev1.VolumeSource{
+						Secret: &corev1.SecretVolumeSource{
+							SecretName: imageSpecJob.Spec.PullSecret,
 						},
 					},
 				},

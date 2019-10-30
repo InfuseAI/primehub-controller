@@ -28,7 +28,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	primehubv1alpha1 "primehub-controller/api/v1alpha1"
@@ -54,14 +53,8 @@ func (r *ImageSpecReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, nil
 	}
 
-	var pushSecret corev1.Secret
-	if err := r.Get(ctx, client.ObjectKey{Namespace: imageSpec.Namespace, Name: os.Getenv("BUILD_IMAGE_SECRET_NAME")}, &pushSecret); err != nil {
-		log.Error(err, "unable to fetch Secret")
-		return ctrl.Result{}, nil
-	}
-
 	revision := computeHash(imageSpec)
-	repoPrefix := strings.TrimSuffix(string(pushSecret.Data["repo_prefix"]), "\n")
+	repoPrefix := os.Getenv("BUILD_IMAGE_REPO_PREFIX")
 
 	log.Info("Computed hash:", "hash", revision)
 
@@ -71,6 +64,10 @@ func (r *ImageSpecReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		log.Info("could not find existing ImageSpecJob for ImageSpec, creating one...")
 
 		imageSpecJob = *buildImageSpecJob(imageSpec, revision, repoPrefix)
+		if err := ctrl.SetControllerReference(&imageSpec, &imageSpecJob, r.Scheme); err != nil {
+			return ctrl.Result{}, err
+		}
+
 		if err := r.Client.Create(ctx, &imageSpecJob); err != nil {
 			log.Error(err, "failed to create ImageSpecJob resource")
 			return ctrl.Result{}, err
@@ -131,9 +128,8 @@ func (r *ImageSpecReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func buildImageSpecJob(imageSpec primehubv1alpha1.ImageSpec, hash string, repoPrefix string) *primehubv1alpha1.ImageSpecJob {
 	imageSpecJob := primehubv1alpha1.ImageSpecJob{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            imageSpec.ObjectMeta.Name + "-" + hash,
-			Namespace:       imageSpec.Namespace,
-			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(&imageSpec, primehubv1alpha1.GroupVersion.WithKind("ImageSpec"))},
+			Name:      imageSpec.ObjectMeta.Name + "-" + hash,
+			Namespace: imageSpec.Namespace,
 			Annotations: map[string]string{
 				"imagespecs.primehub.io/hash": hash,
 			},
@@ -143,9 +139,11 @@ func buildImageSpecJob(imageSpec primehubv1alpha1.ImageSpec, hash string, repoPr
 		},
 		Spec: primehubv1alpha1.ImageSpecJobSpec{
 			BaseImage:   imageSpec.Spec.BaseImage,
+			PullSecret:  imageSpec.Spec.PullSecret,
 			Packages:    imageSpec.Spec.Packages,
-			TargetImage: fmt.Sprintf("%s/%s:%s", repoPrefix, imageSpec.ObjectMeta.Name, hash),
+			TargetImage: fmt.Sprintf("%s:%s", imageSpec.ObjectMeta.Name, hash),
 			PushSecret:  os.Getenv("BUILD_IMAGE_SECRET_NAME"),
+			RepoPrefix:  repoPrefix,
 		},
 	}
 
