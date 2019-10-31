@@ -19,6 +19,7 @@ import (
 	"context"
 
 	"github.com/go-logr/logr"
+	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -33,17 +34,17 @@ import (
 // PhJobReconciler reconciles a PhJob object
 type PhJobReconciler struct {
 	client.Client
-	Log logr.Logger
+	Log    logr.Logger
+	Scheme *runtime.Scheme
 }
 
-func buildJob(phJob primehubv1alpha1.PhJob) *batchv1.Job {
-	job := batchv1.Job{
+func (r *PhJobReconciler) buildJob(phJob *primehubv1alpha1.PhJob) (*batchv1.Job, error) {
+	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            phJob.ObjectMeta.Name,
-			Namespace:       phJob.Namespace,
-			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(&phJob, primehubv1alpha1.GroupVersion.WithKind("PhJob"))},
-			Annotations:     phJob.ObjectMeta.Annotations,
-			Labels:          phJob.ObjectMeta.Labels,
+			Name:        phJob.ObjectMeta.Name,
+			Namespace:   phJob.Namespace,
+			Annotations: phJob.ObjectMeta.Annotations,
+			Labels:      phJob.ObjectMeta.Labels,
 		},
 		Spec: batchv1.JobSpec{
 			Template: corev1.PodTemplateSpec{
@@ -52,7 +53,7 @@ func buildJob(phJob primehubv1alpha1.PhJob) *batchv1.Job {
 						{
 							Name:    phJob.ObjectMeta.Name,
 							Image:   "busybox",
-							Command: []string{"sleep", "60"},
+							Command: []string{"sleep", "10"},
 						},
 					},
 					RestartPolicy: "Never",
@@ -61,7 +62,12 @@ func buildJob(phJob primehubv1alpha1.PhJob) *batchv1.Job {
 		},
 	}
 
-	return &job
+	if err := ctrl.SetControllerReference(phJob, job, r.Scheme); err != nil {
+		r.Log.WithValues("phjob", phJob.Namespace).Error(err, "failed to set job's controller reference to phjob")
+		return nil, err
+	}
+
+	return job, nil
 }
 
 // +kubebuilder:rbac:groups=primehub.io,resources=phjobs,verbs=get;list;watch;create;update;patch;delete
@@ -72,26 +78,60 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
 	log := r.Log.WithValues("phjob", req.NamespacedName)
 
-	var phJob primehubv1alpha1.PhJob
-	if err := r.Get(ctx, req.NamespacedName, &phJob); err != nil {
+	log.Info("start Reconcile")
+
+	phJob := &primehubv1alpha1.PhJob{}
+	if err := r.Get(ctx, req.NamespacedName, phJob); err != nil {
 		log.Error(err, "unable to fetch PhJob")
 		return ctrl.Result{}, nil
 	}
 
 	if phJob.Spec.JobType == "Job" {
-		job := batchv1.Job{}
-		err := r.Client.Get(ctx, client.ObjectKey{Namespace: phJob.Namespace, Name: phJob.ObjectMeta.Name}, &job)
+		job := &batchv1.Job{}
+		err := r.Client.Get(ctx, client.ObjectKey{Namespace: phJob.Namespace, Name: phJob.ObjectMeta.Name}, job)
 		if apierrors.IsNotFound(err) {
+			// If not yet create job and status phase is not ready, status phase is pending
+			if phJob.Status.Phase != primehubv1alpha1.JobReady && phJob.Status.Phase != primehubv1alpha1.JobPending {
+				phJob.Status.Phase = primehubv1alpha1.JobPending
+				if err := r.Status().Update(ctx, phJob); err != nil {
+					log.Error(err, "failed to update PhJob status")
+					return ctrl.Result{}, err
+				}
+				log.Info("updated PhJob status")
+			}
+
+			// If status phase is ready
 			log.Info("could not find existing Job for PhJob, creating one...")
 
-			job = *buildJob(phJob)
-			if err := r.Client.Create(ctx, &job); err != nil {
+			job, err := r.buildJob(phJob)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			if err := r.Client.Create(ctx, job); err != nil {
 				log.Error(err, "failed to create Job resource")
 				return ctrl.Result{}, err
 			}
 
 			log.Info("created Job resource for PhJob")
+
 			return ctrl.Result{}, nil
+		} else {
+			log.Info("found Job resource for PhJob")
+			_, finishedType := isJobFinished(job)
+			switch finishedType {
+			case "": // ongoing
+				phJob.Status.Phase = primehubv1alpha1.JobRunning
+			case batchv1.JobFailed:
+				phJob.Status.Phase = primehubv1alpha1.JobFailed
+			case batchv1.JobComplete:
+				phJob.Status.Phase = primehubv1alpha1.JobSucceeded
+			}
+
+			if err := r.Status().Update(ctx, phJob); err != nil {
+				log.Error(err, "failed to update PhJob status")
+				return ctrl.Result{}, err
+			}
+			log.Info("updated PhJob status")
 		}
 	} else {
 		return ctrl.Result{}, nil
@@ -103,5 +143,16 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 func (r *PhJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&primehubv1alpha1.PhJob{}).
+		Owns(&batchv1.Job{}).
 		Complete(r)
+}
+
+func isJobFinished(job *batchv1.Job) (bool, batchv1.JobConditionType) {
+	for _, c := range job.Status.Conditions {
+		if (c.Type == batchv1.JobComplete || c.Type == batchv1.JobFailed) && c.Status == corev1.ConditionTrue {
+			return true, c.Type
+		}
+	}
+
+	return false, ""
 }

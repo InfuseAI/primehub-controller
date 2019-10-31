@@ -35,9 +35,9 @@ spec:
           description: PhJobSpec defines the desired state of PhJob
           properties:
             activeDeadlineSeconds:
-              description: '----------- From JobSpec ----------- Specifies the duration
-                in seconds relative to the startTime that the job may be active before
-                the system tries to terminate it; value must be positive integer'
+              description: Specifies the duration in seconds relative to the startTime
+                that the job may be active before the system tries to terminate it;
+                value must be positive integer
               format: int64
               type: integer
             backoffLimit:
@@ -71,7 +71,9 @@ spec:
                 the TTLAfterFinished feature.
               format: int32
               type: integer
-            user:
+            userId:
+              type: string
+            userName:
               type: string
           required:
           - command
@@ -79,7 +81,7 @@ spec:
           - image
           - instanceType
           - jobType
-          - user
+          - userId
           type: object
         status:
           description: PhJobStatus defines the observed state of PhJob
@@ -92,7 +94,12 @@ spec:
                 of cluster Important: Run "make" to regenerate code after modifying
                 this file'
               enum:
-              - Job
+              - Pending
+              - Ready
+              - Running
+              - Succeeded
+              - Failed
+              - Unknown
               type: string
             startTime:
               format: date-time

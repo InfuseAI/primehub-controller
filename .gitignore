@@ -25,3 +25,6 @@ bin
 
 # Config yaml file
 config.yaml
+.vscode/*
+__debug_bin
+.DS_Store

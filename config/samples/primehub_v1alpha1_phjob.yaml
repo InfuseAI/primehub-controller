@@ -11,3 +11,5 @@ spec:
   jobType: "Job"
   instanceType: "test"
   image: "test"
+  userId: "userId"
+  
