@@ -30,11 +30,12 @@ const (
 	KubernetesJob JobType = "Job"
 )
 
-// +kubebuilder:validation:Enum=Job
+// +kubebuilder:validation:Enum=Pending;Ready;Running;Succeeded;Failed;Unknown
 type PhJobPhase string
 
 const (
 	JobPending   PhJobPhase = "Pending"
+	JobReady     PhJobPhase = "Ready"
 	JobRunning   PhJobPhase = "Running"
 	JobSucceeded PhJobPhase = "Succeeded"
 	JobFailed    PhJobPhase = "Failed"
@@ -48,13 +49,13 @@ type PhJobSpec struct {
 
 	JobType JobType `json:"jobType"`
 
-	User         string   `json:"user"`
+	UserId       string   `json:"userId"`
+	UserName     string   `json:"userName,omitempty"`
 	Group        string   `json:"group"`
 	InstanceType string   `json:"instanceType"`
 	Image        string   `json:"image"`
 	Command      []string `json:"command"`
 
-	// ----------- From JobSpec -----------
 	// Specifies the duration in seconds relative to the startTime that the job may be active
 	// before the system tries to terminate it; value must be positive integer
 	// +optional
