@@ -226,7 +226,7 @@ func buildPod(imageSpecJob primehubv1alpha1.ImageSpecJob, dockerfile string) *co
 					VolumeSource: corev1.VolumeSource{
 						ConfigMap: &corev1.ConfigMapVolumeSource{
 							LocalObjectReference: corev1.LocalObjectReference{
-								Name: "script-build-and-push",
+								Name: "primehub-controller-custom-image-scripts",
 							},
 						},
 					},

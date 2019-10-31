@@ -7,7 +7,7 @@
 1. Add build-and-push script to ConfigMap
 
     ```
-    kubectl -n hub create configmap script-build-and-push --from-file ./scripts/custom_image/build-and-push.sh
+    kubectl -n hub create configmap primehub-controller-custom-image-scripts --from-file ./scripts/custom_image/
     ```
 
 ### Push Secret
