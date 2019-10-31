@@ -1,7 +1,8 @@
 customImage:
 
   pushSecretName: push-secret-for-gcr
-  pushRepoPrefix: gcr.io/infuseai-dev
+  # Prefix for image. (e.g. 'gcr.io/infuseai' for 'gcr.io/infuseai/primehub-controller:be20ee69c5')
+  pushRepoPrefix: gcr.io/infuseai
 
   buildah:
     resources:
