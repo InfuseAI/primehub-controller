@@ -99,9 +99,10 @@ func main() {
 func loadConfig() {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
-	viper.AddConfigPath(".")    // optionally look for config in the working directory
-	err := viper.ReadInConfig() // Find and read the config file
-	if err != nil {             // Handle errors reading the config file
+	viper.AddConfigPath("/etc/primehub-controller/") // path to look for the config file in
+	viper.AddConfigPath(".")                         // optionally look for config in the working directory
+	err := viper.ReadInConfig()                      // Find and read the config file
+	if err != nil {                                  // Handle errors reading the config file
 		panic(fmt.Errorf("Fatal error config file: %s \n", err))
 	}
 
