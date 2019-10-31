@@ -98,7 +98,7 @@ func (r *ImageSpecJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 		imageSpecJobClone.Status.FinishTime = &containerFinishedAt
 	}
 
-	if r.Status().Update(ctx, imageSpecJobClone); err != nil {
+	if err := r.Status().Update(ctx, imageSpecJobClone); err != nil {
 		log.Error(err, "failed to update ImageSpecJob status")
 		return ctrl.Result{}, err
 	}

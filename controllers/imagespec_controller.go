@@ -92,7 +92,7 @@ func (r *ImageSpecReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		imageSpecClone.Status.Image = image
 	}
 
-	if r.Status().Update(ctx, imageSpecClone); err != nil {
+	if err := r.Status().Update(ctx, imageSpecClone); err != nil {
 		log.Error(err, "failed to update ImageSpec status")
 		return ctrl.Result{}, err
 	}
