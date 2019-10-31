@@ -20,10 +20,10 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/go-logr/logr"
+	"github.com/spf13/viper"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -127,6 +127,8 @@ func (r *ImageSpecReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func buildImageSpecJob(imageSpec primehubv1alpha1.ImageSpec, hash string) *primehubv1alpha1.ImageSpecJob {
+	pushSecretName := viper.GetString("customImage.pushSecretName")
+	repoPrefix := viper.GetString("customImage.pushRepoPrefix")
 	imageSpecJob := primehubv1alpha1.ImageSpecJob{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        imageSpec.ObjectMeta.Name + "-" + hash,
@@ -139,8 +141,8 @@ func buildImageSpecJob(imageSpec primehubv1alpha1.ImageSpec, hash string) *prime
 			PullSecret:  imageSpec.Spec.PullSecret,
 			Packages:    imageSpec.Spec.Packages,
 			TargetImage: imageSpec.ObjectMeta.Name + ":" + hash,
-			PushSecret:  os.Getenv("BUILD_IMAGE_SECRET_NAME"),
-			RepoPrefix:  os.Getenv("BUILD_IMAGE_REPO_PREFIX"),
+			PushSecret:  pushSecretName,
+			RepoPrefix:  repoPrefix,
 		},
 	}
 

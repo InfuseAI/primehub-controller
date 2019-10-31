@@ -1,0 +1,13 @@
+customImage:
+
+  pushSecretName: push-secret-for-gcr
+  pushRepoPrefix: gcr.io/infuseai-dev
+
+  buildah:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 50Mi
+      limits:
+        cpu: 1000m
+        memory: 500Mi

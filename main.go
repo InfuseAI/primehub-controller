@@ -17,6 +17,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"os"
 
 	primehubv1alpha1 "primehub-controller/api/v1alpha1"
@@ -29,6 +30,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	// +kubebuilder:scaffold:imports
+
+	"github.com/spf13/viper"
 )
 
 var (
@@ -44,6 +47,8 @@ func init() {
 }
 
 func main() {
+	loadConfig()
+
 	var metricsAddr string
 	var enableLeaderElection bool
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
@@ -88,5 +93,22 @@ func main() {
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
+	}
+}
+
+func loadConfig() {
+	viper.SetConfigName("config")
+	viper.SetConfigType("yaml")
+	viper.AddConfigPath(".")    // optionally look for config in the working directory
+	err := viper.ReadInConfig() // Find and read the config file
+	if err != nil {             // Handle errors reading the config file
+		panic(fmt.Errorf("Fatal error config file: %s \n", err))
+	}
+
+	if viper.GetString("customImage.pushSecretName") == "" {
+		panic("customImage.pushSecretName is required in config.yaml")
+	}
+	if viper.GetString("customImage.pushRepoPrefix") == "" {
+		panic("customImage.pushRepoPrefix is required in config.yaml")
 	}
 }
