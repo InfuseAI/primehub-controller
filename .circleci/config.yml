@@ -1,0 +1,45 @@
+version: 2
+jobs:
+  build:
+    machine: true
+    steps:
+      - checkout
+
+      # build the application image
+      - run:
+          name: Build image
+          no_output_timeout: 40m
+          command: |
+            echo "Looking for Docker deployment options"
+            if [ ! -n "${DOCKER_TAG:-}" ]
+                then
+                    DOCKER_TAG=$(echo "${CIRCLE_SHA1}" | cut -c1-10)
+            fi
+            # If not set, define CONTAINER_NAME
+            if [[ ! -n "${CONTAINER_NAME:-}" ]]
+                then
+                    CONTAINER_NAME="${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}"
+            fi
+            echo "Container name set to ${CONTAINER_NAME}:${DOCKER_TAG}"
+            make docker-build IMG=${CONTAINER_NAME}:${DOCKER_TAG}
+ 
+      # deploy the image
+      - run:
+          name: Deploy to Docker Hub
+          no_output_timeout: 40m
+          command: |
+            echo "Looking for Docker deployment options"
+            if [ ! -n "${DOCKER_TAG:-}" ]
+                then
+                    DOCKER_TAG=$(echo "${CIRCLE_SHA1}" | cut -c1-10)
+            fi
+            # If not set, define CONTAINER_NAME
+            if [[ ! -n "${CONTAINER_NAME:-}" ]]
+                then
+                    CONTAINER_NAME="${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}"
+            fi
+            echo "Container name set to ${CONTAINER_NAME}:${DOCKER_TAG}"
+            if [[ -n "$DOCKER_PASS" ]]; then
+                  docker login -u $DOCKER_USER -p $DOCKER_PASS
+                  docker push ${CONTAINER_NAME}:${DOCKER_TAG}
+            fi
