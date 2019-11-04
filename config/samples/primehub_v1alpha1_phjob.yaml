@@ -6,10 +6,10 @@ spec:
   # Add fields here
   foo: bar
   command: []
-  group: "test"
-  user: "test"
+  group: "phusers"
+  user: "phadmin"
   jobType: "Job"
-  instanceType: "test"
-  image: "test"
-  userId: "userId"
+  instanceType: "cpu-only"
+  image: "base-notebook"
+  userId: "a4ca7d07-c69f-45e3-b99b-89f8643162b4"
   

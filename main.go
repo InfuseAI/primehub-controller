@@ -19,6 +19,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"primehub-controller/pkg/graphql"
 
 	primehubv1alpha1 "primehub-controller/api/v1alpha1"
 
@@ -92,10 +93,15 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "ImageSpecJob")
 		os.Exit(1)
 	}
+
+	graphqlClient := graphql.NewGraphqlClient(
+		viper.GetString("job.graphqlEndpoint"),
+		viper.GetString("job.graphqlSecret"))
 	if err = (&controllers.PhJobReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("PhJob"),
-		Scheme: mgr.GetScheme(),
+		Client:        mgr.GetClient(),
+		Log:           ctrl.Log.WithName("controllers").WithName("PhJob"),
+		Scheme:        mgr.GetScheme(),
+		GraphqlClient: graphqlClient,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PhJob")
 		os.Exit(1)

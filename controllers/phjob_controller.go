@@ -17,6 +17,7 @@ package controllers
 
 import (
 	"context"
+	"primehub-controller/pkg/graphql"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -36,9 +37,12 @@ type PhJobReconciler struct {
 	client.Client
 	Log    logr.Logger
 	Scheme *runtime.Scheme
+	GraphqlClient *graphql.GraphqlClient
 }
 
 func (r *PhJobReconciler) buildJob(phJob *primehubv1alpha1.PhJob) (*batchv1.Job, error) {
+	var err error
+
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        phJob.ObjectMeta.Name,
@@ -47,20 +51,23 @@ func (r *PhJobReconciler) buildJob(phJob *primehubv1alpha1.PhJob) (*batchv1.Job,
 			Labels:      phJob.ObjectMeta.Labels,
 		},
 		Spec: batchv1.JobSpec{
-			Template: corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
-						{
-							Name:    phJob.ObjectMeta.Name,
-							Image:   "busybox",
-							Command: []string{"sleep", "10"},
-						},
-					},
-					RestartPolicy: "Never",
-				},
-			},
+			Template: corev1.PodTemplateSpec{},
 		},
 	}
+
+	var result *graphql.DtoResult
+	if result, err = r.GraphqlClient.FetchByUser(phJob.Spec.UserId); err != nil {
+		return nil, err
+	}
+	podSpec := corev1.PodSpec{}
+	spawner := graphql.Spawner{}
+	if err = spawner.WithData(result.Data, phJob.Spec.Group, phJob.Spec.InstanceType, phJob.Spec.Image); err != nil {
+		return nil, err
+	}
+	spawner.BuildPodSpec(&podSpec)
+	podSpec.RestartPolicy = corev1.RestartPolicyNever
+	job.Spec.Template.Spec = podSpec
+
 
 	if err := ctrl.SetControllerReference(phJob, job, r.Scheme); err != nil {
 		r.Log.WithValues("phjob", phJob.Namespace).Error(err, "failed to set job's controller reference to phjob")
