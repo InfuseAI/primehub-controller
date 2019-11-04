@@ -103,23 +103,6 @@ func (r *ImageSpecReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 }
 
 func (r *ImageSpecReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	if err := mgr.GetFieldIndexer().IndexField(&primehubv1alpha1.ImageSpecJob{}, ".metadata.controller", func(rawObj runtime.Object) []string {
-		// grab the imageSpecJob object, extract the owner...
-		job := rawObj.(*primehubv1alpha1.ImageSpecJob)
-		owner := metav1.GetControllerOf(job)
-		if owner == nil {
-			return nil
-		}
-		// ...make sure it's a ImageSpec...
-		if owner.APIVersion != primehubv1alpha1.GroupVersion.String() || owner.Kind != "ImageSpec" {
-			return nil
-		}
-
-		// ...and if so, return it
-		return []string{owner.Name}
-	}); err != nil {
-		return err
-	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&primehubv1alpha1.ImageSpec{}).
 		Owns(&primehubv1alpha1.ImageSpecJob{}).
