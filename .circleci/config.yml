@@ -61,3 +61,20 @@ jobs:
                   docker login -u $DOCKER_USER -p $DOCKER_PASS
                   docker push ${CONTAINER_NAME}:${DOCKER_TAG}
             fi
+
+workflows:
+  version: 2
+  latest_builds:
+    jobs:
+      - build:
+          filters:
+            branches:
+              only: master
+  release_builds:
+    jobs:
+      - build:
+          filters:
+            tags:
+              only: /v.*/
+            branches:
+              ignore: /.*/  
