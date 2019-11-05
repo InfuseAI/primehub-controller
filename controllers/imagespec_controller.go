@@ -135,9 +135,15 @@ func buildImageSpecJob(imageSpec primehubv1alpha1.ImageSpec, hash string) *prime
 func computeHash(imageSpec primehubv1alpha1.ImageSpec) string {
 	var s []string
 	s = append(s, imageSpec.Spec.BaseImage)
-	s = append(s, fmt.Sprintf("apt:[%s]", strings.Join(imageSpec.Spec.Packages.Apt, ",")))
-	s = append(s, fmt.Sprintf("pip:[%s]", strings.Join(imageSpec.Spec.Packages.Pip, ",")))
-	s = append(s, fmt.Sprintf("conda:[%s]", strings.Join(imageSpec.Spec.Packages.Conda, ",")))
+	if len(imageSpec.Spec.Packages.Apt) > 0 {
+		s = append(s, fmt.Sprintf("apt:[%s]", strings.Join(imageSpec.Spec.Packages.Apt, ",")))
+	}
+	if len(imageSpec.Spec.Packages.Pip) > 0 {
+		s = append(s, fmt.Sprintf("pip:[%s]", strings.Join(imageSpec.Spec.Packages.Pip, ",")))
+	}
+	if len(imageSpec.Spec.Packages.Conda) > 0 {
+		s = append(s, fmt.Sprintf("conda:[%s]", strings.Join(imageSpec.Spec.Packages.Conda, ",")))
+	}
 
 	h := sha1.New()
 	h.Write([]byte(strings.Join(s, ";")))
