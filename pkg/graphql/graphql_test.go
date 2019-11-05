@@ -1,6 +1,7 @@
 package graphql
 
 import (
+	"encoding/json"
 	"fmt"
 	v1 "k8s.io/api/core/v1"
 	serial "k8s.io/apimachinery/pkg/runtime/serializer/json"
@@ -20,7 +21,8 @@ func TestFetchContext(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("result: %v\n", result)
+	bytes, _ := json.Marshal(result)
+	fmt.Printf("result: %s\n", string(bytes))
 
 	var spawner *Spawner
 	pod := v1.Pod{}

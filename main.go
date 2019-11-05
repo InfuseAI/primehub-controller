@@ -125,10 +125,16 @@ func loadConfig() {
 		panic(fmt.Errorf("Fatal error config file: %s \n", err))
 	}
 
-	if viper.GetString("customImage.pushSecretName") == "" {
-		panic("customImage.pushSecretName is required in config.yaml")
+	configs := []string{
+		"customImage.pushSecretName",
+		"customImage.pushRepoPrefix",
+		"job.graphqlEndpoint",
+		"job.graphqlSecret",
 	}
-	if viper.GetString("customImage.pushRepoPrefix") == "" {
-		panic("customImage.pushRepoPrefix is required in config.yaml")
+
+	for _, config := range configs {
+		if viper.GetString(config) == "" {
+			panic(config + " is required in config.yaml")
+		}
 	}
 }

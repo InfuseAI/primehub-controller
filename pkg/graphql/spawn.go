@@ -81,7 +81,7 @@ func findGroup(groups []DtoGroup, groupName string) (DtoGroup, error) {
 		}
 	}
 
-	return DtoGroup{}, errors.New("Group not found")
+	return DtoGroup{}, errors.New("Group not found: " + groupName)
 }
 
 func findImage(images []DtoImage, imageName string) (DtoImage, error) {
@@ -91,7 +91,7 @@ func findImage(images []DtoImage, imageName string) (DtoImage, error) {
 		}
 	}
 
-	return DtoImage{}, errors.New("Image not found")
+	return DtoImage{}, errors.New("Image not found: " + imageName)
 }
 
 func findInstanceType(instanceTypes []DtoInstanceType, instanceTypeName string) (DtoInstanceType, error) {
@@ -101,7 +101,7 @@ func findInstanceType(instanceTypes []DtoInstanceType, instanceTypeName string) 
 		}
 	}
 
-	return DtoInstanceType{}, errors.New("InstanceType not found")
+	return DtoInstanceType{}, errors.New("InstanceType not found: " + instanceTypeName)
 }
 
 func volumeForGroup(project string) (corev1.Volume, corev1.VolumeMount) {

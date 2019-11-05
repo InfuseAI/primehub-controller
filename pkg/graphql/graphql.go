@@ -2,6 +2,7 @@ package graphql
 
 import (
 	"encoding/json"
+	"errors"
 	"io/ioutil"
 	"net/http"
 	"strings"
@@ -160,6 +161,10 @@ func (c GraphqlClient) FetchByUserId(userId string) (*DtoResult, error) {
 		return nil, err
 	}
 
+	if response.StatusCode != 200 {
+		return nil, errors.New("graphql query failed: " + response.Status)
+	}
+
 	defer response.Body.Close()
 	body, err := ioutil.ReadAll(response.Body)
 	if err != nil {
@@ -168,5 +173,10 @@ func (c GraphqlClient) FetchByUserId(userId string) (*DtoResult, error) {
 	//fmt.Println(string(body))
 	var result DtoResult
 	json.Unmarshal(body, &result)
+
+	if result.Data.User.Id == "" {
+		return nil, errors.New("User not found")
+	}
+
 	return &result, nil
 }

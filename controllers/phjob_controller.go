@@ -114,31 +114,33 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		}
 
 		if phJob.Status.Phase == "" || phJob.Status.Phase == primehubv1alpha1.JobPending {
-			// pod not found, create one
+			// create the pod
+			phJob = phJob.DeepCopy()
 			log.Info("could not find existing pod for PhJob, creating one...")
-
 			pod, err = r.buildPod(phJob)
-			if err != nil {
-				return ctrl.Result{}, err
+			if err == nil {
+				err = r.Client.Create(ctx, pod)
 			}
-			if err = r.Client.Create(ctx, pod); err != nil {
-				log.Error(err, "failed to create pod resource")
-				return ctrl.Result{}, err
-			}
-			log.Info("created Job resource")
 
-			// If not yet create pod and status phase is not ready, status phase is pending
-			phJob.Status.Phase = primehubv1alpha1.JobReady
-			phJob.Status.PodName = podkey.Name
+			// Update the phjob status
+			if err == nil {
+				// If not yet create pod and status phase is not ready, status phase is pending
+				phJob.Status.Phase = primehubv1alpha1.JobReady
+				phJob.Status.PodName = podkey.Name
+				log.Info("create pod", "pod", pod)
+			} else {
+				phJob.Status.Phase = primehubv1alpha1.JobFailed
+				phJob.Status.Reason = err.Error()
+				log.Error(err, "failed to create pod")
+			}
+
 			if err = r.Status().Update(ctx, phJob); err != nil {
 				log.Error(err, "failed to update PhJob status")
 				return ctrl.Result{}, err
 			}
-			log.Info("Create pod", "pod", pod)
 		} else {
 			log.Info("Pod not found but not necessary ot create")
 		}
-
 	} else {
 		log.Info("found pod resource for PhJob")
 
