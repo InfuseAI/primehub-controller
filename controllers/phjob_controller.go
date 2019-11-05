@@ -17,16 +17,14 @@ package controllers
 
 import (
 	"context"
-	"primehub-controller/pkg/graphql"
-
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
+	"primehub-controller/pkg/graphql"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	primehubv1alpha1 "primehub-controller/api/v1alpha1"
 
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,46 +33,49 @@ import (
 // PhJobReconciler reconciles a PhJob object
 type PhJobReconciler struct {
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
+	Log           logr.Logger
+	Scheme        *runtime.Scheme
 	GraphqlClient *graphql.GraphqlClient
 }
 
-func (r *PhJobReconciler) buildJob(phJob *primehubv1alpha1.PhJob) (*batchv1.Job, error) {
+func (r *PhJobReconciler) buildPod(phJob *primehubv1alpha1.PhJob) (*corev1.Pod, error) {
 	var err error
 
-	job := &batchv1.Job{
+	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        phJob.ObjectMeta.Name,
+			Name:        "phjob-" + phJob.ObjectMeta.Name,
 			Namespace:   phJob.Namespace,
 			Annotations: phJob.ObjectMeta.Annotations,
 			Labels:      phJob.ObjectMeta.Labels,
 		},
-		Spec: batchv1.JobSpec{
-			Template: corev1.PodTemplateSpec{},
-		},
 	}
 
-	var result *graphql.DtoResult
-	if result, err = r.GraphqlClient.FetchByUser(phJob.Spec.UserId); err != nil {
-		return nil, err
-	}
+	// Fetch data from graphql
 	podSpec := corev1.PodSpec{}
-	spawner := graphql.Spawner{}
-	if err = spawner.WithData(result.Data, phJob.Spec.Group, phJob.Spec.InstanceType, phJob.Spec.Image); err != nil {
+	var result *graphql.DtoResult
+	if result, err = r.GraphqlClient.FetchByUserId(phJob.Spec.UserId); err != nil {
 		return nil, err
 	}
-	spawner.BuildPodSpec(&podSpec)
+
+	// Build the podTemplate according to data from graphql and phjob group, instanceType, image settings
+	var spawner *graphql.Spawner
+	if spawner, err = graphql.NewSpawnerByData(result.Data, phJob.Spec.Group, phJob.Spec.InstanceType, phJob.Spec.Image); err != nil {
+		return nil, err
+	}
+	spawner.WithCommand(phJob.Spec.Command).BuildPodSpec(&podSpec)
 	podSpec.RestartPolicy = corev1.RestartPolicyNever
-	job.Spec.Template.Spec = podSpec
+	pod.Spec = podSpec
+	pod.Labels = map[string]string{
+		"app": "primehub-job",
+	}
 
-
-	if err := ctrl.SetControllerReference(phJob, job, r.Scheme); err != nil {
+	// Owner reference
+	if err := ctrl.SetControllerReference(phJob, pod, r.Scheme); err != nil {
 		r.Log.WithValues("phjob", phJob.Namespace).Error(err, "failed to set job's controller reference to phjob")
 		return nil, err
 	}
 
-	return job, nil
+	return pod, nil
 }
 
 // +kubebuilder:rbac:groups=primehub.io,resources=phjobs,verbs=get;list;watch;create;update;patch;delete
@@ -84,64 +85,72 @@ func (r *PhJobReconciler) buildJob(phJob *primehubv1alpha1.PhJob) (*batchv1.Job,
 func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
 	log := r.Log.WithValues("phjob", req.NamespacedName)
+	podkey := client.ObjectKey{
+		Namespace: req.Namespace,
+		Name:      "phjob-" + req.Name,
+	}
+	var err error
 
 	log.Info("start Reconcile")
 
 	phJob := &primehubv1alpha1.PhJob{}
 	if err := r.Get(ctx, req.NamespacedName, phJob); err != nil {
-		log.Error(err, "unable to fetch PhJob")
-		return ctrl.Result{}, nil
+		if apierrors.IsNotFound(err) {
+			log.Info("PhJob deleted")
+			return ctrl.Result{}, nil
+		} else {
+			log.Error(err, "unable to fetch PhJob")
+			return ctrl.Result{}, nil
+		}
 	}
 
-	if phJob.Spec.JobType == "Job" {
-		job := &batchv1.Job{}
-		err := r.Client.Get(ctx, client.ObjectKey{Namespace: phJob.Namespace, Name: phJob.ObjectMeta.Name}, job)
-		if apierrors.IsNotFound(err) {
-			// If not yet create job and status phase is not ready, status phase is pending
-			if phJob.Status.Phase != primehubv1alpha1.JobReady && phJob.Status.Phase != primehubv1alpha1.JobPending {
-				phJob.Status.Phase = primehubv1alpha1.JobPending
-				if err := r.Status().Update(ctx, phJob); err != nil {
-					log.Error(err, "failed to update PhJob status")
-					return ctrl.Result{}, err
-				}
-				log.Info("updated PhJob status")
-			}
+	pod := &corev1.Pod{}
+	err = r.Client.Get(ctx, podkey, pod)
+	if err != nil {
 
-			// If status phase is ready
-			log.Info("could not find existing Job for PhJob, creating one...")
+		if !apierrors.IsNotFound(err) {
+			log.Error(err, "failed to get pod")
+			return ctrl.Result{}, nil
+		}
 
-			job, err := r.buildJob(phJob)
+		if phJob.Status.Phase == "" || phJob.Status.Phase == primehubv1alpha1.JobPending {
+			// pod not found, create one
+			log.Info("could not find existing pod for PhJob, creating one...")
+
+			pod, err = r.buildPod(phJob)
 			if err != nil {
 				return ctrl.Result{}, err
 			}
-			if err := r.Client.Create(ctx, job); err != nil {
-				log.Error(err, "failed to create Job resource")
+			if err = r.Client.Create(ctx, pod); err != nil {
+				log.Error(err, "failed to create pod resource")
 				return ctrl.Result{}, err
 			}
+			log.Info("created Job resource")
 
-			log.Info("created Job resource for PhJob")
-
-			return ctrl.Result{}, nil
-		} else {
-			log.Info("found Job resource for PhJob")
-			_, finishedType := isJobFinished(job)
-			switch finishedType {
-			case "": // ongoing
-				phJob.Status.Phase = primehubv1alpha1.JobRunning
-			case batchv1.JobFailed:
-				phJob.Status.Phase = primehubv1alpha1.JobFailed
-			case batchv1.JobComplete:
-				phJob.Status.Phase = primehubv1alpha1.JobSucceeded
-			}
-
-			if err := r.Status().Update(ctx, phJob); err != nil {
+			// If not yet create pod and status phase is not ready, status phase is pending
+			phJob.Status.Phase = primehubv1alpha1.JobReady
+			phJob.Status.PodName = podkey.Name
+			if err = r.Status().Update(ctx, phJob); err != nil {
 				log.Error(err, "failed to update PhJob status")
 				return ctrl.Result{}, err
 			}
-			log.Info("updated PhJob status")
+			log.Info("Create pod", "pod", pod)
+		} else {
+			log.Info("Pod not found but not necessary ot create")
 		}
+
 	} else {
-		return ctrl.Result{}, nil
+		log.Info("found pod resource for PhJob")
+
+		phJob = phJob.DeepCopy()
+		phJob.Status.Phase = convertJobPhase(pod)
+		phJob.Status.StartTime = getStartTime(pod)
+		phJob.Status.FinishTime = getFinishTime(pod)
+		if err = r.Status().Update(ctx, phJob); err != nil {
+			log.Error(err, "failed to update PhJob status")
+			return ctrl.Result{}, err
+		}
+		log.Info("Update status from phjob")
 	}
 
 	return ctrl.Result{}, nil
@@ -150,16 +159,49 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 func (r *PhJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&primehubv1alpha1.PhJob{}).
-		Owns(&batchv1.Job{}).
+		Owns(&corev1.Pod{}).
 		Complete(r)
 }
 
-func isJobFinished(job *batchv1.Job) (bool, batchv1.JobConditionType) {
-	for _, c := range job.Status.Conditions {
-		if (c.Type == batchv1.JobComplete || c.Type == batchv1.JobFailed) && c.Status == corev1.ConditionTrue {
-			return true, c.Type
+func convertJobPhase(pod *corev1.Pod) primehubv1alpha1.PhJobPhase {
+	switch pod.Status.Phase {
+	case corev1.PodPending:
+		return primehubv1alpha1.JobReady
+	case corev1.PodRunning:
+		return primehubv1alpha1.JobRunning
+	case corev1.PodSucceeded:
+		return primehubv1alpha1.JobSucceeded
+	case corev1.PodFailed:
+		return primehubv1alpha1.JobFailed
+	case corev1.PodUnknown:
+		return primehubv1alpha1.JobUnknown
+	default:
+		return primehubv1alpha1.JobPending
+	}
+}
+
+func getStartTime(pod *corev1.Pod) *metav1.Time {
+	for _, cs := range pod.Status.ContainerStatuses {
+		if cs.Name == "main" {
+			if cs.State.Running != nil {
+				return cs.State.Running.StartedAt.DeepCopy()
+			} else if cs.State.Terminated != nil {
+				return cs.State.Terminated.StartedAt.DeepCopy()
+			}
 		}
 	}
 
-	return false, ""
+	return nil
+}
+
+func getFinishTime(pod *corev1.Pod) *metav1.Time {
+	for _, cs := range pod.Status.ContainerStatuses {
+		if cs.Name == "main" {
+			if cs.State.Terminated != nil {
+				return cs.State.Terminated.FinishedAt.DeepCopy()
+			}
+		}
+	}
+
+	return nil
 }

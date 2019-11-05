@@ -16,20 +16,20 @@ func TestFetchContext(t *testing.T) {
 	graphqlSecret := ""
 
 	client := NewGraphqlClient(graphqlEndpoint, graphqlSecret)
-	result, err := client.FetchByUser(userId)
+	result, err := client.FetchByUserId(userId)
 	if err != nil {
 		panic(err)
 	}
 	fmt.Printf("result: %v\n", result)
 
-	spawner := Spawner{}
+	var spawner *Spawner
 	pod := v1.Pod{}
 
-	err = spawner.WithData(result.Data, "phusers", "cpu-only", "base-notebook")
+	spawner, err = NewSpawnerByData(result.Data, "phusers", "cpu-only", "base-notebook")
 	if err != nil {
 		panic(err)
 	}
-	spawner.BuildPodSpec(&pod.Spec)
+	spawner.WithCommand([]string{"echo", "helloworld"}).BuildPodSpec(&pod.Spec)
 
 	serializer := serial.NewSerializerWithOptions(serial.DefaultMetaFactory, nil, nil, serial.SerializerOptions{})
 	serializer.Encode(&pod, os.Stdout)

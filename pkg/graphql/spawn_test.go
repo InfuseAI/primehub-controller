@@ -19,12 +19,13 @@ func TestSpawn(t *testing.T) {
 
 	var pod corev1.Pod
 
-	spawner := Spawner{}
-	err := spawner.WithData(result.Data, "phusers", "cpu-only", "base-notebook")
+	var spawner *Spawner
+	var err error
+	spawner, err = NewSpawnerByData(result.Data, "phusers", "cpu-only", "base-notebook")
 	if err != nil {
 		panic(err)
 	}
-	spawner.BuildPodSpec(&pod.Spec)
+	spawner.WithCommand([]string{"echo", "helloworld"}).BuildPodSpec(&pod.Spec)
 
 	serializer := serial.NewSerializerWithOptions(serial.DefaultMetaFactory, nil, nil, serial.SerializerOptions{})
 	serializer.Encode(&pod, os.Stdout)

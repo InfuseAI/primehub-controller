@@ -5,7 +5,10 @@ metadata:
 spec:
   # Add fields here
   foo: bar
-  command: []
+  command:
+  - bash 
+  - -c
+  - "sleep 5; echo complete"
   group: "phusers"
   user: "phadmin"
   jobType: "Job"

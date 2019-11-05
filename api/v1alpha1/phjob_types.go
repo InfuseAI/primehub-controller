@@ -25,12 +25,7 @@ import (
 // +kubebuilder:validation:Enum=Job
 type JobType string
 
-const (
-	// Job is kubernetes job.
-	KubernetesJob JobType = "Job"
-)
-
-// +kubebuilder:validation:Enum=Pending;Ready;Running;Succeeded;Failed;Unknown
+// +kubebuilder:validation:Enum=Pending;Ready;Running;Succeeded;Failed;Cancelled;Unknown
 type PhJobPhase string
 
 const (
@@ -39,6 +34,7 @@ const (
 	JobRunning   PhJobPhase = "Running"
 	JobSucceeded PhJobPhase = "Succeeded"
 	JobFailed    PhJobPhase = "Failed"
+	JobCancelled PhJobPhase = "Cancelled"
 	JobUnknown   PhJobPhase = "Unknown"
 )
 
@@ -46,35 +42,12 @@ const (
 type PhJobSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-
-	JobType JobType `json:"jobType"`
-
 	UserId       string   `json:"userId"`
 	UserName     string   `json:"userName,omitempty"`
 	Group        string   `json:"group"`
 	InstanceType string   `json:"instanceType"`
 	Image        string   `json:"image"`
 	Command      []string `json:"command"`
-
-	// Specifies the duration in seconds relative to the startTime that the job may be active
-	// before the system tries to terminate it; value must be positive integer
-	// +optional
-	ActiveDeadlineSeconds *int64 `json:"activeDeadlineSeconds,omitempty" protobuf:"varint,3,opt,name=activeDeadlineSeconds"`
-	// Specifies the number of retries before marking this job failed.
-	// Defaults to 6
-	// +optional
-	BackoffLimit *int32 `json:"backoffLimit,omitempty" protobuf:"varint,7,opt,name=backoffLimit"`
-	// ttlSecondsAfterFinished limits the lifetime of a Job that has finished
-	// execution (either Complete or Failed). If this field is set,
-	// ttlSecondsAfterFinished after the Job finishes, it is eligible to be
-	// automatically deleted. When the Job is being deleted, its lifecycle
-	// guarantees (e.g. finalizers) will be honored. If this field is unset,
-	// the Job won't be automatically deleted. If this field is set to zero,
-	// the Job becomes eligible to be deleted immediately after it finishes.
-	// This field is alpha-level and is only honored by servers that enable the
-	// TTLAfterFinished feature.
-	// +optional
-	TTLSecondsAfterFinished *int32 `json:"ttlSecondsAfterFinished,omitempty" protobuf:"varint,8,opt,name=ttlSecondsAfterFinished"`
 }
 
 // PhJobStatus defines the observed state of PhJob
@@ -82,12 +55,18 @@ type PhJobStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 	Phase      PhJobPhase   `json:"phase"`
+	Reason     string       `json:"reason,omitempty"`
+	PodName    string       `json:"podName,omitempty"`
 	StartTime  *metav1.Time `json:"startTime,omitempty"`
 	FinishTime *metav1.Time `json:"finishTime,omitempty"`
 }
 
 // +kubebuilder:subresource:status
 // +kubebuilder:object:root=true
+// +kubebuilder:printcolumn:name="User",type="string",JSONPath=".spec.user"
+// +kubebuilder:printcolumn:name="Group",type="string",JSONPath=".spec.group"
+// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.phase",description="Status of the job"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // PhJob is the Schema for the phjobs API
 type PhJob struct {

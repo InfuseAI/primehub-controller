@@ -1,10 +1,13 @@
 package graphql
 
 import (
-	"errors"
 	"fmt"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+)
+
+import (
+	"errors"
+	corev1 "k8s.io/api/core/v1"
 )
 
 type Spawner struct {
@@ -12,6 +15,7 @@ type Spawner struct {
 	volumeMounts    []corev1.VolumeMount
 	image           string
 	imagePullSecret string
+	command         []string
 	requestsCpu     resource.Quantity
 	limitsCpu       resource.Quantity
 	requestsMemory  resource.Quantity
@@ -20,11 +24,12 @@ type Spawner struct {
 	limitsGpu       resource.Quantity
 }
 
-func (spawner* Spawner) WithData(data DtoData, groupName string, instanceTypeName string, imageName string) error {
+func NewSpawnerByData(data DtoData, groupName string, instanceTypeName string, imageName string) (*Spawner, error) {
 	var group DtoGroup
 	var image DtoImage
 	var instanceType DtoInstanceType
 	var err error
+	spawner := &Spawner{}
 
 	//isGlobal := false
 
@@ -37,7 +42,7 @@ func (spawner* Spawner) WithData(data DtoData, groupName string, instanceTypeNam
 
 	// Find the group
 	if group, err = findGroup(data.User.Groups, groupName); err != nil {
-		return err
+		return nil, err
 	}
 
 	// Group volume
@@ -49,23 +54,27 @@ func (spawner* Spawner) WithData(data DtoData, groupName string, instanceTypeNam
 
 	// Instance type
 	if instanceType, err = findInstanceType(group.InstanceTypes, instanceTypeName); err != nil {
-		return err
+		return nil, err
 	}
 	isGpu := spawner.resourceForInstanceType(instanceType)
 
 	// Image
 	if image, err = findImage(group.Images, imageName); err != nil {
-		return err
+		return nil, err
 	}
 	spawner.image, spawner.imagePullSecret = imageForImageSpec(image.Spec, isGpu)
 
-
 	// Dataset
 
-	return nil
+	return spawner, nil
 }
 
-func findGroup(groups []DtoGroup, groupName string) (DtoGroup,  error) {
+func (spawner *Spawner) WithCommand(command []string) *Spawner {
+	spawner.command = command
+	return spawner
+}
+
+func findGroup(groups []DtoGroup, groupName string) (DtoGroup, error) {
 	for _, group := range groups {
 		if group.Name == groupName {
 			return group, nil
@@ -75,7 +84,7 @@ func findGroup(groups []DtoGroup, groupName string) (DtoGroup,  error) {
 	return DtoGroup{}, errors.New("Group not found")
 }
 
-func findImage(images []DtoImage, imageName string) (DtoImage,  error) {
+func findImage(images []DtoImage, imageName string) (DtoImage, error) {
 	for _, image := range images {
 		if image.Name == imageName {
 			return image, nil
@@ -85,8 +94,7 @@ func findImage(images []DtoImage, imageName string) (DtoImage,  error) {
 	return DtoImage{}, errors.New("Image not found")
 }
 
-
-func findInstanceType(instanceTypes []DtoInstanceType, instanceTypeName string) (DtoInstanceType,  error) {
+func findInstanceType(instanceTypes []DtoInstanceType, instanceTypeName string) (DtoInstanceType, error) {
 	for _, instanceType := range instanceTypes {
 		if instanceType.Name == instanceTypeName {
 			return instanceType, nil
@@ -96,7 +104,7 @@ func findInstanceType(instanceTypes []DtoInstanceType, instanceTypeName string) 
 	return DtoInstanceType{}, errors.New("InstanceType not found")
 }
 
-func volumeForGroup (project string) (corev1.Volume, corev1.VolumeMount){
+func volumeForGroup(project string) (corev1.Volume, corev1.VolumeMount) {
 	name := "project-" + project
 	path := "/project/" + project
 
@@ -132,10 +140,9 @@ func (spawner *Spawner) resourceForInstanceType(instanceType DtoInstanceType) bo
 	return isGpu
 }
 
-func imageForImageSpec(spec DtoImageSpec, isGpu bool) (string, string){
+func imageForImageSpec(spec DtoImageSpec, isGpu bool) (string, string) {
 	return spec.Url, ""
 }
-
 
 func (spawner *Spawner) BuildPodSpec(podSpec *corev1.PodSpec) {
 	container := corev1.Container{}
@@ -143,6 +150,7 @@ func (spawner *Spawner) BuildPodSpec(podSpec *corev1.PodSpec) {
 	// container
 	container.Name = "main"
 	container.Image = spawner.image
+	container.Command = spawner.command
 	container.VolumeMounts = append(container.VolumeMounts, spawner.volumeMounts...)
 	container.Resources.Requests = map[corev1.ResourceName]resource.Quantity{}
 	container.Resources.Limits = map[corev1.ResourceName]resource.Quantity{}

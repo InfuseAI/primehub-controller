@@ -2,28 +2,19 @@ package graphql
 
 import (
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strings"
 )
 
-type GraphqlClient struct {
-	graphqlEndpoint string
-	graphqlSecret string
-}
-
-func NewGraphqlClient(graphqlEndpoint string, graphqlSecret string) *GraphqlClient {
-	return &GraphqlClient{graphqlEndpoint: graphqlEndpoint, graphqlSecret: graphqlSecret}
-}
-
+// Type definitions of data transfer objects (DTO) from graphql
 type DtoResult struct {
 	Data DtoData
 }
 
 type DtoData struct {
 	System DtoSystem
-	User DtoUser
+	User   DtoUser
 }
 
 type DtoSystem struct {
@@ -31,88 +22,97 @@ type DtoSystem struct {
 }
 
 type DtoUser struct {
-	Id string
-	Username string
-	IsAdmin bool
+	Id             string
+	Username       string
+	IsAdmin        bool
 	VolumeCapacity string
-	Groups []DtoGroup
+	Groups         []DtoGroup
 }
 
 type DtoGroup struct {
-	Name string
-	DisplayName string
-	EnabledSharedVolume bool
+	Name                 string
+	DisplayName          string
+	EnabledSharedVolume  bool
 	SharedVolumeCapacity string
-	HomeSymlink string
-	LaunchGroupOnly string
-	QuotaCpu float32
-	QuotaGpu float32
-	QuotaMemory string
-	UserVolumeCapacity string
-	ProjectQuotaCpu float32
-	ProjectQuotaGpu float32
-	ProjectQuotaMemory string
+	HomeSymlink          string
+	LaunchGroupOnly      string
+	QuotaCpu             float32
+	QuotaGpu             float32
+	QuotaMemory          string
+	UserVolumeCapacity   string
+	ProjectQuotaCpu      float32
+	ProjectQuotaGpu      float32
+	ProjectQuotaMemory   string
 
 	InstanceTypes []DtoInstanceType
-	Images []DtoImage
-	Datasets []DtoDataset
+	Images        []DtoImage
+	Datasets      []DtoDataset
 }
 
 type DtoInstanceType struct {
-	Name string
+	Name        string
 	Description string
 	DisplayName string
-	Global bool
-	Spec DtoInstanceTypeSpec
+	Global      bool
+	Spec        DtoInstanceTypeSpec
 }
 
 // https://gitlab.com/infuseai/canner-admin-ui/blob/master/packages/graphql-server/src/graphql/instanceType.graphql
 type DtoInstanceTypeSpec struct {
-	LimitsCpu  float32 `json:"limits.cpu"`
-	RequestsCpu  float32 `json:"requests.cpu"`
-	RequestsMemory string `json:"requests.memory"`
-	LimitsMemory string `json:"limits.memory"`
-	RequestsGpu  int `json:"requests.nvidia.com/gpu"`
-	LimitsGpu  int `json:"limits.nvidia.com/gpu"`
+	LimitsCpu      float32 `json:"limits.cpu"`
+	RequestsCpu    float32 `json:"requests.cpu"`
+	RequestsMemory string  `json:"requests.memory"`
+	LimitsMemory   string  `json:"limits.memory"`
+	RequestsGpu    int     `json:"requests.nvidia.com/gpu"`
+	LimitsGpu      int     `json:"limits.nvidia.com/gpu"`
 }
 
 type DtoImage struct {
-	Name string
+	Name        string
 	Description string
 	DisplayName string
-	Global bool
-	Spec DtoImageSpec
+	Global      bool
+	Spec        DtoImageSpec
 }
 
 type DtoImageSpec struct {
 	Name string
 
-	Type string
-	Url string
+	Type      string
+	Url       string
 	UrlForGpu string
 }
 
 type DtoDataset struct {
-	Name string
-	Description string
-	DisplayName string
-	Writable bool
-	MountRoot string
-	HomeSymlink bool
+	Name            string
+	Description     string
+	DisplayName     string
+	Writable        bool
+	MountRoot       string
+	HomeSymlink     bool
 	LaunchGroupOnly bool
-	Global bool
-	Spec DtoDatasetSpec
+	Global          bool
+	Spec            DtoDatasetSpec
 }
 
 type DtoDatasetSpec struct {
 	EnableUploadServer bool
-	Type string
-	Url string
-	VolumeName string
-	Variables map[string]interface{}
+	Type               string
+	Url                string
+	VolumeName         string
+	Variables          map[string]interface{}
 }
 
-func (c GraphqlClient) FetchByUser(userId string)  (*DtoResult, error){
+type GraphqlClient struct {
+	graphqlEndpoint string
+	graphqlSecret   string
+}
+
+func NewGraphqlClient(graphqlEndpoint string, graphqlSecret string) *GraphqlClient {
+	return &GraphqlClient{graphqlEndpoint: graphqlEndpoint, graphqlSecret: graphqlSecret}
+}
+
+func (c GraphqlClient) FetchByUserId(userId string) (*DtoResult, error) {
 	query := `
 	query ($id: ID!) {
 		system { defaultUserVolumeCapacity }
@@ -140,7 +140,7 @@ func (c GraphqlClient) FetchByUser(userId string)  (*DtoResult, error){
 
 	requestData := map[string]interface{}{
 		"query": query,
-		"variables": map[string]interface{} {
+		"variables": map[string]interface{}{
 			"id": userId,
 		},
 	}
@@ -153,7 +153,7 @@ func (c GraphqlClient) FetchByUser(userId string)  (*DtoResult, error){
 	}
 
 	request.Header.Add("Content-Type", "application/json")
-	request.Header.Add("Authorization", "Bearer " + c.graphqlSecret)
+	request.Header.Add("Authorization", "Bearer "+c.graphqlSecret)
 	client := &http.Client{}
 	response, err := client.Do(request)
 	if err != nil {
@@ -169,8 +169,4 @@ func (c GraphqlClient) FetchByUser(userId string)  (*DtoResult, error){
 	var result DtoResult
 	json.Unmarshal(body, &result)
 	return &result, nil
-}
-
-func FetchContext() {
-	fmt.Println("hello")
 }
