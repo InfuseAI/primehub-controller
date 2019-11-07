@@ -42,12 +42,14 @@ const (
 type PhJobSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	UserId       string   `json:"userId"`
-	UserName     string   `json:"userName,omitempty"`
-	Group        string   `json:"group"`
-	InstanceType string   `json:"instanceType"`
-	Image        string   `json:"image"`
-	Command      []string `json:"command"`
+	DisplayName  string `json:"displayName"`
+	UserId       string `json:"userId"`
+	UserName     string `json:"userName,omitempty"`
+	Group        string `json:"group"`
+	InstanceType string `json:"instanceType"`
+	Image        string `json:"image"`
+	Command      string `json:"command"`
+	Cancel       bool   `json:"cancel,omitempty"`
 }
 
 // PhJobStatus defines the observed state of PhJob

@@ -48,10 +48,14 @@ spec:
         spec:
           description: PhJobSpec defines the desired state of PhJob
           properties:
+            cancel:
+              type: boolean
             command:
-              items:
-                type: string
-              type: array
+              type: string
+            displayName:
+              description: 'INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
+                Important: Run "make" to regenerate code after modifying this file'
+              type: string
             group:
               type: string
             image:
@@ -59,13 +63,12 @@ spec:
             instanceType:
               type: string
             userId:
-              description: 'INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-                Important: Run "make" to regenerate code after modifying this file'
               type: string
             userName:
               type: string
           required:
           - command
+          - displayName
           - group
           - image
           - instanceType
