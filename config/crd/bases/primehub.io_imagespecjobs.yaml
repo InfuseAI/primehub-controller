@@ -61,12 +61,15 @@ spec:
               type: string
             targetImage:
               type: string
+            updateTime:
+              type: string
           required:
           - baseImage
           - packages
           - pushSecret
           - repoPrefix
           - targetImage
+          - updateTime
           type: object
         status:
           description: ImageSpecJobStatus defines the observed state of ImageSpecJob

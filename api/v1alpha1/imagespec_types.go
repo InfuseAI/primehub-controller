@@ -36,6 +36,8 @@ type ImageSpecSpec struct {
 	PullSecret string `json:"pullSecret,omitempty"`
 
 	Packages ImageSpecSpecPackages `json:"packages"`
+
+	UpdateTime string `json:"updateTime"`
 }
 
 // ImageSpecStatus defines the observed state of ImageSpec

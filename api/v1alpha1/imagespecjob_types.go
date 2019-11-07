@@ -33,6 +33,8 @@ type ImageSpecJobSpec struct {
 	TargetImage string                `json:"targetImage"`
 	PushSecret  string                `json:"pushSecret"`
 	RepoPrefix  string                `json:"repoPrefix"`
+
+	UpdateTime string `json:"updateTime"`
 }
 
 // ImageSpecJobStatus defines the observed state of ImageSpecJob
