@@ -95,8 +95,8 @@ func main() {
 	}
 
 	graphqlClient := graphql.NewGraphqlClient(
-		viper.GetString("job.graphqlEndpoint"),
-		viper.GetString("job.graphqlSecret"))
+		viper.GetString("jobSubmission.graphqlEndpoint"),
+		viper.GetString("jobSubmission.graphqlSecret"))
 	if err = (&controllers.PhJobReconciler{
 		Client:        mgr.GetClient(),
 		Log:           ctrl.Log.WithName("controllers").WithName("PhJob"),
@@ -128,8 +128,8 @@ func loadConfig() {
 	configs := []string{
 		"customImage.pushSecretName",
 		"customImage.pushRepoPrefix",
-		"job.graphqlEndpoint",
-		"job.graphqlSecret",
+		"jobSubmission.graphqlEndpoint",
+		"jobSubmission.graphqlSecret",
 	}
 
 	for _, config := range configs {
