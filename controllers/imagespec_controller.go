@@ -137,7 +137,10 @@ func buildImageSpecJob(imageSpec primehubv1alpha1.ImageSpec, hash string) *prime
 			Name:        imageSpec.ObjectMeta.Name + "-" + hash,
 			Namespace:   imageSpec.Namespace,
 			Annotations: map[string]string{"imagespecs.primehub.io/hash": hash},
-			Labels:      map[string]string{"imagespecs.primehub.io/name": imageSpec.ObjectMeta.Name},
+			Labels: map[string]string{
+				"imagespecs.primehub.io/name": imageSpec.ObjectMeta.Name,
+				"app":                         "primehub-custom-image",
+			},
 		},
 		Spec: primehubv1alpha1.ImageSpecJobSpec{
 			BaseImage:   imageSpec.Spec.BaseImage,
