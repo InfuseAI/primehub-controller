@@ -49,6 +49,8 @@ type ImageSpecJobStatus struct {
 
 // +kubebuilder:subresource:status
 // +kubebuilder:object:root=true
+// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.phase",description="status of current job"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // ImageSpecJob is the Schema for the imagespecjobs API
 type ImageSpecJob struct {

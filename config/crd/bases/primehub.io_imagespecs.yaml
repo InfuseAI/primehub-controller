@@ -6,6 +6,14 @@ metadata:
   creationTimestamp: null
   name: imagespecs.primehub.io
 spec:
+  additionalPrinterColumns:
+  - JSONPath: .status.phase
+    description: status of current job
+    name: Status
+    type: string
+  - JSONPath: .metadata.creationTimestamp
+    name: Age
+    type: date
   group: primehub.io
   names:
     kind: ImageSpec
