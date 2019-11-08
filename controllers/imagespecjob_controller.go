@@ -186,6 +186,10 @@ func buildPod(imageSpecJob primehubv1alpha1.ImageSpecJob, dockerfile string) *co
 					},
 					VolumeMounts: []corev1.VolumeMount{
 						{
+							Name:      "varlibcontainers",
+							MountPath: "/var/lib/containers",
+						},
+						{
 							Name:      "scripts",
 							MountPath: "/scripts",
 							ReadOnly:  true,
@@ -203,6 +207,12 @@ func buildPod(imageSpecJob primehubv1alpha1.ImageSpecJob, dockerfile string) *co
 			},
 			RestartPolicy: "Never",
 			Volumes: []corev1.Volume{
+				{
+					Name: "varlibcontainers",
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
+				},
 				{
 					Name: "scripts",
 					VolumeSource: corev1.VolumeSource{
