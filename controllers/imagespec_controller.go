@@ -60,8 +60,10 @@ func (r *ImageSpecReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	var imageSpec primehubv1alpha1.ImageSpec
 	if err := r.Get(ctx, req.NamespacedName, &imageSpec); err != nil {
-		log.Error(err, "unable to fetch ImageSpec")
-		return ctrl.Result{}, nil
+		if ignoreNotFound(err) != nil {
+			log.Error(err, "unable to fetch ImageSpec")
+		}
+		return ctrl.Result{}, ignoreNotFound(err)
 	}
 
 	hash := computeHash(imageSpec)

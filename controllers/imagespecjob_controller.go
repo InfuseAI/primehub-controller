@@ -49,7 +49,9 @@ func (r *ImageSpecJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 
 	var imageSpecJob primehubv1alpha1.ImageSpecJob
 	if err := r.Get(ctx, req.NamespacedName, &imageSpecJob); err != nil {
-		log.Error(err, "unable to fetch ImageSpecJob")
+		if ignoreNotFound(err) != nil {
+			log.Error(err, "unable to fetch ImageSpecJob")
+		}
 		return ctrl.Result{}, ignoreNotFound(err)
 	}
 
