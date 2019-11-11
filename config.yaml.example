@@ -14,5 +14,5 @@ customImage:
         memory: 500Mi
 
 jobSubmission:
-  graphqlEndpoint: https://hub.celu.dev.primehub.io/graphql
-  graphqlSecret: b3f0c00afb6b8e37e3f9ea05c1695ece6f8758411950ed711a8f88687fb22c84
+  graphqlEndpoint: https://primehub.local/graphql
+  graphqlSecret: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx

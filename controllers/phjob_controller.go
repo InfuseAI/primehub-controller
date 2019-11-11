@@ -139,7 +139,7 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 				return ctrl.Result{}, err
 			}
 		} else {
-			log.Info("Pod not found but not necessary ot create")
+			log.Info("Pod not found but not necessary to create")
 		}
 	} else {
 		log.Info("found pod resource for PhJob")

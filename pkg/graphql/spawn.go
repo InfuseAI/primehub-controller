@@ -1,11 +1,10 @@
 package graphql
 
 import (
-	"k8s.io/apimachinery/pkg/api/resource"
-)
-
-import (
 	"errors"
+
+	"k8s.io/apimachinery/pkg/api/resource"
+
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -86,7 +85,7 @@ func findGroup(groups []DtoGroup, groupName string) (DtoGroup, DtoGroup, error) 
 	}
 
 	if !found {
-		return DtoGroup{},DtoGroup{},errors.New("Group not found: " + groupName)
+		return DtoGroup{}, DtoGroup{}, errors.New("Group not found: " + groupName)
 	} else {
 		return groupTarget, groupGlobal, nil
 	}
@@ -148,7 +147,7 @@ func volumeForGroup(project string) (corev1.Volume, corev1.VolumeMount) {
 func (spawner *Spawner) resourceForInstanceType(instanceType DtoInstanceType) bool {
 	isGpu := instanceType.Spec.RequestsCpu > 0
 
-	if instanceType.Spec.RequestsCpu > 0{
+	if instanceType.Spec.RequestsCpu > 0 {
 		spawner.requestsCpu.SetMilli(int64(instanceType.Spec.RequestsCpu * 1000))
 	}
 
@@ -171,7 +170,6 @@ func (spawner *Spawner) resourceForInstanceType(instanceType DtoInstanceType) bo
 	if instanceType.Spec.LimitsMemory != "" {
 		spawner.limitsMemory = resource.MustParse(instanceType.Spec.LimitsMemory)
 	}
-
 
 	return isGpu
 }
