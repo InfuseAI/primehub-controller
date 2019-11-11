@@ -1,7 +1,6 @@
 package graphql
 
 import (
-	"fmt"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
@@ -26,14 +25,11 @@ type Spawner struct {
 
 func NewSpawnerByData(data DtoData, groupName string, instanceTypeName string, imageName string) (*Spawner, error) {
 	var group DtoGroup
+	var groupGlobal DtoGroup
 	var image DtoImage
 	var instanceType DtoInstanceType
 	var err error
 	spawner := &Spawner{}
-
-	//isGlobal := false
-
-	fmt.Println("user: " + data.User.Username)
 
 	if groupName == "" {
 		groupName = "everyone"
@@ -41,7 +37,7 @@ func NewSpawnerByData(data DtoData, groupName string, instanceTypeName string, i
 	}
 
 	// Find the group
-	if group, err = findGroup(data.User.Groups, groupName); err != nil {
+	if group, groupGlobal, err = findGroup(data.User.Groups, groupName); err != nil {
 		return nil, err
 	}
 
@@ -53,13 +49,13 @@ func NewSpawnerByData(data DtoData, groupName string, instanceTypeName string, i
 	}
 
 	// Instance type
-	if instanceType, err = findInstanceType(group.InstanceTypes, instanceTypeName); err != nil {
+	if instanceType, err = findInstanceType(group.InstanceTypes, groupGlobal.InstanceTypes, instanceTypeName); err != nil {
 		return nil, err
 	}
 	isGpu := spawner.resourceForInstanceType(instanceType)
 
 	// Image
-	if image, err = findImage(group.Images, imageName); err != nil {
+	if image, err = findImage(group.Images, groupGlobal.Images, imageName); err != nil {
 		return nil, err
 	}
 	spawner.image, spawner.imagePullSecret = imageForImageSpec(image.Spec, isGpu)
@@ -74,18 +70,36 @@ func (spawner *Spawner) WithCommand(command []string) *Spawner {
 	return spawner
 }
 
-func findGroup(groups []DtoGroup, groupName string) (DtoGroup, error) {
+func findGroup(groups []DtoGroup, groupName string) (DtoGroup, DtoGroup, error) {
+	var groupTarget DtoGroup
+	var groupGlobal DtoGroup
+	found := false
+
 	for _, group := range groups {
 		if group.Name == groupName {
-			return group, nil
+			groupTarget = group
+			found = true
+		}
+		if group.Name == "everyone" {
+			groupGlobal = group
 		}
 	}
 
-	return DtoGroup{}, errors.New("Group not found: " + groupName)
+	if !found {
+		return DtoGroup{},DtoGroup{},errors.New("Group not found: " + groupName)
+	} else {
+		return groupTarget, groupGlobal, nil
+	}
 }
 
-func findImage(images []DtoImage, imageName string) (DtoImage, error) {
+func findImage(images []DtoImage, imagesGlobal []DtoImage, imageName string) (DtoImage, error) {
 	for _, image := range images {
+		if image.Name == imageName {
+			return image, nil
+		}
+	}
+
+	for _, image := range imagesGlobal {
 		if image.Name == imageName {
 			return image, nil
 		}
@@ -94,8 +108,14 @@ func findImage(images []DtoImage, imageName string) (DtoImage, error) {
 	return DtoImage{}, errors.New("Image not found: " + imageName)
 }
 
-func findInstanceType(instanceTypes []DtoInstanceType, instanceTypeName string) (DtoInstanceType, error) {
+func findInstanceType(instanceTypes []DtoInstanceType, instanceTypesGlobal []DtoInstanceType, instanceTypeName string) (DtoInstanceType, error) {
 	for _, instanceType := range instanceTypes {
+		if instanceType.Name == instanceTypeName {
+			return instanceType, nil
+		}
+	}
+
+	for _, instanceType := range instanceTypesGlobal {
 		if instanceType.Name == instanceTypeName {
 			return instanceType, nil
 		}
@@ -128,14 +148,30 @@ func volumeForGroup(project string) (corev1.Volume, corev1.VolumeMount) {
 func (spawner *Spawner) resourceForInstanceType(instanceType DtoInstanceType) bool {
 	isGpu := instanceType.Spec.RequestsCpu > 0
 
-	spawner.requestsCpu.SetMilli(int64(instanceType.Spec.RequestsCpu * 1000))
-	spawner.limitsCpu.SetMilli(int64(instanceType.Spec.LimitsCpu * 1000))
+	if instanceType.Spec.RequestsCpu > 0{
+		spawner.requestsCpu.SetMilli(int64(instanceType.Spec.RequestsCpu * 1000))
+	}
 
-	spawner.requestsGpu.Set(int64(instanceType.Spec.RequestsGpu))
-	spawner.limitsGpu.Set(int64(instanceType.Spec.LimitsGpu))
+	if instanceType.Spec.LimitsCpu > 0 {
+		spawner.limitsCpu.SetMilli(int64(instanceType.Spec.LimitsCpu * 1000))
+	}
 
-	spawner.requestsMemory = resource.MustParse(instanceType.Spec.RequestsMemory)
-	spawner.limitsMemory = resource.MustParse(instanceType.Spec.LimitsMemory)
+	if instanceType.Spec.RequestsGpu > 0 {
+		spawner.requestsGpu.Set(int64(instanceType.Spec.RequestsGpu))
+	}
+
+	if instanceType.Spec.LimitsGpu > 0 {
+		spawner.limitsGpu.Set(int64(instanceType.Spec.LimitsGpu))
+	}
+
+	if instanceType.Spec.RequestsMemory != "" {
+		spawner.requestsMemory = resource.MustParse(instanceType.Spec.RequestsMemory)
+	}
+
+	if instanceType.Spec.LimitsMemory != "" {
+		spawner.limitsMemory = resource.MustParse(instanceType.Spec.LimitsMemory)
+	}
+
 
 	return isGpu
 }
