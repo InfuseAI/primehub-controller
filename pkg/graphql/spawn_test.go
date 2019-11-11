@@ -17,7 +17,7 @@ func TestSpawn(t *testing.T) {
 		group        string
 		instanceType string
 		image        string
-		success		 bool
+		success      bool
 	}{
 		{name: "normal", group: "phusers", instanceType: "cpu-only", image: "base-notebook", success: true},
 		{name: "it-from-global", group: "phusers", instanceType: "cpu-test", image: "base-notebook", success: true},
