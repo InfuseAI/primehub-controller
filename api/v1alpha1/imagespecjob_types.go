@@ -34,7 +34,7 @@ type ImageSpecJobSpec struct {
 	PushSecret  string                `json:"pushSecret"`
 	RepoPrefix  string                `json:"repoPrefix"`
 
-	UpdateTime string `json:"updateTime"`
+	UpdateTime *metav1.Time `json:"updateTime,omitempty"`
 }
 
 // ImageSpecJobStatus defines the observed state of ImageSpecJob

@@ -37,7 +37,7 @@ type ImageSpecSpec struct {
 
 	Packages ImageSpecSpecPackages `json:"packages"`
 
-	UpdateTime string `json:"updateTime"`
+	UpdateTime *metav1.Time `json:"updateTime,omitempty"`
 }
 
 // ImageSpecStatus defines the observed state of ImageSpec

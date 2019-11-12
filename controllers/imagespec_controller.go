@@ -66,6 +66,17 @@ func (r *ImageSpecReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, ignoreNotFound(err)
 	}
 
+	imageSpecClone := imageSpec.DeepCopy()
+	if imageSpecClone.Spec.UpdateTime.IsZero() {
+		log.Info("updateTime is not set, auto fill the current local time")
+		now := metav1.Now()
+		imageSpecClone.Spec.UpdateTime = &now
+		if err := r.Update(ctx, imageSpecClone); err != nil {
+			log.Error(err, "failed to update ImageSpec status")
+			return ctrl.Result{}, err
+		}
+	}
+
 	hash := computeHash(imageSpec)
 
 	log.Info("Computed hash:", "hash", hash)
@@ -95,7 +106,7 @@ func (r *ImageSpecReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, err
 	}
 
-	if imageSpecJob.Spec.UpdateTime != imageSpec.Spec.UpdateTime {
+	if !imageSpecJob.Spec.UpdateTime.Equal(imageSpecClone.Spec.UpdateTime) {
 		if err := r.Delete(ctx, &imageSpecJob, client.PropagationPolicy(metav1.DeletePropagationBackground)); ignoreNotFound(err) != nil {
 			log.Error(err, "unable to delete outdated ImageSpecJob", "imageSpecJob", imageSpecJob)
 		} else {
@@ -105,7 +116,6 @@ func (r *ImageSpecReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 
 	log.Info("updating ImageSpec resource status")
-	imageSpecClone := imageSpec.DeepCopy()
 
 	imageSpecClone.Status.JobName = imageSpecJob.Name
 	imageSpecClone.Status.Phase = string(imageSpecJob.Status.Phase)

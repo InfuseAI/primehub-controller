@@ -64,11 +64,11 @@ spec:
             pullSecret:
               type: string
             updateTime:
+              format: date-time
               type: string
           required:
           - baseImage
           - packages
-          - updateTime
           type: object
         status:
           description: ImageSpecStatus defines the observed state of ImageSpec
