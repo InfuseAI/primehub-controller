@@ -19,6 +19,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"primehub-controller/pkg/graphql"
 
 	primehubv1alpha1 "primehub-controller/api/v1alpha1"
 
@@ -29,6 +30,9 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 	// +kubebuilder:scaffold:imports
 
 	"github.com/spf13/viper"
@@ -43,6 +47,8 @@ func init() {
 	_ = clientgoscheme.AddToScheme(scheme)
 
 	_ = primehubv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+	_ = batchv1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -87,6 +93,19 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "ImageSpecJob")
 		os.Exit(1)
 	}
+
+	graphqlClient := graphql.NewGraphqlClient(
+		viper.GetString("jobSubmission.graphqlEndpoint"),
+		viper.GetString("jobSubmission.graphqlSecret"))
+	if err = (&controllers.PhJobReconciler{
+		Client:        mgr.GetClient(),
+		Log:           ctrl.Log.WithName("controllers").WithName("PhJob"),
+		Scheme:        mgr.GetScheme(),
+		GraphqlClient: graphqlClient,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "PhJob")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	setupLog.Info("starting manager")
@@ -106,10 +125,16 @@ func loadConfig() {
 		panic(fmt.Errorf("Fatal error config file: %s \n", err))
 	}
 
-	if viper.GetString("customImage.pushSecretName") == "" {
-		panic("customImage.pushSecretName is required in config.yaml")
+	configs := []string{
+		"customImage.pushSecretName",
+		"customImage.pushRepoPrefix",
+		"jobSubmission.graphqlEndpoint",
+		"jobSubmission.graphqlSecret",
 	}
-	if viper.GetString("customImage.pushRepoPrefix") == "" {
-		panic("customImage.pushRepoPrefix is required in config.yaml")
+
+	for _, config := range configs {
+		if viper.GetString(config) == "" {
+			panic(config + " is required in config.yaml")
+		}
 	}
 }

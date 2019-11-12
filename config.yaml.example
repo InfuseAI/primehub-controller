@@ -12,3 +12,7 @@ customImage:
       limits:
         cpu: 1000m
         memory: 500Mi
+
+jobSubmission:
+  graphqlEndpoint: https://primehub.local/graphql
+  graphqlSecret: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
