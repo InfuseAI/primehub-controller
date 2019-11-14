@@ -33,11 +33,22 @@ import (
 	primehubv1alpha1 "primehub-controller/api/v1alpha1"
 )
 
+const (
+	CustomImageJobStatusSucceeded = "Succeeded"
+)
+
 // ImageSpecReconciler reconciles a ImageSpec object
 type ImageSpecReconciler struct {
 	client.Client
 	Log    logr.Logger
 	Scheme *runtime.Scheme
+}
+
+func ignoreNotFound(err error) error {
+	if apierrors.IsNotFound(err) {
+		return nil
+	}
+	return err
 }
 
 // +kubebuilder:rbac:groups=primehub.io,resources=imagespecs,verbs=get;list;watch;create;update;patch;delete
@@ -49,8 +60,21 @@ func (r *ImageSpecReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	var imageSpec primehubv1alpha1.ImageSpec
 	if err := r.Get(ctx, req.NamespacedName, &imageSpec); err != nil {
-		log.Error(err, "unable to fetch ImageSpec")
-		return ctrl.Result{}, nil
+		if ignoreNotFound(err) != nil {
+			log.Error(err, "unable to fetch ImageSpec")
+		}
+		return ctrl.Result{}, ignoreNotFound(err)
+	}
+
+	imageSpecClone := imageSpec.DeepCopy()
+	if imageSpecClone.Spec.UpdateTime.IsZero() {
+		log.Info("updateTime is not set, auto fill the current local time")
+		now := metav1.Now()
+		imageSpecClone.Spec.UpdateTime = &now
+		if err := r.Update(ctx, imageSpecClone); err != nil {
+			log.Error(err, "failed to update ImageSpec status")
+			return ctrl.Result{}, err
+		}
 	}
 
 	hash := computeHash(imageSpec)
@@ -82,12 +106,20 @@ func (r *ImageSpecReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, err
 	}
 
+	if !imageSpecJob.Spec.UpdateTime.Equal(imageSpecClone.Spec.UpdateTime) {
+		if err := r.Delete(ctx, &imageSpecJob, client.PropagationPolicy(metav1.DeletePropagationBackground)); ignoreNotFound(err) != nil {
+			log.Error(err, "unable to delete outdated ImageSpecJob", "imageSpecJob", imageSpecJob)
+		} else {
+			log.Info("deleted old outdated ImageSpecJob", "imageSpecJob", imageSpecJob)
+		}
+		return ctrl.Result{}, nil
+	}
+
 	log.Info("updating ImageSpec resource status")
-	imageSpecClone := imageSpec.DeepCopy()
 
 	imageSpecClone.Status.JobName = imageSpecJob.Name
 	imageSpecClone.Status.Phase = string(imageSpecJob.Status.Phase)
-	if imageSpecClone.Status.Phase == "Succeeded" {
+	if imageSpecClone.Status.Phase == CustomImageJobStatusSucceeded {
 		image := imageSpecJob.Spec.RepoPrefix + "/" + imageSpecJob.Spec.TargetImage
 		imageSpecClone.Status.Image = image
 	}
@@ -117,7 +149,10 @@ func buildImageSpecJob(imageSpec primehubv1alpha1.ImageSpec, hash string) *prime
 			Name:        imageSpec.ObjectMeta.Name + "-" + hash,
 			Namespace:   imageSpec.Namespace,
 			Annotations: map[string]string{"imagespecs.primehub.io/hash": hash},
-			Labels:      map[string]string{"imagespecs.primehub.io/name": imageSpec.ObjectMeta.Name},
+			Labels: map[string]string{
+				"imagespecs.primehub.io/name": imageSpec.ObjectMeta.Name,
+				"app":                         "primehub-custom-image",
+			},
 		},
 		Spec: primehubv1alpha1.ImageSpecJobSpec{
 			BaseImage:   imageSpec.Spec.BaseImage,
@@ -126,6 +161,7 @@ func buildImageSpecJob(imageSpec primehubv1alpha1.ImageSpec, hash string) *prime
 			TargetImage: imageSpec.ObjectMeta.Name + ":" + hash,
 			PushSecret:  pushSecretName,
 			RepoPrefix:  repoPrefix,
+			UpdateTime:  imageSpec.Spec.UpdateTime,
 		},
 	}
 

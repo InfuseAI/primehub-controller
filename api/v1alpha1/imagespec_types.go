@@ -36,6 +36,8 @@ type ImageSpecSpec struct {
 	PullSecret string `json:"pullSecret,omitempty"`
 
 	Packages ImageSpecSpecPackages `json:"packages"`
+
+	UpdateTime *metav1.Time `json:"updateTime,omitempty"`
 }
 
 // ImageSpecStatus defines the observed state of ImageSpec
@@ -49,6 +51,8 @@ type ImageSpecStatus struct {
 
 // +kubebuilder:subresource:status
 // +kubebuilder:object:root=true
+// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.phase",description="status of current job"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // ImageSpec is the Schema for the imagespecs API
 type ImageSpec struct {

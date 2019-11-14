@@ -18,6 +18,7 @@ package controllers
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"text/template"
 
 	"github.com/go-logr/logr"
@@ -48,12 +49,37 @@ func (r *ImageSpecJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 
 	var imageSpecJob primehubv1alpha1.ImageSpecJob
 	if err := r.Get(ctx, req.NamespacedName, &imageSpecJob); err != nil {
-		log.Error(err, "unable to fetch ImageSpecJob")
+		if ignoreNotFound(err) != nil {
+			log.Error(err, "unable to fetch ImageSpecJob")
+		}
+		return ctrl.Result{}, ignoreNotFound(err)
+	}
+
+	imageSpecJobClone := imageSpecJob.DeepCopy()
+
+	if imageSpecJobClone.Status.Phase == CustomImageJobStatusSucceeded {
 		return ctrl.Result{}, nil
 	}
 
+	var podName string
+	if imageSpecJobClone.Status.PodName != "" {
+		podName = imageSpecJobClone.Status.PodName
+	} else {
+		hash, err := generateRandomString(4)
+		if err != nil {
+			log.Error(err, "unable to generate random string for pod name")
+			return ctrl.Result{}, err
+		}
+		podName = "image-" + imageSpecJobClone.ObjectMeta.Name + "-" + hash
+		imageSpecJobClone.Status.PodName = podName
+		if err := r.Status().Update(ctx, imageSpecJobClone); err != nil {
+			log.Error(err, "failed to update ImageSpecJob status")
+			return ctrl.Result{}, err
+		}
+	}
+
 	pod := corev1.Pod{}
-	err := r.Client.Get(ctx, client.ObjectKey{Namespace: imageSpecJob.Namespace, Name: imageSpecJob.ObjectMeta.Name}, &pod)
+	err := r.Client.Get(ctx, client.ObjectKey{Namespace: imageSpecJob.Namespace, Name: podName}, &pod)
 	if apierrors.IsNotFound(err) {
 		log.Info("could not find existing Pod for ImageSpecJob, creating one...")
 
@@ -67,7 +93,7 @@ func (r *ImageSpecJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 		}
 
 		dockerfile := generateDockerfile(imageSpecJob)
-		pod = *buildPod(imageSpecJob, dockerfile)
+		pod = *buildPod(imageSpecJob, podName, dockerfile)
 		if err := ctrl.SetControllerReference(&imageSpecJob, &pod, r.Scheme); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -87,14 +113,14 @@ func (r *ImageSpecJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 
 	log.Info("updating ImageSpecJob resource status")
 
-	imageSpecJobClone := imageSpecJob.DeepCopy()
-	imageSpecJobClone.Status.PodName = pod.Name
 	imageSpecJobClone.Status.Phase = string(pod.Status.Phase)
-	if pod.Status.StartTime != nil {
+	if pod.Status.StartTime != nil && !pod.Status.StartTime.Equal(imageSpecJobClone.Status.StartTime) {
 		imageSpecJobClone.Status.StartTime = pod.Status.StartTime
+		imageSpecJobClone.Status.FinishTime = nil
 	}
-	if len(pod.Status.ContainerStatuses) > 0 && pod.Status.ContainerStatuses[0].State.Terminated != nil {
-		containerFinishedAt := pod.Status.ContainerStatuses[0].State.Terminated.FinishedAt
+	podStatuses := pod.Status.ContainerStatuses
+	if len(podStatuses) > 0 && podStatuses[0].State.Terminated != nil && !podStatuses[0].State.Terminated.FinishedAt.IsZero() {
+		containerFinishedAt := podStatuses[0].State.Terminated.FinishedAt
 		imageSpecJobClone.Status.FinishTime = &containerFinishedAt
 	}
 
@@ -152,14 +178,45 @@ RUN conda install --quiet --yes \
 	return res.String()
 }
 
-func buildPod(imageSpecJob primehubv1alpha1.ImageSpecJob, dockerfile string) *corev1.Pod {
+// GenerateRandomBytes returns securely generated random bytes.
+// It will return an error if the system's secure random
+// number generator fails to function correctly, in which
+// case the caller should not continue.
+func generateRandomBytes(n int) ([]byte, error) {
+	b := make([]byte, n)
+	_, err := rand.Read(b)
+	// Note that err == nil only if we read len(b) bytes.
+	if err != nil {
+		return nil, err
+	}
+
+	return b, nil
+}
+
+// GenerateRandomString returns a securely generated random string.
+// It will return an error if the system's secure random
+// number generator fails to function correctly, in which
+// case the caller should not continue.
+func generateRandomString(n int) (string, error) {
+	const letters = "0123456789abcdefghijklmnopqrstuvwxyz"
+	bytes, err := generateRandomBytes(n)
+	if err != nil {
+		return "", err
+	}
+	for i, b := range bytes {
+		bytes[i] = letters[b%byte(len(letters))]
+	}
+	return string(bytes), nil
+}
+
+func buildPod(imageSpecJob primehubv1alpha1.ImageSpecJob, podName string, dockerfile string) *corev1.Pod {
 	containerName := "build-and-push"
 	containerImage := "quay.io/buildah/stable:v1.11.3"
 	privileged := true
 
 	pod := corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        imageSpecJob.ObjectMeta.Name,
+			Name:        podName,
 			Namespace:   imageSpecJob.Namespace,
 			Annotations: imageSpecJob.ObjectMeta.Annotations,
 			Labels:      imageSpecJob.ObjectMeta.Labels,

@@ -1,7 +1,17 @@
 apiVersion: primehub.io/v1alpha1
 kind: ImageSpec
 metadata:
-  name: imagespec-sample
+  name: better-base-notebook
+  namespace: hub
 spec:
-  # Add fields here
-  foo: bar
+  baseImage: jupyter/base-notebook
+  pullSecret: secret-to-pull
+  packages:
+    apt:
+    - curl
+    - vim
+    pip:
+    - flask
+    conda:
+    - tensorflow=1.13*
+  updateTime: 2019-11-05T00:09:15Z

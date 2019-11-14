@@ -33,6 +33,8 @@ type ImageSpecJobSpec struct {
 	TargetImage string                `json:"targetImage"`
 	PushSecret  string                `json:"pushSecret"`
 	RepoPrefix  string                `json:"repoPrefix"`
+
+	UpdateTime *metav1.Time `json:"updateTime,omitempty"`
 }
 
 // ImageSpecJobStatus defines the observed state of ImageSpecJob
@@ -47,6 +49,8 @@ type ImageSpecJobStatus struct {
 
 // +kubebuilder:subresource:status
 // +kubebuilder:object:root=true
+// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.phase",description="status of current job"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // ImageSpecJob is the Schema for the imagespecjobs API
 type ImageSpecJob struct {
