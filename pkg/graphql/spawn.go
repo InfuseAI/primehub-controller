@@ -185,6 +185,7 @@ func (spawner *Spawner) BuildPodSpec(podSpec *corev1.PodSpec) {
 	container.Name = "main"
 	container.Image = spawner.image
 	container.Command = spawner.command
+	container.WorkingDir = "/workingdir"
 	container.VolumeMounts = append(container.VolumeMounts, spawner.volumeMounts...)
 	container.Resources.Requests = map[corev1.ResourceName]resource.Quantity{}
 	container.Resources.Limits = map[corev1.ResourceName]resource.Quantity{}
@@ -215,7 +216,7 @@ func (spawner *Spawner) BuildPodSpec(podSpec *corev1.PodSpec) {
 
 	// pod
 	podSpec.Volumes = append(podSpec.Volumes, spawner.volumes...)
-	mountEmptyDir(podSpec, []*corev1.Container{&container}, "emptyhome", "/home/jovyan")
+	mountEmptyDir(podSpec, []*corev1.Container{&container}, "workingdir", "/workingdir")
 	podSpec.Containers = append(podSpec.Containers, container)
 	if spawner.imagePullSecret != "" {
 		podSpec.ImagePullSecrets = append(podSpec.ImagePullSecrets, corev1.LocalObjectReference{
