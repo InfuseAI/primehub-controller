@@ -130,6 +130,7 @@ func loadConfig() {
 		"customImage.pushRepoPrefix",
 		"jobSubmission.graphqlEndpoint",
 		"jobSubmission.graphqlSecret",
+		"jobSubmission.workingDirSize",
 	}
 
 	for _, config := range configs {

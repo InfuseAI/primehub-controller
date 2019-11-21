@@ -3,6 +3,7 @@ package graphql
 import (
 	"errors"
 
+	"github.com/spf13/viper"
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	corev1 "k8s.io/api/core/v1"
@@ -227,11 +228,12 @@ func (spawner *Spawner) BuildPodSpec(podSpec *corev1.PodSpec) {
 }
 
 func mountEmptyDir(podSpec *corev1.PodSpec, containers []*corev1.Container, name string, path string) {
+	emptyDirLimit := resource.MustParse(viper.GetString("jobSubmission.workingDirSize"))
 	podSpec.Volumes = append(podSpec.Volumes,
 		corev1.Volume{
 			Name: name,
 			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
+				EmptyDir: &corev1.EmptyDirVolumeSource{SizeLimit: &emptyDirLimit},
 			},
 		})
 
