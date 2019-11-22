@@ -25,6 +25,7 @@ import (
 
 	"primehub-controller/controllers"
 
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
@@ -33,6 +34,7 @@ import (
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+
 	// +kubebuilder:scaffold:imports
 
 	"github.com/spf13/viper"
@@ -137,5 +139,10 @@ func loadConfig() {
 		if viper.GetString(config) == "" {
 			panic(config + " is required in config.yaml")
 		}
+	}
+
+	// Check jobSubmission.workingDirSize must correct
+	if _, err := resource.ParseQuantity(viper.GetString("jobSubmission.workingDirSize")); err != nil {
+		panic(fmt.Errorf("cannot parse jobSubmission.workingDirSize: %v", err))
 	}
 }

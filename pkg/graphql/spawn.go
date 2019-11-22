@@ -21,6 +21,7 @@ type Spawner struct {
 	limitsMemory    resource.Quantity
 	requestsGpu     resource.Quantity
 	limitsGpu       resource.Quantity
+	workingDirSize  resource.Quantity
 }
 
 func NewSpawnerByData(data DtoData, groupName string, instanceTypeName string, imageName string) (*Spawner, error) {
@@ -61,6 +62,9 @@ func NewSpawnerByData(data DtoData, groupName string, instanceTypeName string, i
 	spawner.image, spawner.imagePullSecret = imageForImageSpec(image.Spec, isGpu)
 
 	// Dataset
+
+	// Others
+	spawner.workingDirSize = resource.MustParse(viper.GetString("jobSubmission.workingDirSize"))
 
 	return spawner, nil
 }
@@ -179,6 +183,24 @@ func imageForImageSpec(spec DtoImageSpec, isGpu bool) (string, string) {
 	return spec.Url, ""
 }
 
+func mountEmptyDir(podSpec *corev1.PodSpec, containers []*corev1.Container, name string, path string, emptyDirLimit resource.Quantity) {
+	podSpec.Volumes = append(podSpec.Volumes,
+		corev1.Volume{
+			Name: name,
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{SizeLimit: &emptyDirLimit},
+			},
+		})
+
+	for _, container := range containers {
+		container.VolumeMounts = append(container.VolumeMounts,
+			corev1.VolumeMount{
+				Name:      name,
+				MountPath: path,
+			})
+	}
+}
+
 func (spawner *Spawner) BuildPodSpec(podSpec *corev1.PodSpec) {
 	container := corev1.Container{}
 
@@ -217,7 +239,7 @@ func (spawner *Spawner) BuildPodSpec(podSpec *corev1.PodSpec) {
 
 	// pod
 	podSpec.Volumes = append(podSpec.Volumes, spawner.volumes...)
-	mountEmptyDir(podSpec, []*corev1.Container{&container}, "workingdir", "/workingdir")
+	mountEmptyDir(podSpec, []*corev1.Container{&container}, "workingdir", "/workingdir", spawner.workingDirSize)
 	podSpec.Containers = append(podSpec.Containers, container)
 	if spawner.imagePullSecret != "" {
 		podSpec.ImagePullSecrets = append(podSpec.ImagePullSecrets, corev1.LocalObjectReference{
@@ -225,23 +247,4 @@ func (spawner *Spawner) BuildPodSpec(podSpec *corev1.PodSpec) {
 		})
 	}
 
-}
-
-func mountEmptyDir(podSpec *corev1.PodSpec, containers []*corev1.Container, name string, path string) {
-	emptyDirLimit := resource.MustParse(viper.GetString("jobSubmission.workingDirSize"))
-	podSpec.Volumes = append(podSpec.Volumes,
-		corev1.Volume{
-			Name: name,
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{SizeLimit: &emptyDirLimit},
-			},
-		})
-
-	for _, container := range containers {
-		container.VolumeMounts = append(container.VolumeMounts,
-			corev1.VolumeMount{
-				Name:      name,
-				MountPath: path,
-			})
-	}
 }
