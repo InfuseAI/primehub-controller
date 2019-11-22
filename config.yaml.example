@@ -16,3 +16,5 @@ customImage:
 jobSubmission:
   graphqlEndpoint: https://primehub.local/graphql
   graphqlSecret: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+  workingDirSize: 5Gi
