@@ -17,9 +17,10 @@ package controllers
 
 import (
 	"context"
+	"primehub-controller/pkg/graphql"
+
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
-	"primehub-controller/pkg/graphql"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -145,9 +146,22 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		log.Info("found pod resource for PhJob")
 
 		phJob = phJob.DeepCopy()
-		phJob.Status.Phase = convertJobPhase(pod)
 		phJob.Status.StartTime = getStartTime(pod)
-		phJob.Status.FinishTime = getFinishTime(pod)
+
+		if phJob.Spec.Cancel == true && phJob.Status.Phase != primehubv1alpha1.JobCancelled {
+			if err := r.Client.Delete(ctx, pod); err != nil {
+				log.Error(err, "failed to delete pod and cancel phjob")
+				return ctrl.Result{}, err
+			}
+
+			phJob.Status.Phase = primehubv1alpha1.JobCancelled
+			now := metav1.Now()
+			phJob.Status.FinishTime = &now
+		} else if phJob.Spec.Cancel != true {
+			phJob.Status.Phase = convertJobPhase(pod)
+			phJob.Status.FinishTime = getFinishTime(pod)
+		}
+
 		if err = r.Status().Update(ctx, phJob); err != nil {
 			log.Error(err, "failed to update PhJob status")
 			return ctrl.Result{}, err
