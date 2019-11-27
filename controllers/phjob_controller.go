@@ -149,7 +149,9 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		phJob.Status.StartTime = getStartTime(pod)
 
 		if phJob.Spec.Cancel == true && phJob.Status.Phase != primehubv1alpha1.JobCancelled {
-			if err := r.Client.Delete(ctx, pod); err != nil {
+			gracePeriodSeconds := int64(0)
+			deleteOptions := client.DeleteOptions{GracePeriodSeconds: &gracePeriodSeconds}
+			if err := r.Client.Delete(ctx, pod, &deleteOptions); err != nil {
 				log.Error(err, "failed to delete pod and cancel phjob")
 				return ctrl.Result{}, err
 			}
