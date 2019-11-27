@@ -212,6 +212,7 @@ func (spawner *Spawner) BuildPodSpec(podSpec *corev1.PodSpec) {
 	container.VolumeMounts = append(container.VolumeMounts, spawner.volumeMounts...)
 	container.Resources.Requests = map[corev1.ResourceName]resource.Quantity{}
 	container.Resources.Limits = map[corev1.ResourceName]resource.Quantity{}
+	container.TerminationMessagePolicy = corev1.TerminationMessageFallbackToLogsOnError
 
 	if !spawner.requestsCpu.IsZero() {
 		container.Resources.Requests["cpu"] = spawner.requestsCpu

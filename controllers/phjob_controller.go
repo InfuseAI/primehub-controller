@@ -162,6 +162,11 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		} else if phJob.Spec.Cancel != true {
 			phJob.Status.Phase = convertJobPhase(pod)
 			phJob.Status.FinishTime = getFinishTime(pod)
+
+			if pod.Status.Phase == corev1.PodFailed && len(pod.Status.ContainerStatuses) > 0 {
+				phJob.Status.Reason = pod.Status.ContainerStatuses[0].State.Terminated.Reason
+				phJob.Status.Message = pod.Status.ContainerStatuses[0].State.Terminated.Message
+			}
 		}
 
 		if err = r.Status().Update(ctx, phJob); err != nil {
