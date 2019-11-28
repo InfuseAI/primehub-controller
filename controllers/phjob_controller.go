@@ -17,6 +17,8 @@ package controllers
 
 import (
 	"context"
+	"github.com/spf13/viper"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"primehub-controller/pkg/graphql"
 	"strings"
 	"time"
@@ -71,7 +73,10 @@ func (r *PhJobReconciler) buildPod(phJob *primehubv1alpha1.PhJob) (*corev1.Pod, 
 	if spawner, err = graphql.NewSpawnerByData(result.Data, phJob.Spec.Group, phJob.Spec.InstanceType, phJob.Spec.Image); err != nil {
 		return nil, err
 	}
-	spawner.WithCommand([]string{"sh", "-c", phJob.Spec.Command}).BuildPodSpec(&podSpec)
+	spawner.WithCommand([]string{"sh", "-c", phJob.Spec.Command})
+	spawner.WithWorkingDir(resource.MustParse(viper.GetString("jobSubmission.workingDirSize")))
+	spawner.BuildPodSpec(&podSpec)
+
 	podSpec.RestartPolicy = corev1.RestartPolicyNever
 	pod.Spec = podSpec
 	pod.Labels = map[string]string{

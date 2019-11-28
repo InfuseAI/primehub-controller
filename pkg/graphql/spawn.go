@@ -3,7 +3,6 @@ package graphql
 import (
 	"errors"
 
-	"github.com/spf13/viper"
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	corev1 "k8s.io/api/core/v1"
@@ -21,7 +20,7 @@ type Spawner struct {
 	limitsMemory    resource.Quantity
 	requestsGpu     resource.Quantity
 	limitsGpu       resource.Quantity
-	workingDirSize  resource.Quantity
+	workingDir      string
 }
 
 func NewSpawnerByData(data DtoData, groupName string, instanceTypeName string, imageName string) (*Spawner, error) {
@@ -63,10 +62,15 @@ func NewSpawnerByData(data DtoData, groupName string, instanceTypeName string, i
 
 	// Dataset
 
-	// Others
-	spawner.workingDirSize = resource.MustParse(viper.GetString("jobSubmission.workingDirSize"))
-
 	return spawner, nil
+}
+
+func (spawner *Spawner) WithWorkingDir(workingDirSize  resource.Quantity) *Spawner {
+	volume, volumeMount, workingDir := volumeForWorkingDir(workingDirSize)
+	spawner.volumes = append(spawner.volumes, volume)
+	spawner.volumeMounts = append(spawner.volumeMounts, volumeMount)
+	spawner.workingDir = workingDir
+	return spawner
 }
 
 func (spawner *Spawner) WithCommand(command []string) *Spawner {
@@ -149,6 +153,25 @@ func volumeForGroup(project string) (corev1.Volume, corev1.VolumeMount) {
 	return volume, volumeMount
 }
 
+func volumeForWorkingDir(workingDirSize resource.Quantity) (corev1.Volume, corev1.VolumeMount, string){
+	name := "workingdir"
+	path := "/workingdir"
+
+	volume := corev1.Volume{
+		Name: name,
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{SizeLimit: &workingDirSize},
+		},
+	}
+
+	volumeMount := corev1.VolumeMount{
+		MountPath: path,
+		Name:      name,
+	}
+
+	return volume, volumeMount, path
+}
+
 func (spawner *Spawner) resourceForInstanceType(instanceType DtoInstanceType) bool {
 	isGpu := instanceType.Spec.RequestsCpu > 0
 
@@ -183,24 +206,6 @@ func imageForImageSpec(spec DtoImageSpec, isGpu bool) (string, string) {
 	return spec.Url, ""
 }
 
-func mountEmptyDir(podSpec *corev1.PodSpec, containers []*corev1.Container, name string, path string, emptyDirLimit resource.Quantity) {
-	podSpec.Volumes = append(podSpec.Volumes,
-		corev1.Volume{
-			Name: name,
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{SizeLimit: &emptyDirLimit},
-			},
-		})
-
-	for _, container := range containers {
-		container.VolumeMounts = append(container.VolumeMounts,
-			corev1.VolumeMount{
-				Name:      name,
-				MountPath: path,
-			})
-	}
-}
-
 func (spawner *Spawner) BuildPodSpec(podSpec *corev1.PodSpec) {
 	container := corev1.Container{}
 
@@ -208,7 +213,7 @@ func (spawner *Spawner) BuildPodSpec(podSpec *corev1.PodSpec) {
 	container.Name = "main"
 	container.Image = spawner.image
 	container.Command = spawner.command
-	container.WorkingDir = "/workingdir"
+	container.WorkingDir = spawner.workingDir
 	container.VolumeMounts = append(container.VolumeMounts, spawner.volumeMounts...)
 	container.Resources.Requests = map[corev1.ResourceName]resource.Quantity{}
 	container.Resources.Limits = map[corev1.ResourceName]resource.Quantity{}
@@ -240,7 +245,6 @@ func (spawner *Spawner) BuildPodSpec(podSpec *corev1.PodSpec) {
 
 	// pod
 	podSpec.Volumes = append(podSpec.Volumes, spawner.volumes...)
-	mountEmptyDir(podSpec, []*corev1.Container{&container}, "workingdir", "/workingdir", spawner.workingDirSize)
 	podSpec.Containers = append(podSpec.Containers, container)
 	if spawner.imagePullSecret != "" {
 		podSpec.ImagePullSecrets = append(podSpec.ImagePullSecrets, corev1.LocalObjectReference{
