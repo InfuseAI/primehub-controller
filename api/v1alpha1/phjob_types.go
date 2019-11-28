@@ -58,6 +58,7 @@ type PhJobStatus struct {
 	// Important: Run "make" to regenerate code after modifying this file
 	Phase      PhJobPhase   `json:"phase"`
 	Reason     string       `json:"reason,omitempty"`
+	Message    string       `json:"message,omitempty"`
 	PodName    string       `json:"podName,omitempty"`
 	StartTime  *metav1.Time `json:"startTime,omitempty"`
 	FinishTime *metav1.Time `json:"finishTime,omitempty"`
