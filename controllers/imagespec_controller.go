@@ -72,7 +72,16 @@ func (r *ImageSpecReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		now := metav1.Now()
 		imageSpecClone.Spec.UpdateTime = &now
 		if err := r.Update(ctx, imageSpecClone); err != nil {
-			log.Error(err, "failed to update ImageSpec status")
+			log.Error(err, "failed to update ImageSpec updateTime")
+			return ctrl.Result{}, err
+		}
+	}
+
+	t := imageSpecClone.Spec.UpdateTime.Rfc3339Copy()
+	if !imageSpecClone.Spec.UpdateTime.Equal(&t) {
+		imageSpecClone.Spec.UpdateTime = &t
+		if err := r.Update(ctx, imageSpecClone); err != nil {
+			log.Error(err, "failed to update ImageSpec updateTime")
 			return ctrl.Result{}, err
 		}
 	}
