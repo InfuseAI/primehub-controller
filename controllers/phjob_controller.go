@@ -32,6 +32,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+var (
+	// DefaultJobReadyTimeout is the phJob ready state timeout value
+	DefaultJobReadyTimeout = time.Duration(180) * time.Second
+)
+
 // PhJobReconciler reconciles a PhJob object
 type PhJobReconciler struct {
 	client.Client
@@ -181,8 +186,6 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			}
 
 			if phJobReadyTimeout {
-				*phJob.Status.Requeued += int32(1)
-
 				if phJob.Spec.RequeueLimit != nil && *phJob.Status.Requeued > *phJob.Spec.RequeueLimit {
 					// Requeued excceeds limit
 					log.Info("phJob has failed because it was requeued more than specified times")
@@ -197,6 +200,7 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 					log.Error(err, "failed to delete pod and cancel phjob")
 					return ctrl.Result{}, err
 				}
+				*phJob.Status.Requeued += int32(1)
 			} else {
 				phJob.Status.Phase = convertJobPhase(pod)
 				phJob.Status.FinishTime = getFinishTime(pod)
@@ -231,8 +235,7 @@ func (r *PhJobReconciler) readyStateTimeout(phJob *primehubv1alpha1.PhJob, pod *
 		now := metav1.Now()
 		start := pod.ObjectMeta.CreationTimestamp.Time
 		duration := now.Time.Sub(start)
-		allowedDuration := time.Duration(180) * time.Second
-		return duration >= allowedDuration
+		return duration >= DefaultJobReadyTimeout
 	}
 	return false
 }
