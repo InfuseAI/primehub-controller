@@ -18,6 +18,7 @@ package controllers
 import (
 	"context"
 	"primehub-controller/pkg/graphql"
+	"time"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -106,6 +107,8 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 
 	pod := &corev1.Pod{}
+	phJobReadyTimeout := false
+
 	err = r.Client.Get(ctx, podkey, pod)
 	if err != nil {
 
@@ -117,6 +120,12 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		if phJob.Status.Phase == "" || phJob.Status.Phase == primehubv1alpha1.JobPending {
 			// create the pod
 			phJob = phJob.DeepCopy()
+
+			if phJob.Status.Requeued == nil {
+				phJob.Status.Requeued = new(int32)
+				*phJob.Status.Requeued = int32(0)
+			}
+
 			log.Info("could not find existing pod for PhJob, creating one...")
 			pod, err = r.buildPod(phJob)
 			if err == nil {
@@ -148,6 +157,11 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		phJob = phJob.DeepCopy()
 		phJob.Status.StartTime = getStartTime(pod)
 
+		if phJob.Status.Requeued == nil {
+			phJob.Status.Requeued = new(int32)
+			*phJob.Status.Requeued = int32(0)
+		}
+
 		if phJob.Spec.Cancel == true && phJob.Status.Phase != primehubv1alpha1.JobCancelled {
 			gracePeriodSeconds := int64(0)
 			deleteOptions := client.DeleteOptions{GracePeriodSeconds: &gracePeriodSeconds}
@@ -160,12 +174,37 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			now := metav1.Now()
 			phJob.Status.FinishTime = &now
 		} else if phJob.Spec.Cancel != true {
-			phJob.Status.Phase = convertJobPhase(pod)
-			phJob.Status.FinishTime = getFinishTime(pod)
+			// pod has been created, check pod's status
+			if r.readyStateTimeout(phJob, pod) {
+				log.Info("phJob is in ready state longer then deadline. Going to requeue the phJob.")
+				phJobReadyTimeout = true
+			}
 
-			if pod.Status.Phase == corev1.PodFailed && len(pod.Status.ContainerStatuses) > 0 {
-				phJob.Status.Reason = pod.Status.ContainerStatuses[0].State.Terminated.Reason
-				phJob.Status.Message = pod.Status.ContainerStatuses[0].State.Terminated.Message
+			if phJobReadyTimeout {
+				*phJob.Status.Requeued += int32(1)
+
+				if phJob.Spec.RequeueLimit != nil && *phJob.Status.Requeued > *phJob.Spec.RequeueLimit {
+					// Requeued excceeds limit
+					log.Info("phJob has failed because it was requeued more than specified times")
+					phJob.Status.Phase = primehubv1alpha1.JobFailed
+					phJob.Status.Reason = "phJob has failed because it was requeued more than specified times"
+				} else {
+					phJob.Status.Phase = primehubv1alpha1.JobPending
+				}
+				gracePeriodSeconds := int64(0)
+				deleteOptions := client.DeleteOptions{GracePeriodSeconds: &gracePeriodSeconds}
+				if err := r.Client.Delete(ctx, pod, &deleteOptions); err != nil {
+					log.Error(err, "failed to delete pod and cancel phjob")
+					return ctrl.Result{}, err
+				}
+			} else {
+				phJob.Status.Phase = convertJobPhase(pod)
+				phJob.Status.FinishTime = getFinishTime(pod)
+
+				if pod.Status.Phase == corev1.PodFailed && len(pod.Status.ContainerStatuses) > 0 {
+					phJob.Status.Reason = pod.Status.ContainerStatuses[0].State.Terminated.Reason
+					phJob.Status.Message = pod.Status.ContainerStatuses[0].State.Terminated.Message
+				}
 			}
 		}
 
@@ -173,7 +212,7 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			log.Error(err, "failed to update PhJob status")
 			return ctrl.Result{}, err
 		}
-		log.Info("Update status from phjob")
+		log.Info("Update status from PhJob")
 	}
 
 	return ctrl.Result{}, nil
@@ -184,6 +223,19 @@ func (r *PhJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&primehubv1alpha1.PhJob{}).
 		Owns(&corev1.Pod{}).
 		Complete(r)
+}
+
+// check whether the pod is in pending state longer than deadline
+func (r *PhJobReconciler) readyStateTimeout(phJob *primehubv1alpha1.PhJob, pod *corev1.Pod) bool {
+	if pod.Status.Phase == corev1.PodPending {
+		r.Log.WithValues("phjob", phJob.Namespace).Info("in readystatetimeout check.")
+		now := metav1.Now()
+		start := pod.ObjectMeta.CreationTimestamp.Time
+		duration := now.Time.Sub(start)
+		allowedDuration := time.Duration(20) * time.Second
+		return duration >= allowedDuration
+	}
+	return false
 }
 
 func convertJobPhase(pod *corev1.Pod) primehubv1alpha1.PhJobPhase {
