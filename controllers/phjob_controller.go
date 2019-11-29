@@ -228,7 +228,6 @@ func (r *PhJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // check whether the pod is in pending state longer than deadline
 func (r *PhJobReconciler) readyStateTimeout(phJob *primehubv1alpha1.PhJob, pod *corev1.Pod) bool {
 	if pod.Status.Phase == corev1.PodPending {
-		r.Log.WithValues("phjob", phJob.Namespace).Info("in readystatetimeout check.")
 		now := metav1.Now()
 		start := pod.ObjectMeta.CreationTimestamp.Time
 		duration := now.Time.Sub(start)
