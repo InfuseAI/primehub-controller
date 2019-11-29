@@ -231,7 +231,7 @@ func (r *PhJobReconciler) readyStateTimeout(phJob *primehubv1alpha1.PhJob, pod *
 		now := metav1.Now()
 		start := pod.ObjectMeta.CreationTimestamp.Time
 		duration := now.Time.Sub(start)
-		allowedDuration := time.Duration(20) * time.Second
+		allowedDuration := time.Duration(180) * time.Second
 		return duration >= allowedDuration
 	}
 	return false
