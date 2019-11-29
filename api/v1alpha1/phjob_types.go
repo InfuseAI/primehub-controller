@@ -50,6 +50,7 @@ type PhJobSpec struct {
 	Image        string `json:"image"`
 	Command      string `json:"command"`
 	Cancel       bool   `json:"cancel,omitempty"`
+	RequeueLimit *int32 `json:"requeueLimit,omitempty"`
 }
 
 // PhJobStatus defines the observed state of PhJob
@@ -62,6 +63,7 @@ type PhJobStatus struct {
 	PodName    string       `json:"podName,omitempty"`
 	StartTime  *metav1.Time `json:"startTime,omitempty"`
 	FinishTime *metav1.Time `json:"finishTime,omitempty"`
+	Requeued   *int32       `json:"requeued,omitempty"`
 }
 
 // +kubebuilder:subresource:status
