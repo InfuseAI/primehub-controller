@@ -227,15 +227,15 @@ func (spawner *Spawner) BuildPodSpec(podSpec *corev1.PodSpec) {
 	}
 
 	if !spawner.limitsCpu.IsZero() {
-		container.Resources.Requests["cpu"] = spawner.limitsCpu
+		container.Resources.Limits["cpu"] = spawner.limitsCpu
 	}
 
 	if !spawner.limitsMemory.IsZero() {
-		container.Resources.Requests["memory"] = spawner.limitsMemory
+		container.Resources.Limits["memory"] = spawner.limitsMemory
 	}
 
 	if !spawner.limitsGpu.IsZero() {
-		container.Resources.Requests["nvidia.com/gpu"] = spawner.limitsGpu
+		container.Resources.Limits["nvidia.com/gpu"] = spawner.limitsGpu
 	}
 
 	// pod
