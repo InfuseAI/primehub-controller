@@ -27,7 +27,8 @@ func TestFetchContext(t *testing.T) {
 	var spawner *Spawner
 	pod := v1.Pod{}
 
-	spawner, err = NewSpawnerByData(result.Data, "phusers", "cpu-only", "base-notebook")
+	options := SpawnerDataOptions{}
+	spawner, err = NewSpawnerByData(result.Data, "phusers", "cpu-only", "base-notebook", options)
 	if err != nil {
 		panic(err)
 	}

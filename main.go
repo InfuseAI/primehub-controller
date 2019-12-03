@@ -104,6 +104,7 @@ func main() {
 		Log:           ctrl.Log.WithName("controllers").WithName("PhJob"),
 		Scheme:        mgr.GetScheme(),
 		GraphqlClient: graphqlClient,
+		WorkingDirSize: resource.MustParse(viper.GetString("jobSubmission.workingDirSize")),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PhJob")
 		os.Exit(1)

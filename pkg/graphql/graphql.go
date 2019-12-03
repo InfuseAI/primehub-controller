@@ -35,8 +35,8 @@ type DtoGroup struct {
 	DisplayName          string
 	EnabledSharedVolume  bool
 	SharedVolumeCapacity string
-	HomeSymlink          string
-	LaunchGroupOnly      string
+	HomeSymlink          *bool
+	LaunchGroupOnly      *bool
 	QuotaCpu             float32
 	QuotaGpu             float32
 	QuotaMemory          string
@@ -86,14 +86,14 @@ type DtoImageSpec struct {
 
 type DtoDataset struct {
 	Name            string
-	Description     string
 	DisplayName     string
+	Description     string
+	Global          bool
 	Writable        bool
 	MountRoot       string
-	HomeSymlink     bool
-	LaunchGroupOnly bool
-	Global          bool
-	Spec            DtoDatasetSpec
+	HomeSymlink     *bool
+	LaunchGroupOnly *bool
+	Spec			DtoDatasetSpec
 }
 
 type DtoDatasetSpec struct {
@@ -101,7 +101,9 @@ type DtoDatasetSpec struct {
 	Type               string
 	Url                string
 	VolumeName         string
-	Variables          map[string]interface{}
+	Variables          map[string]string
+	GitSyncHostRoot	   string
+	GitSyncRoot		   string
 }
 
 type GraphqlClient struct {
