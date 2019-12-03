@@ -18,6 +18,7 @@ package controllers
 import (
 	"context"
 	"primehub-controller/pkg/graphql"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -73,7 +74,9 @@ func (r *PhJobReconciler) buildPod(phJob *primehubv1alpha1.PhJob) (*corev1.Pod, 
 	podSpec.RestartPolicy = corev1.RestartPolicyNever
 	pod.Spec = podSpec
 	pod.Labels = map[string]string{
-		"app": "primehub-job",
+		"app":               "primehub-job",
+		"primehub.io/group": phJob.Spec.Group,
+		"primehub.io/user":  phJob.Spec.UserName,
 	}
 
 	// Owner reference
@@ -144,9 +147,16 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 				phJob.Status.PodName = podkey.Name
 				log.Info("create pod", "pod", pod)
 			} else {
-				phJob.Status.Phase = primehubv1alpha1.JobFailed
-				phJob.Status.Reason = err.Error()
-				log.Error(err, "failed to create pod")
+				errMessage := err.Error()
+				if strings.Contains(errMessage, "admission webhook") && strings.Contains(errMessage, "resources-validation-webhook") {
+					phJob.Status.Phase = primehubv1alpha1.JobPending
+					log.Info("admission denied", "pod", pod)
+					log.Info("admission denied messages", "messages", errMessage)
+				} else {
+					phJob.Status.Phase = primehubv1alpha1.JobFailed
+					phJob.Status.Reason = err.Error()
+					log.Error(err, "failed to create pod")
+				}
 			}
 
 			if err = r.Status().Update(ctx, phJob); err != nil {

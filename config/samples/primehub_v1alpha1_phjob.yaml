@@ -12,7 +12,7 @@ spec:
     echo complete
   displayName: "Test Job"
   userId: "710a5425-ed60-4374-9bda-08c8333cd14d"
-  user: "phadmin"
+  userName: "phadmin"
   group: "phusers"
   instanceType: "cpu-only"
   image: "base-notebook"
