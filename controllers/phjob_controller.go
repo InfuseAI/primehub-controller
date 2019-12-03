@@ -147,17 +147,7 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 				phJob.Status.PodName = podkey.Name
 				log.Info("created pod", "pod", pod)
 			} else { // error occurs when creating pod
-				errMessage := err.Error()
-				if strings.Contains(errMessage, "admission webhook") && strings.Contains(errMessage, "resources-validation-webhook") { // if it's resource validation admission error, requeue
-					phJob.Status.Phase = primehubv1alpha1.JobPending
-					*phJob.Status.Requeued += int32(1)
-					log.Info("admission denied", "pod", pod)
-					log.Info("admission denied messages", "messages", errMessage)
-				} else {
-					phJob.Status.Phase = primehubv1alpha1.JobFailed
-					phJob.Status.Reason = err.Error()
-					log.Error(err, "failed to create pod")
-				}
+				r.handleCreatePodFailed(phJob, pod, err)
 			}
 		} else {
 			log.Info("Pod not found but not necessary to create")
@@ -240,6 +230,21 @@ func (r *PhJobReconciler) readyStateTimeout(phJob *primehubv1alpha1.PhJob, pod *
 		return duration >= DefaultJobReadyTimeout
 	}
 	return false
+}
+
+func (r *PhJobReconciler) handleCreatePodFailed(phJob *primehubv1alpha1.PhJob, pod *corev1.Pod, err error) {
+	log := r.Log.WithValues("phjob", phJob.Namespace)
+	errMessage := err.Error()
+	if strings.Contains(errMessage, "admission webhook") && strings.Contains(errMessage, "resources-validation-webhook") { // if it's resource validation admission error, requeue
+		phJob.Status.Phase = primehubv1alpha1.JobPending
+		*phJob.Status.Requeued += int32(1)
+		log.Info("admission denied", "pod", pod)
+		log.Info("admission denied messages", "messages", errMessage)
+	} else {
+		phJob.Status.Phase = primehubv1alpha1.JobFailed
+		phJob.Status.Reason = err.Error()
+		log.Error(err, "failed to create pod")
+	}
 }
 
 func convertJobPhase(pod *corev1.Pod) primehubv1alpha1.PhJobPhase {
