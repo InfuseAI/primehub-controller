@@ -78,6 +78,12 @@ func (r *PhJobReconciler) buildPod(phJob *primehubv1alpha1.PhJob) (*corev1.Pod, 
 		"primehub.io/group": phJob.Spec.Group,
 		"primehub.io/user":  phJob.Spec.UserName,
 	}
+	pod.Spec.InitContainers = append(pod.Spec.InitContainers, corev1.Container{
+		Name:            "admission-is-not-found",
+		Image:           "admission-is-not-found",
+		ImagePullPolicy: "Never",
+		Command:         []string{"false"},
+	})
 
 	// Owner reference
 	if err := ctrl.SetControllerReference(phJob, pod, r.Scheme); err != nil {
