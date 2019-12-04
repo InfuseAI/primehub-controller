@@ -18,6 +18,7 @@ package controllers
 import (
 	"context"
 	"primehub-controller/pkg/graphql"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -73,8 +74,16 @@ func (r *PhJobReconciler) buildPod(phJob *primehubv1alpha1.PhJob) (*corev1.Pod, 
 	podSpec.RestartPolicy = corev1.RestartPolicyNever
 	pod.Spec = podSpec
 	pod.Labels = map[string]string{
-		"app": "primehub-job",
+		"app":               "primehub-job",
+		"primehub.io/group": phJob.Spec.Group,
+		"primehub.io/user":  phJob.Spec.UserName,
 	}
+	pod.Spec.InitContainers = append(pod.Spec.InitContainers, corev1.Container{
+		Name:            "admission-is-not-found",
+		Image:           "admission-is-not-found",
+		ImagePullPolicy: "Never",
+		Command:         []string{"false"},
+	})
 
 	// Owner reference
 	if err := ctrl.SetControllerReference(phJob, pod, r.Scheme); err != nil {
@@ -100,6 +109,7 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	log.Info("start Reconcile")
 
+	// finding phjob
 	phJob := &primehubv1alpha1.PhJob{}
 	if err := r.Get(ctx, req.NamespacedName, phJob); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -109,6 +119,13 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			log.Error(err, "unable to fetch PhJob")
 			return ctrl.Result{}, nil
 		}
+	}
+
+	// copy and init phjob if needed
+	phJob = phJob.DeepCopy()
+	if phJob.Status.Requeued == nil {
+		phJob.Status.Requeued = new(int32)
+		*phJob.Status.Requeued = int32(0)
 	}
 
 	pod := &corev1.Pod{}
@@ -122,52 +139,33 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			return ctrl.Result{}, nil
 		}
 
+		// pod not found
 		if phJob.Status.Phase == "" || phJob.Status.Phase == primehubv1alpha1.JobPending {
-			// create the pod
-			phJob = phJob.DeepCopy()
-
-			if phJob.Status.Requeued == nil {
-				phJob.Status.Requeued = new(int32)
-				*phJob.Status.Requeued = int32(0)
-			}
-
 			log.Info("could not find existing pod for PhJob, creating one...")
 			pod, err = r.buildPod(phJob)
 			if err == nil {
 				err = r.Client.Create(ctx, pod)
 			}
 
-			// Update the phjob status
 			if err == nil {
-				// If not yet create pod and status phase is not ready, status phase is pending
+				// TODO: change phase to ready should move to cronjob scheduler
 				phJob.Status.Phase = primehubv1alpha1.JobReady
 				phJob.Status.PodName = podkey.Name
-				log.Info("create pod", "pod", pod)
-			} else {
-				phJob.Status.Phase = primehubv1alpha1.JobFailed
-				phJob.Status.Reason = err.Error()
-				log.Error(err, "failed to create pod")
-			}
-
-			if err = r.Status().Update(ctx, phJob); err != nil {
-				log.Error(err, "failed to update PhJob status")
-				return ctrl.Result{}, err
+				log.Info("created pod", "pod", pod)
+			} else { // error occurs when creating pod
+				r.handleCreatePodFailed(phJob, pod, err)
 			}
 		} else {
 			log.Info("Pod not found but not necessary to create")
+			return ctrl.Result{}, nil
 		}
 	} else {
+		// found pod
 		log.Info("found pod resource for PhJob")
 
-		phJob = phJob.DeepCopy()
 		phJob.Status.StartTime = getStartTime(pod)
 
-		if phJob.Status.Requeued == nil {
-			phJob.Status.Requeued = new(int32)
-			*phJob.Status.Requeued = int32(0)
-		}
-
-		if phJob.Spec.Cancel == true && phJob.Status.Phase != primehubv1alpha1.JobCancelled {
+		if phJob.Spec.Cancel == true && phJob.Status.Phase != primehubv1alpha1.JobCancelled { // user request cancellation
 			gracePeriodSeconds := int64(0)
 			deleteOptions := client.DeleteOptions{GracePeriodSeconds: &gracePeriodSeconds}
 			if err := r.Client.Delete(ctx, pod, &deleteOptions); err != nil {
@@ -180,20 +178,13 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			phJob.Status.FinishTime = &now
 		} else if phJob.Spec.Cancel != true {
 			// pod has been created, check pod's status
-			if r.readyStateTimeout(phJob, pod) {
+			if r.readyStateTimeout(phJob, pod) { // if pod is in pending phase too long, requeue job
 				log.Info("phJob is in ready state longer then deadline. Going to requeue the phJob.")
 				phJobReadyTimeout = true
 			}
 
 			if phJobReadyTimeout {
-				if phJob.Spec.RequeueLimit != nil && *phJob.Status.Requeued > *phJob.Spec.RequeueLimit {
-					// Requeued excceeds limit
-					log.Info("phJob has failed because it was requeued more than specified times")
-					phJob.Status.Phase = primehubv1alpha1.JobFailed
-					phJob.Status.Reason = "phJob has failed because it was requeued more than specified times"
-				} else {
-					phJob.Status.Phase = primehubv1alpha1.JobPending
-				}
+				phJob.Status.Phase = primehubv1alpha1.JobPending
 				gracePeriodSeconds := int64(0)
 				deleteOptions := client.DeleteOptions{GracePeriodSeconds: &gracePeriodSeconds}
 				if err := r.Client.Delete(ctx, pod, &deleteOptions); err != nil {
@@ -211,13 +202,20 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 				}
 			}
 		}
-
-		if err = r.Status().Update(ctx, phJob); err != nil {
-			log.Error(err, "failed to update PhJob status")
-			return ctrl.Result{}, err
-		}
-		log.Info("Update status from PhJob")
 	}
+
+	if phJob.Spec.RequeueLimit != nil && *phJob.Status.Requeued > *phJob.Spec.RequeueLimit {
+		// Requeued excceeds limit
+		log.Info("phJob has failed because it was requeued more than specified times")
+		phJob.Status.Phase = primehubv1alpha1.JobFailed
+		phJob.Status.Reason = "phJob has failed because it was requeued more than specified times"
+	}
+
+	if err = r.Status().Update(ctx, phJob); err != nil {
+		log.Error(err, "failed to update PhJob status")
+		return ctrl.Result{}, err
+	}
+	log.Info("Update status from PhJob")
 
 	return ctrl.Result{}, nil
 }
@@ -238,6 +236,21 @@ func (r *PhJobReconciler) readyStateTimeout(phJob *primehubv1alpha1.PhJob, pod *
 		return duration >= DefaultJobReadyTimeout
 	}
 	return false
+}
+
+func (r *PhJobReconciler) handleCreatePodFailed(phJob *primehubv1alpha1.PhJob, pod *corev1.Pod, err error) {
+	log := r.Log.WithValues("phjob", phJob.Namespace)
+	errMessage := err.Error()
+	if strings.Contains(errMessage, "admission webhook") && strings.Contains(errMessage, "resources-validation-webhook") { // if it's resource validation admission error, requeue
+		phJob.Status.Phase = primehubv1alpha1.JobPending
+		*phJob.Status.Requeued += int32(1)
+		log.Info("admission denied", "pod", pod)
+		log.Info("admission denied messages", "messages", errMessage)
+	} else {
+		phJob.Status.Phase = primehubv1alpha1.JobFailed
+		phJob.Status.Reason = err.Error()
+		log.Error(err, "failed to create pod")
+	}
 }
 
 func convertJobPhase(pod *corev1.Pod) primehubv1alpha1.PhJobPhase {
