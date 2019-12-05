@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io/ioutil"
+	corev1 "k8s.io/api/core/v1"
 	"net/http"
 	"strings"
 )
@@ -66,6 +67,8 @@ type DtoInstanceTypeSpec struct {
 	LimitsMemory   string  `json:"limits.memory"`
 	RequestsGpu    int     `json:"requests.nvidia.com/gpu"`
 	LimitsGpu      int     `json:"limits.nvidia.com/gpu"`
+	NodeSelector   map[string]string
+	Tolerations    []corev1.Toleration
 }
 
 type DtoImage struct {

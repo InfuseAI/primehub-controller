@@ -77,7 +77,7 @@ func TestGroupVolume(t *testing.T) {
 			},
 			volumeName: "project-group1",
 			pvcName: "project-group1",
-			mountPath: "/projects/group1",
+			mountPath: "/project/group1",
 		},
 		{
 			name:        "is launch group but no share",
@@ -107,7 +107,7 @@ func TestGroupVolume(t *testing.T) {
 			},
 			volumeName: "project-group2",
 			pvcName: "project-group2",
-			mountPath: "/projects/group2",
+			mountPath: "/project/group2",
 		},
 	}
 
@@ -347,16 +347,16 @@ func TestDatasetEnv(t *testing.T) {
 		expectedKey   string
 		valid       bool
 	}{
-		{"foo", "DS_FOO", true},
-		{"foo-bar", "DS_FOO-BAR", true},
+		{"foo", "TEST-ENV_FOO", true},
+		{"foo-bar", "TEST-ENV_FOO-BAR", true},
 		{"!", "", false},
 	}
 
 	for _, test := range tests {
 		t.Run(test.key, func(t *testing.T) {
-			actualKey, valid := transformEnvKey("dS", test.key)
+			actualKey, valid := transformEnvKey("test-ENV", test.key)
 
-			assert.True(t, test.valid, valid)
+			assert.Equal(t, test.valid, valid)
 			if (valid) {
 				assert.Equal(t, test.expectedKey, actualKey)
 			}

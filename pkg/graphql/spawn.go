@@ -35,6 +35,9 @@ type Spawner struct {
 	imagePullSecret string					// main container: imagePullSecret
 	command         []string				// main container: command
 
+	NodeSelector	map[string]string
+	Tolerations     []corev1.Toleration
+
 
 	// main container: resources requests and limits for
 	requestsCpu     resource.Quantity
@@ -441,6 +444,14 @@ func (spawner *Spawner) applyResourceForInstanceType(instanceType DtoInstanceTyp
 		}
 	}
 
+	if spawner.NodeSelector == nil {
+		spawner.NodeSelector = make(map[string]string)
+	}
+	for k, v := range instanceType.Spec.NodeSelector {
+		spawner.NodeSelector[k] = v
+	}
+	spawner.Tolerations = append(spawner.Tolerations, instanceType.Spec.Tolerations...)
+
 	return isGpu
 }
 
@@ -518,4 +529,12 @@ func (spawner *Spawner) BuildPodSpec(podSpec *corev1.PodSpec) {
 			Name: spawner.imagePullSecret,
 		})
 	}
+
+	if podSpec.NodeSelector == nil {
+		podSpec.NodeSelector = make(map[string]string)
+	}
+	for k, v := range spawner.NodeSelector {
+		podSpec.NodeSelector[k] = v
+	}
+	podSpec.Tolerations = append(podSpec.Tolerations, spawner.Tolerations...)
 }
