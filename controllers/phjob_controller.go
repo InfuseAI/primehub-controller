@@ -36,7 +36,7 @@ import (
 
 var (
 	// DefaultJobReadyTimeout is the phJob ready state timeout value
-	DefaultJobReadyTimeout = time.Duration(60) * time.Second
+	DefaultJobReadyTimeout = time.Duration(180) * time.Second
 )
 
 // PhJobReconciler reconciles a PhJob object
