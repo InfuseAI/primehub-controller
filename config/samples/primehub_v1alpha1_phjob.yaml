@@ -16,6 +16,4 @@ spec:
   group: "phusers"
   instanceType: "cpu-only"
   image: "base-notebook"
-  # for testing pending situation purpose
-  nodeSelector: "jack"
   requeueLimit: 1
