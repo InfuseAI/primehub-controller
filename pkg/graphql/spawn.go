@@ -445,8 +445,13 @@ func (spawner *Spawner) applyResourceForInstanceType(instanceType DtoInstanceTyp
 }
 
 func (spawner *Spawner) applyImageForImageSpec(spec DtoImageSpec, isGpu bool) {
-	spawner.image = spec.Url
-	spawner.imagePullSecret = ""
+	if isGpu {
+		spawner.image = spec.UrlForGpu
+	} else {
+		spawner.image = spec.Url
+	}
+
+	spawner.imagePullSecret = spec.PullSecret
 }
 
 func (spawner *Spawner) BuildPodSpec(podSpec *corev1.PodSpec) {
@@ -507,6 +512,7 @@ func (spawner *Spawner) BuildPodSpec(podSpec *corev1.PodSpec) {
 	// pod
 	podSpec.Volumes = append(podSpec.Volumes, spawner.volumes...)
 	podSpec.Containers = append(podSpec.Containers, container)
+
 	if spawner.imagePullSecret != "" {
 		podSpec.ImagePullSecrets = append(podSpec.ImagePullSecrets, corev1.LocalObjectReference{
 			Name: spawner.imagePullSecret,

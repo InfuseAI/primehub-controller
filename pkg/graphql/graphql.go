@@ -77,11 +77,12 @@ type DtoImage struct {
 }
 
 type DtoImageSpec struct {
-	Name string
+	Name 		string
 
-	Type      string
-	Url       string
-	UrlForGpu string
+	Type      	string
+	Url       	string
+	UrlForGpu 	string
+	PullSecret	string
 }
 
 type DtoDataset struct {
