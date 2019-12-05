@@ -232,6 +232,8 @@ func (r *PhJobReconciler) reconcilePod(ctx context.Context, phJob *primehubv1alp
 	log := r.Log.WithValues("phjob", phJob.Namespace)
 	phJobReadyTimeout := false
 	admissionReject := false
+	createPodFailed := false
+	createPodFailedReason := ""
 	pod, err := r.getPodForJob(ctx, podkey)
 	if err != nil && !apierrors.IsNotFound(err) {
 		log.Info("return since get pod err", "podkey", podkey, "err", err)
@@ -245,7 +247,7 @@ func (r *PhJobReconciler) reconcilePod(ctx context.Context, phJob *primehubv1alp
 			err = r.Client.Create(ctx, pod)
 		}
 
-		if err == nil {
+		if err == nil { // create pod successfully
 			// TODO(@Jack Pan): change phase to Ready should move to cronjob scheduler
 			// phJob.Status.Phase = primehubv1alpha1.JobReady
 			phJob.Status.PodName = podkey.Name
@@ -253,6 +255,10 @@ func (r *PhJobReconciler) reconcilePod(ctx context.Context, phJob *primehubv1alp
 
 		} else { // error occurs when creating pod
 			admissionReject = r.handleCreatePodFailed(phJob, pod, err)
+			if admissionReject == false {
+				createPodFailed = true
+				createPodFailedReason = err.Error()
+			}
 		}
 	} else { // pod exist, check the status of current pod and update the phJob
 		log.Info("pod exist, check the status of current pod and update the phJob")
@@ -269,16 +275,33 @@ func (r *PhJobReconciler) reconcilePod(ctx context.Context, phJob *primehubv1alp
 
 	}
 
-	return r.updateStatus(ctx, phJob, pod, phJobReadyTimeout, admissionReject)
+	return r.updateStatus(ctx, phJob, pod, phJobReadyTimeout, admissionReject, createPodFailed, createPodFailedReason)
 
 }
 
 // updateStatus updates the status of the phjob based on the pod.
-func (r *PhJobReconciler) updateStatus(ctx context.Context, phJob *primehubv1alpha1.PhJob, pod *corev1.Pod, phJobReadyTimeout, admissionReject bool) error {
+func (r *PhJobReconciler) updateStatus(
+	ctx context.Context,
+	phJob *primehubv1alpha1.PhJob,
+	pod *corev1.Pod,
+	phJobReadyTimeout, admissionReject, createPodFailed bool,
+	createPodFailedReason string) error {
+
 	log := r.Log.WithValues("phjob", phJob.Namespace)
 	if phJobReadyTimeout || admissionReject { // phjob ready state timeout or admission reject, requeue the phjob.
 		*phJob.Status.Requeued += int32(1)
 		phJob.Status.Phase = primehubv1alpha1.JobPending
+		if err := r.updatePhJobStatus(ctx, phJob); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	if createPodFailed {
+		phJob.Status.Phase = primehubv1alpha1.JobFailed
+		phJob.Status.Reason = createPodFailedReason
+		now := metav1.Now()
+		phJob.Status.FinishTime = &now
 		if err := r.updatePhJobStatus(ctx, phJob); err != nil {
 			return err
 		}
