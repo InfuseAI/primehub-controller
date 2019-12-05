@@ -168,7 +168,7 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 	// TODO (@Jack Lin): activeDeadlineSecond
 
-	if inDeterministicPhase(phJob.Status.Phase) || phJobExceedsRequeueLimit { // phJob is in Succeeded, Failed, Cancelled, Unknown status, or other spce condition
+	if inFinalPhase(phJob.Status.Phase) || phJobExceedsRequeueLimit { // phJob is in Succeeded, Failed, Cancelled, Unknown status, or other spce condition
 		// currently don't need to delete the pod or job when phjob is done
 		// TODO(@Jack Lin): need to delete it according to ttl after finished in the future
 
@@ -340,14 +340,10 @@ func (r *PhJobReconciler) handleCreatePodFailed(phJob *primehubv1alpha1.PhJob, p
 	log := r.Log.WithValues("phjob", phJob.Namespace)
 	errMessage := err.Error()
 	if strings.Contains(errMessage, "admission webhook") && strings.Contains(errMessage, "resources-validation-webhook") { // if it's resource validation admission error, requeue
-		// phJob.Status.Phase = primehubv1alpha1.JobPending
-		// *phJob.Status.Requeued += int32(1)
 		log.Info("admission denied", "pod", pod)
 		log.Info("admission denied messages", "messages", errMessage)
 		return true
 	} else {
-		// phJob.Status.Phase = primehubv1alpha1.JobFailed
-		// phJob.Status.Reason = err.Error()
 		log.Error(err, "failed to create pod")
 		return false
 	}
@@ -378,7 +374,7 @@ func (r *PhJobReconciler) deletePod(ctx context.Context, podkey client.ObjectKey
 	return nil
 }
 
-func inDeterministicPhase(phase primehubv1alpha1.PhJobPhase) bool {
+func inFinalPhase(phase primehubv1alpha1.PhJobPhase) bool { // TODO: change the name
 	switch phase {
 	case primehubv1alpha1.JobSucceeded, primehubv1alpha1.JobFailed, primehubv1alpha1.JobUnknown, primehubv1alpha1.JobCancelled:
 		return true
