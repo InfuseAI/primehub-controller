@@ -110,7 +110,7 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	log.Info("start Reconcile")
 	startTime := time.Now()
 	defer func() {
-		log.Info("Finished Reconciling phJob ", "ReconcileTime", startTime)
+		log.Info("Finished Reconciling phJob ", "ReconcileTime", time.Since(startTime))
 	}()
 
 	// finding phjob
@@ -287,7 +287,7 @@ func (r *PhJobReconciler) updateStatus(ctx context.Context, phJob *primehubv1alp
 
 	// set StartTime.
 	phJob.Status.StartTime = getStartTime(pod)
-	log.Info("updateStatus", "pod status", pod.Status)
+	// log.Info("updateStatus", "pod status", pod.Status)
 
 	if pod.Status.Phase == corev1.PodSucceeded {
 		phJob.Status.Phase = primehubv1alpha1.JobSucceeded
@@ -319,7 +319,7 @@ func (r *PhJobReconciler) updatePhJobStatus(ctx context.Context, phJob *primehub
 	log := r.Log.WithValues("phjob", phJob.Namespace)
 	updateTime := time.Now()
 	defer func() {
-		log.Info("Finished updating PHJob ", "UpdateTime", updateTime)
+		log.Info("Finished updating PHJob ", "UpdateTime", time.Since(updateTime))
 	}()
 	if err := r.Status().Update(ctx, phJob); err != nil {
 		log.Error(err, "failed to update PhJob status")
@@ -382,23 +382,6 @@ func inFinalPhase(phase primehubv1alpha1.PhJobPhase) bool { // TODO: change the 
 		return false
 	}
 }
-
-// func convertJobPhase(pod *corev1.Pod) primehubv1alpha1.PhJobPhase {
-// 	switch pod.Status.Phase {
-// 	case corev1.PodPending:
-// 		return primehubv1alpha1.JobReady
-// 	case corev1.PodRunning:
-// 		return primehubv1alpha1.JobRunning
-// 	case corev1.PodSucceeded:
-// 		return primehubv1alpha1.JobSucceeded
-// 	case corev1.PodFailed:
-// 		return primehubv1alpha1.JobFailed
-// 	case corev1.PodUnknown:
-// 		return primehubv1alpha1.JobUnknown
-// 	default:
-// 		return primehubv1alpha1.JobPending
-// 	}
-// }
 
 func getStartTime(pod *corev1.Pod) *metav1.Time {
 	for _, cs := range pod.Status.ContainerStatuses {
