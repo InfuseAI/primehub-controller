@@ -1,13 +1,13 @@
 apiVersion: primehub.io/v1alpha1
 kind: PhJob
 metadata:
-  name: job-fy6lr9hzi
+  name: job-fy6lr9hzijack
   namespace: hub
 spec:
   command: |
     echo start
     data
-    sleep 5
+    sleep 80
     date
     echo complete
   displayName: "Test Job"
@@ -16,6 +16,4 @@ spec:
   group: "phusers"
   instanceType: "cpu-only"
   image: "base-notebook"
-  # for testing pending situation purpose
-  nodeSelector: "jack"
-  requeueLimit: 1
+  requeueLimit: 2
