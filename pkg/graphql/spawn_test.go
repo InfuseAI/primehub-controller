@@ -59,14 +59,14 @@ func TestGroupVolume(t *testing.T) {
 
 	// Test cases for pvc volumes.
 	testsPvc := []struct {
-		name       	string
+		name string
 		// input
-		launchGroup	string
-		group		DtoGroup
+		launchGroup string
+		group       DtoGroup
 		// output
-		volumeName	string
-		pvcName    	string
-		mountPath  	string
+		volumeName string
+		pvcName    string
+		mountPath  string
 	}{
 		{
 			name:        "is launch group",
@@ -76,8 +76,8 @@ func TestGroupVolume(t *testing.T) {
 				EnabledSharedVolume: true,
 			},
 			volumeName: "project-group1",
-			pvcName: "project-group1",
-			mountPath: "/project/group1",
+			pvcName:    "project-group1",
+			mountPath:  "/project/group1",
 		},
 		{
 			name:        "is launch group but no share",
@@ -103,11 +103,11 @@ func TestGroupVolume(t *testing.T) {
 			group: DtoGroup{
 				Name:                "group2",
 				EnabledSharedVolume: true,
-				LaunchGroupOnly: &boolFalse,
+				LaunchGroupOnly:     &boolFalse,
 			},
 			volumeName: "project-group2",
-			pvcName: "project-group2",
-			mountPath: "/project/group2",
+			pvcName:    "project-group2",
+			mountPath:  "/project/group2",
 		},
 	}
 
@@ -140,12 +140,12 @@ func TestGroupVolume(t *testing.T) {
 }
 
 func TestDatasetLaunchGroupOnly(t *testing.T) {
-	newDataset := func(name string, global bool, launchGroupOnly bool) (DtoDataset){
+	newDataset := func(name string, global bool, launchGroupOnly bool) DtoDataset {
 		return DtoDataset{
 			Name:            name,
 			Global:          global,
 			LaunchGroupOnly: &launchGroupOnly,
-			Spec:            DtoDatasetSpec{
+			Spec: DtoDatasetSpec{
 				EnableUploadServer: false,
 				Type:               "pv",
 				VolumeName:         name,
@@ -153,10 +153,10 @@ func TestDatasetLaunchGroupOnly(t *testing.T) {
 		}
 	}
 
-	checkDataset := func(spawner *Spawner, dataset string) (bool){
+	checkDataset := func(spawner *Spawner, dataset string) bool {
 
 		for _, volume := range spawner.volumes {
-			if volume.Name == "dataset-" + dataset {
+			if volume.Name == "dataset-"+dataset {
 				return true
 			}
 		}
@@ -213,25 +213,24 @@ func TestDatasetLaunchGroupOnly(t *testing.T) {
 	})
 }
 
-
 func TestDatasetPV(t *testing.T) {
-	newDataset := func(name string, volumeName string, writable bool) (DtoDataset){
+	newDataset := func(name string, volumeName string, writable bool) DtoDataset {
 		return DtoDataset{
-			Name:        name,
-			Writable:    writable,
+			Name:     name,
+			Writable: writable,
 			Spec: DtoDatasetSpec{
-				Type:               "pv",
-				VolumeName:         volumeName,
+				Type:       "pv",
+				VolumeName: volumeName,
 			},
 		}
 	}
 
 	tests := []struct {
-		name         string
-		dataset      DtoDataset
-		pvcName      string
-		readOnly     bool
-		symlink		 string
+		name     string
+		dataset  DtoDataset
+		pvcName  string
+		readOnly bool
+		symlink  string
 	}{
 		{
 			"ds1",
@@ -252,15 +251,15 @@ func TestDatasetPV(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			spawner := &Spawner{}
-			spawner.applyVolumeForPvDataset(test.dataset, "dataset-"+test.name, "/mnt/dataset-"+test.name, "/datasets/" + test.name)
+			spawner.applyVolumeForPvDataset(test.dataset, "dataset-"+test.name, "/mnt/dataset-"+test.name, "/datasets/"+test.name)
 
 			volume, volumeMount := findVolume(spawner, "dataset-"+test.name)
-			if (volume == nil || volumeMount == nil) {
+			if volume == nil || volumeMount == nil {
 				assert.Fail(t, "volume not found")
 				return
 			}
 
-			if (volume.PersistentVolumeClaim == nil) {
+			if volume.PersistentVolumeClaim == nil {
 				assert.Fail(t, "not pvc")
 				return
 			}
@@ -273,9 +272,9 @@ func TestDatasetPV(t *testing.T) {
 }
 
 func TestDatasetGit(t *testing.T) {
-	newDataset := func(name string, gitSyncHostRoot string ) (DtoDataset){
+	newDataset := func(name string, gitSyncHostRoot string) DtoDataset {
 		return DtoDataset{
-			Name:        name,
+			Name: name,
 			Spec: DtoDatasetSpec{
 				Type:            "git",
 				Url:             "git@github.com:kubernetes/kubernetes.git",
@@ -285,10 +284,10 @@ func TestDatasetGit(t *testing.T) {
 	}
 
 	tests := []struct {
-		name         string
-		dataset      DtoDataset
-		hostPath     string
-		symlink		 string
+		name     string
+		dataset  DtoDataset
+		hostPath string
+		symlink  string
 	}{
 		{
 			"ds1",
@@ -307,15 +306,15 @@ func TestDatasetGit(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			spawner := &Spawner{}
-			spawner.applyVolumeForGitDataset(test.dataset, "dataset-"+test.name, "/mnt/dataset-"+test.name, "/datasets/" + test.name)
+			spawner.applyVolumeForGitDataset(test.dataset, "dataset-"+test.name, "/mnt/dataset-"+test.name, "/datasets/"+test.name)
 
 			volume, volumeMount := findVolume(spawner, "dataset-"+test.name)
-			if (volume == nil || volumeMount == nil) {
+			if volume == nil || volumeMount == nil {
 				assert.Fail(t, "volume not found")
 				return
 			}
 
-			if (volume.HostPath == nil) {
+			if volume.HostPath == nil {
 				assert.Fail(t, "not hostpath")
 				return
 			}
@@ -332,9 +331,9 @@ func TestDatasetEnv(t *testing.T) {
 	dataset := DtoDataset{
 		Name: "ds",
 		Spec: DtoDatasetSpec{
-			Type:      "env",
-			Variables: map[string]string {
-				"foo":"bar",
+			Type: "env",
+			Variables: map[string]string{
+				"foo": "bar",
 			},
 		},
 	}
@@ -344,7 +343,7 @@ func TestDatasetEnv(t *testing.T) {
 
 	tests := []struct {
 		key         string
-		expectedKey   string
+		expectedKey string
 		valid       bool
 	}{
 		{"foo", "TEST-ENV_FOO", true},
@@ -357,15 +356,14 @@ func TestDatasetEnv(t *testing.T) {
 			actualKey, valid := transformEnvKey("test-ENV", test.key)
 
 			assert.Equal(t, test.valid, valid)
-			if (valid) {
+			if valid {
 				assert.Equal(t, test.expectedKey, actualKey)
 			}
 		})
 	}
 }
 
-
-func findVolume (spawner *Spawner, name string) (*corev1.Volume, *corev1.VolumeMount) {
+func findVolume(spawner *Spawner, name string) (*corev1.Volume, *corev1.VolumeMount) {
 	var volume *corev1.Volume = nil
 	var volumeMount *corev1.VolumeMount = nil
 
@@ -386,8 +384,7 @@ func findVolume (spawner *Spawner, name string) (*corev1.Volume, *corev1.VolumeM
 	return volume, volumeMount
 }
 
-
-func checkSymlink (spawner *Spawner, symlink string) bool {
+func checkSymlink(spawner *Spawner, symlink string) bool {
 	for _, symlink2 := range spawner.symlinks {
 		if symlink == symlink2 {
 			return true

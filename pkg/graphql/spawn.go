@@ -11,8 +11,8 @@ import (
 )
 
 type SpawnerDataOptions struct {
-	WorkingDir string
-	WorkingDirSize  resource.Quantity
+	WorkingDir     string
+	WorkingDirSize resource.Quantity
 }
 
 // Represent the pod spawner.
@@ -26,26 +26,25 @@ type SpawnerDataOptions struct {
 // Spawner concept is from jupyterhub spawner.
 // Reference: https://jupyterhub.readthedocs.io/en/stable/api/spawner.html#spawner
 type Spawner struct {
-	volumes         []corev1.Volume			// pod: volumes
-	volumeMounts    []corev1.VolumeMount	// main container: volume mounts
-	env 			[]corev1.EnvVar
-	workingDir      string					// main container: working directory
-	symlinks        []string 				// main container: symbolic links commands
-	image           string					// main container: image
-	imagePullSecret string					// main container: imagePullSecret
-	command         []string				// main container: command
+	volumes         []corev1.Volume      // pod: volumes
+	volumeMounts    []corev1.VolumeMount // main container: volume mounts
+	env             []corev1.EnvVar
+	workingDir      string   // main container: working directory
+	symlinks        []string // main container: symbolic links commands
+	image           string   // main container: image
+	imagePullSecret string   // main container: imagePullSecret
+	command         []string // main container: command
 
-	NodeSelector	map[string]string
-	Tolerations     []corev1.Toleration
-
+	NodeSelector map[string]string
+	Tolerations  []corev1.Toleration
 
 	// main container: resources requests and limits for
-	requestsCpu     resource.Quantity
-	limitsCpu       resource.Quantity
-	requestsMemory  resource.Quantity
-	limitsMemory    resource.Quantity
-	requestsGpu     resource.Quantity
-	limitsGpu       resource.Quantity
+	requestsCpu    resource.Quantity
+	limitsCpu      resource.Quantity
+	requestsMemory resource.Quantity
+	limitsMemory   resource.Quantity
+	requestsGpu    resource.Quantity
+	limitsGpu      resource.Quantity
 }
 
 // Set spanwer by graphql response data
@@ -57,7 +56,6 @@ func NewSpawnerByData(data DtoData, groupName string, instanceTypeName string, i
 
 	var err error
 	spawner := &Spawner{}
-
 
 	workingDir := options.WorkingDir
 	if workingDir == "" {
@@ -79,7 +77,6 @@ func NewSpawnerByData(data DtoData, groupName string, instanceTypeName string, i
 	for _, group := range data.User.Groups {
 		spawner.applyVolumeForGroup(groupName, group)
 	}
-
 
 	// Instance type
 	if instanceType, err = findInstanceType(group.InstanceTypes, groupGlobal.InstanceTypes, instanceTypeName); err != nil {
@@ -348,8 +345,8 @@ func (spawner *Spawner) applyVolumeForEnvDataset(dataset DtoDataset) {
 			continue
 		} else {
 			spawner.env = append(spawner.env, corev1.EnvVar{
-				Name:      envKey,
-				Value:     value,
+				Name:  envKey,
+				Value: value,
 			})
 		}
 	}

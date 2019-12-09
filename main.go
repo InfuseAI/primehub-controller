@@ -100,11 +100,12 @@ func main() {
 		viper.GetString("jobSubmission.graphqlEndpoint"),
 		viper.GetString("jobSubmission.graphqlSecret"))
 	if err = (&controllers.PhJobReconciler{
-		Client:        mgr.GetClient(),
-		Log:           ctrl.Log.WithName("controllers").WithName("PhJob"),
-		Scheme:        mgr.GetScheme(),
-		GraphqlClient: graphqlClient,
-		WorkingDirSize: resource.MustParse(viper.GetString("jobSubmission.workingDirSize")),
+		Client:                       mgr.GetClient(),
+		Log:                          ctrl.Log.WithName("controllers").WithName("PhJob"),
+		Scheme:                       mgr.GetScheme(),
+		GraphqlClient:                graphqlClient,
+		WorkingDirSize:               resource.MustParse(viper.GetString("jobSubmission.workingDirSize")),
+		DefaultActiveDeadlineSeconds: viper.GetInt64("jobSubmission.defaultActiveDeadlineSeconds"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PhJob")
 		os.Exit(1)
@@ -134,6 +135,7 @@ func loadConfig() {
 		"jobSubmission.graphqlEndpoint",
 		"jobSubmission.graphqlSecret",
 		"jobSubmission.workingDirSize",
+		"jobSubmission.defaultActiveDeadlineSeconds",
 	}
 
 	for _, config := range configs {

@@ -43,10 +43,11 @@ var (
 // PhJobReconciler reconciles a PhJob object
 type PhJobReconciler struct {
 	client.Client
-	Log           logr.Logger
-	Scheme        *runtime.Scheme
-	GraphqlClient *graphql.GraphqlClient
-	WorkingDirSize resource.Quantity
+	Log                          logr.Logger
+	Scheme                       *runtime.Scheme
+	GraphqlClient                *graphql.GraphqlClient
+	WorkingDirSize               resource.Quantity
+	DefaultActiveDeadlineSeconds int64
 }
 
 func (r *PhJobReconciler) buildPod(phJob *primehubv1alpha1.PhJob) (*corev1.Pod, error) {
@@ -135,6 +136,8 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	oldStatus := phJob.Status.DeepCopy()
 	phJob = phJob.DeepCopy()
 	phJobExceedsRequeueLimit := false
+	phJobExceedsLimit := false
+	var failureMessage string
 
 	if phJob.Status.Phase == "" { // New Job, move it into pending state.
 		phJob.Status.Phase = primehubv1alpha1.JobPending
@@ -162,32 +165,49 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 				return ctrl.Result{RequeueAfter: finalizeCheck}, err
 			}
 		}
+		return ctrl.Result{}, nil
+	}
 
+	if inFinalPhase(phJob.Status.Phase) { // phJob is in Succeeded, Failed, Cancelled, Unknown status.
+		// Currently we don't need to delete the pod or job when phjob is finished.
+		// just update and return, doesn't need further reconcile
+		// TODO(@Jack Lin): need to delete it according to ttl after phjob is finished in the future
+		if !apiequality.Semantic.DeepEqual(*oldStatus, phJob.Status) {
+			if err := r.updatePhJobStatus(ctx, phJob); err != nil {
+				finalizeCheck := 1 * time.Minute // reconcile this job after 1 min
+				return ctrl.Result{RequeueAfter: finalizeCheck}, err
+			}
+		}
 		return ctrl.Result{}, nil
 	}
 
 	if phJob.Spec.RequeueLimit != nil {
-		// Requeued excceeds limit
+		// Requeued exceeds limit
 		if *phJob.Status.Requeued > *phJob.Spec.RequeueLimit {
 			log.Info("phJob has failed because it was requeued more than specified times")
 			phJobExceedsRequeueLimit = true
 		}
 	}
-	// TODO (@Jack Lin): activeDeadlineSecond
 
-	if inFinalPhase(phJob.Status.Phase) || phJobExceedsRequeueLimit { // phJob is in Succeeded, Failed, Cancelled, Unknown status, or other spce condition
-		// currently don't need to delete the pod or job when phjob is done
-		// TODO(@Jack Lin): need to delete it according to ttl after finished in the future
+	if phJobExceedsRequeueLimit {
+		phJobExceedsLimit = true
+		failureMessage = "phJob has failed because it was requeued more than specified times"
+	} else if r.pastActiveDeadline(phJob) {
+		phJobExceedsLimit = true
+		failureMessage = "phJob has failed because it was active longer than specified deadline"
+	}
 
-		if phJobExceedsRequeueLimit {
-			if err := r.deletePod(ctx, podkey); err != nil {
-				log.Error(err, "failed to delete pod when phJob exceeds requeue limit")
-				return ctrl.Result{}, err
-			}
-			phJob.Status.Phase = primehubv1alpha1.JobFailed
-			phJob.Status.Reason = "phJob has failed because it was requeued more than specified times"
+	if phJobExceedsLimit { // phJob exceeds requeue limit or active deadline.
+		if err := r.deletePod(ctx, podkey); err != nil {
+			log.Error(err, "failed to delete pod when phJob exceeds requeue limit")
+			return ctrl.Result{}, err
 		}
-
+		if phJob.Status.FinishTime == nil {
+			now := metav1.Now()
+			phJob.Status.FinishTime = &now
+		}
+		phJob.Status.Phase = primehubv1alpha1.JobFailed
+		phJob.Status.Reason = failureMessage
 		if !apiequality.Semantic.DeepEqual(*oldStatus, phJob.Status) {
 			if err := r.updatePhJobStatus(ctx, phJob); err != nil {
 				finalizeCheck := 1 * time.Minute // reconcile this job after 1 min
@@ -364,6 +384,25 @@ func (r *PhJobReconciler) readyStateTimeout(phJob *primehubv1alpha1.PhJob, pod *
 	start := pod.ObjectMeta.CreationTimestamp.Time
 	duration := now.Time.Sub(start)
 	return duration >= DefaultJobReadyTimeout
+}
+
+// check whether the job has ActiveDeadlineSeconds field set and if it is exceeded.
+func (r *PhJobReconciler) pastActiveDeadline(phJob *primehubv1alpha1.PhJob) bool {
+	// if user didn't set ActiveDeadlineSeconds, use default value which is 1 day (86400)
+	if phJob.Spec.ActiveDeadlineSeconds == nil {
+		phJob.Spec.ActiveDeadlineSeconds = &r.DefaultActiveDeadlineSeconds
+	}
+
+	// Set the ActiveDeadlineSeconds to 0 to disable the function
+	if *phJob.Spec.ActiveDeadlineSeconds == int64(0) || phJob.Status.StartTime == nil {
+		return false
+	}
+
+	now := metav1.Now()
+	start := phJob.Status.StartTime.Time
+	duration := now.Time.Sub(start)
+	allowedDuration := time.Duration(*phJob.Spec.ActiveDeadlineSeconds) * time.Second
+	return duration >= allowedDuration
 }
 
 func (r *PhJobReconciler) handleCreatePodFailed(phJob *primehubv1alpha1.PhJob, pod *corev1.Pod, err error) bool {
