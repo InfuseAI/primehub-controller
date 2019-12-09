@@ -17,6 +17,7 @@ package controllers
 
 import (
 	"context"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"primehub-controller/pkg/graphql"
 	"strings"
 	"time"
@@ -45,6 +46,7 @@ type PhJobReconciler struct {
 	Log           logr.Logger
 	Scheme        *runtime.Scheme
 	GraphqlClient *graphql.GraphqlClient
+	WorkingDirSize resource.Quantity
 }
 
 func (r *PhJobReconciler) buildPod(phJob *primehubv1alpha1.PhJob) (*corev1.Pod, error) {
@@ -68,10 +70,15 @@ func (r *PhJobReconciler) buildPod(phJob *primehubv1alpha1.PhJob) (*corev1.Pod, 
 
 	// Build the podTemplate according to data from graphql and phjob group, instanceType, image settings
 	var spawner *graphql.Spawner
-	if spawner, err = graphql.NewSpawnerByData(result.Data, phJob.Spec.Group, phJob.Spec.InstanceType, phJob.Spec.Image); err != nil {
+	options := graphql.SpawnerDataOptions{
+		WorkingDirSize: r.WorkingDirSize,
+	}
+	if spawner, err = graphql.NewSpawnerByData(result.Data, phJob.Spec.Group, phJob.Spec.InstanceType, phJob.Spec.Image, options); err != nil {
 		return nil, err
 	}
-	spawner.WithCommand([]string{"sh", "-c", phJob.Spec.Command}).BuildPodSpec(&podSpec)
+	spawner.WithCommand([]string{"sh", "-c", phJob.Spec.Command})
+	spawner.BuildPodSpec(&podSpec)
+
 	podSpec.RestartPolicy = corev1.RestartPolicyNever
 	pod.Spec = podSpec
 	pod.Labels = map[string]string{
