@@ -50,6 +50,9 @@ spec:
         spec:
           description: PhJobSpec defines the desired state of PhJob
           properties:
+            activeDeadlineSeconds:
+              format: int64
+              type: integer
             cancel:
               type: boolean
             command:

@@ -80,12 +80,12 @@ type DtoImage struct {
 }
 
 type DtoImageSpec struct {
-	Name 		string
+	Name string
 
-	Type      	string
-	Url       	string
-	UrlForGpu 	string
-	PullSecret	string
+	Type       string
+	Url        string
+	UrlForGpu  string
+	PullSecret string
 }
 
 type DtoDataset struct {
@@ -97,7 +97,7 @@ type DtoDataset struct {
 	MountRoot       string
 	HomeSymlink     *bool
 	LaunchGroupOnly *bool
-	Spec			DtoDatasetSpec
+	Spec            DtoDatasetSpec
 }
 
 type DtoDatasetSpec struct {
@@ -106,8 +106,8 @@ type DtoDatasetSpec struct {
 	Url                string
 	VolumeName         string
 	Variables          map[string]string
-	GitSyncHostRoot	   string
-	GitSyncRoot		   string
+	GitSyncHostRoot    string
+	GitSyncRoot        string
 }
 
 type GraphqlClient struct {

@@ -18,3 +18,4 @@ jobSubmission:
   graphqlSecret: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
   workingDirSize: 5Gi
+  defaultActiveDeadlineSeconds: 86400
