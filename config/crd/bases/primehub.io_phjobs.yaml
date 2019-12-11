@@ -3,8 +3,6 @@
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
-  annotations:
-    controller-gen.kubebuilder.io/version: v0.2.2
   creationTimestamp: null
   name: phjobs.primehub.io
 spec:
@@ -61,7 +59,9 @@ spec:
               description: 'INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
                 Important: Run "make" to regenerate code after modifying this file'
               type: string
-            group:
+            groupId:
+              type: string
+            groupName:
               type: string
             image:
               type: string
@@ -80,7 +80,8 @@ spec:
           required:
           - command
           - displayName
-          - group
+          - groupId
+          - groupName
           - image
           - instanceType
           - userId

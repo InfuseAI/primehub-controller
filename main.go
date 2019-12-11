@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"primehub-controller/pkg/graphql"
+	"time"
 
 	primehubv1alpha1 "primehub-controller/api/v1alpha1"
 
@@ -27,6 +28,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/wait"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -111,6 +113,14 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "PhJob")
 		os.Exit(1)
 	}
+
+	phJobScheduler := controllers.PHJobScheduler{
+		Client:        mgr.GetClient(),
+		Log:           ctrl.Log.WithName("Scheduler").WithName("PhJob"),
+		GraphqlClient: graphqlClient,
+	}
+	go wait.Until(phJobScheduler.Schedule, time.Second*30, wait.NeverStop)
+
 	// +kubebuilder:scaffold:builder
 
 	setupLog.Info("starting manager")

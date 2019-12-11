@@ -76,7 +76,7 @@ func (r *PhJobReconciler) buildPod(phJob *primehubv1alpha1.PhJob) (*corev1.Pod, 
 	options := graphql.SpawnerDataOptions{
 		WorkingDirSize: r.WorkingDirSize,
 	}
-	if spawner, err = graphql.NewSpawnerByData(result.Data, phJob.Spec.Group, phJob.Spec.InstanceType, phJob.Spec.Image, options); err != nil {
+	if spawner, err = graphql.NewSpawnerByData(result.Data, phJob.Spec.GroupName, phJob.Spec.InstanceType, phJob.Spec.Image, options); err != nil {
 		return nil, err
 	}
 	spawner.WithCommand([]string{"sh", "-c", phJob.Spec.Command})
@@ -86,7 +86,7 @@ func (r *PhJobReconciler) buildPod(phJob *primehubv1alpha1.PhJob) (*corev1.Pod, 
 	pod.Spec = podSpec
 	pod.Labels = map[string]string{
 		"app":               "primehub-job",
-		"primehub.io/group": phJob.Spec.Group,
+		"primehub.io/group": phJob.Spec.GroupName,
 		"primehub.io/user":  phJob.Spec.UserName,
 	}
 	pod.Spec.InitContainers = append(pod.Spec.InitContainers, corev1.Container{
@@ -241,16 +241,6 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{RequeueAfter: nextCheck}, nil
 	}
 
-	// NOTE(@Jack Lin): We don't have schedule process
-	// to move the job from pending state to readystate yet.
-	// So every job will move to ready state dirctly
-	// In the future, these jobs need to be scheduled and move to readystate
-	// and then can reconcile the pod.
-	// TODO(@Jack Pan): resource constraint
-	if phJob.Status.Phase == primehubv1alpha1.JobPending {
-		phJob.Status.Phase = primehubv1alpha1.JobReady
-	}
-
 	if phJob.Status.Phase != primehubv1alpha1.JobPending { // only Job in Ready, Running will reconcile the pod.
 		log.Info("reconcile Pod start")
 		if err := r.reconcilePod(ctx, phJob, podkey); err != nil {
@@ -307,8 +297,6 @@ func (r *PhJobReconciler) reconcilePod(ctx context.Context, phJob *primehubv1alp
 		}
 
 		if err == nil { // create pod successfully
-			// TODO(@Jack Pan): change phase to Ready should move to cronjob scheduler
-			// phJob.Status.Phase = primehubv1alpha1.JobReady
 			phJob.Status.PodName = podkey.Name
 			log.Info("created pod", "pod", pod)
 
