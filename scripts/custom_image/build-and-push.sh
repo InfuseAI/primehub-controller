@@ -32,7 +32,7 @@ function build() {
 
 function push() {
   echo "[Step: push]"
-  buildah --storage-driver vfs --authfile $PUSH_SECRET_AUTHFILE push $TARGET_IMAGE
+  buildah --storage-driver vfs --authfile $PUSH_SECRET_AUTHFILE push --format docker $TARGET_IMAGE
   [[ $? -ne 0 ]] && { exit $PUSH_FAILED; }
   echo
 }
