@@ -7,7 +7,7 @@ spec:
   command: |
     echo start
     data
-    sleep 5
+    sleep 100
     date
     echo complete
   displayName: "Test Job"
@@ -17,3 +17,5 @@ spec:
   instanceType: "cpu-only"
   image: "base-notebook"
   requeueLimit: 1
+  # activeDeadlineSeconds: 10
+  # ttlSecondsAfterFinished: 10

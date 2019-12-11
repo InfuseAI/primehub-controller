@@ -70,6 +70,9 @@ spec:
             requeueLimit:
               format: int32
               type: integer
+            ttlSecondsAfterFinished:
+              format: int32
+              type: integer
             userId:
               type: string
             userName:

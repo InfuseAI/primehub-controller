@@ -17,10 +17,11 @@ package controllers
 
 import (
 	"context"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"primehub-controller/pkg/graphql"
 	"strings"
 	"time"
+
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -43,11 +44,12 @@ var (
 // PhJobReconciler reconciles a PhJob object
 type PhJobReconciler struct {
 	client.Client
-	Log                          logr.Logger
-	Scheme                       *runtime.Scheme
-	GraphqlClient                *graphql.GraphqlClient
-	WorkingDirSize               resource.Quantity
-	DefaultActiveDeadlineSeconds int64
+	Log                            logr.Logger
+	Scheme                         *runtime.Scheme
+	GraphqlClient                  *graphql.GraphqlClient
+	WorkingDirSize                 resource.Quantity
+	DefaultActiveDeadlineSeconds   int64
+	DefaultTTLSecondsAfterFinished int32
 }
 
 func (r *PhJobReconciler) buildPod(phJob *primehubv1alpha1.PhJob) (*corev1.Pod, error) {
@@ -135,6 +137,19 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	oldStatus := phJob.Status.DeepCopy()
 	phJob = phJob.DeepCopy()
+
+	// if user didn't set ActiveDeadlineSeconds, use default value which is 1 day (86400)
+	if phJob.Spec.ActiveDeadlineSeconds == nil {
+		phJob.Spec.ActiveDeadlineSeconds = &r.DefaultActiveDeadlineSeconds
+	}
+
+	// if user didn't set TTLSecondsAfterFinished, use default value which is 7 day (604800)
+	if phJob.Spec.TTLSecondsAfterFinished == nil {
+		phJob.Spec.TTLSecondsAfterFinished = &r.DefaultTTLSecondsAfterFinished
+	}
+
+	errorCheckAfter := 1 * time.Minute
+	nextCheck := 1 * time.Minute
 	phJobExceedsRequeueLimit := false
 	phJobExceedsLimit := false
 	var failureMessage string
@@ -161,24 +176,24 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 		if !apiequality.Semantic.DeepEqual(*oldStatus, phJob.Status) {
 			if err := r.updatePhJobStatus(ctx, phJob); err != nil {
-				finalizeCheck := 1 * time.Minute // reconcile this job after 1 min
-				return ctrl.Result{RequeueAfter: finalizeCheck}, err
+				return ctrl.Result{RequeueAfter: errorCheckAfter}, err
 			}
 		}
 		return ctrl.Result{}, nil
 	}
 
-	if inFinalPhase(phJob.Status.Phase) { // phJob is in Succeeded, Failed, Cancelled, Unknown status.
-		// Currently we don't need to delete the pod or job when phjob is finished.
-		// just update and return, doesn't need further reconcile
-		// TODO(@Jack Lin): need to delete it according to ttl after phjob is finished in the future
+	if inFinalPhase(phJob.Status.Phase) { // phJob is in Succeeded, Failed, Unknown status.
+		if err := r.handleTTL(ctx, phJob, podkey); err != nil {
+			return ctrl.Result{RequeueAfter: errorCheckAfter}, err
+		}
+
 		if !apiequality.Semantic.DeepEqual(*oldStatus, phJob.Status) {
 			if err := r.updatePhJobStatus(ctx, phJob); err != nil {
-				finalizeCheck := 1 * time.Minute // reconcile this job after 1 min
-				return ctrl.Result{RequeueAfter: finalizeCheck}, err
+				return ctrl.Result{RequeueAfter: errorCheckAfter}, err
 			}
 		}
-		return ctrl.Result{}, nil
+
+		return ctrl.Result{RequeueAfter: nextCheck}, nil
 	}
 
 	if phJob.Spec.RequeueLimit != nil {
@@ -210,11 +225,11 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		phJob.Status.Reason = failureMessage
 		if !apiequality.Semantic.DeepEqual(*oldStatus, phJob.Status) {
 			if err := r.updatePhJobStatus(ctx, phJob); err != nil {
-				finalizeCheck := 1 * time.Minute // reconcile this job after 1 min
-				return ctrl.Result{RequeueAfter: finalizeCheck}, err
+				return ctrl.Result{RequeueAfter: errorCheckAfter}, err
 			}
 		}
-		return ctrl.Result{}, nil
+
+		return ctrl.Result{RequeueAfter: nextCheck}, nil
 	}
 
 	// NOTE(@Jack Lin): We don't have schedule process
@@ -231,7 +246,6 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		log.Info("reconcile Pod start")
 		if err := r.reconcilePod(ctx, phJob, podkey); err != nil {
 			log.Error(err, "reconcilePod error.")
-			nextCheck := 1 * time.Minute // reconcile this job after 1 min
 			return ctrl.Result{RequeueAfter: nextCheck}, err
 		}
 	}
@@ -239,12 +253,20 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	//no need to update the phjob if the status hasn't changed since last time.
 	if !apiequality.Semantic.DeepEqual(*oldStatus, phJob.Status) {
 		if err := r.updatePhJobStatus(ctx, phJob); err != nil {
-			nextCheck := 1 * time.Minute // reconcile this job after 1 min
-			return ctrl.Result{RequeueAfter: nextCheck}, err
+			return ctrl.Result{RequeueAfter: errorCheckAfter}, err
 		}
 	}
 
-	nextCheck := 1 * time.Minute // reconcile this job after 1 min
+	if inFinalPhase(phJob.Status.Phase) { // Job in Succeeded, Failed, Unknown status.
+		ttlDuration := time.Second * time.Duration(*phJob.Spec.TTLSecondsAfterFinished)
+		log.Info("phJob has finished, reconcile it after ttl.", "ttlDuration", ttlDuration)
+		return ctrl.Result{RequeueAfter: ttlDuration}, nil
+	} else if phJob.Status.StartTime != nil { // Job in Running
+		activeDeadlineSeconds := time.Second * time.Duration(*phJob.Spec.ActiveDeadlineSeconds)
+		log.Info("phJob is still running, reconcile it after active deadline seconds.", "activeDeadlineSeconds", activeDeadlineSeconds)
+		return ctrl.Result{RequeueAfter: activeDeadlineSeconds}, nil
+	}
+
 	return ctrl.Result{RequeueAfter: nextCheck}, nil
 }
 
@@ -263,7 +285,7 @@ func (r *PhJobReconciler) reconcilePod(ctx context.Context, phJob *primehubv1alp
 	createPodFailedReason := ""
 	pod, err := r.getPodForJob(ctx, podkey)
 	if err != nil && !apierrors.IsNotFound(err) {
-		log.Info("return since get pod err", "podkey", podkey, "err", err)
+		log.Info("return since get pod err ", "podkey", podkey, "err", err)
 		return err
 	}
 
@@ -378,6 +400,30 @@ func (r *PhJobReconciler) updatePhJobStatus(ctx context.Context, phJob *primehub
 	return nil
 }
 
+// handleTTL delete the resources of the terminated phjob after the ttl.
+func (r *PhJobReconciler) handleTTL(ctx context.Context, phJob *primehubv1alpha1.PhJob, podkey client.ObjectKey) error {
+	log := r.Log.WithValues("phjob", phJob.Namespace)
+	if *phJob.Spec.TTLSecondsAfterFinished == int32(0) { // set 0 to disable the cleanup
+		return nil
+	}
+
+	currentTime := time.Now()
+	ttlDuration := time.Second * time.Duration(*phJob.Spec.TTLSecondsAfterFinished)
+
+	if currentTime.After(phJob.Status.FinishTime.Add(ttlDuration)) {
+		// log.Info("cleanup phJob pod for it has been terminated for a given ttl.")
+		err := r.deletePod(ctx, podkey)
+		if err != nil {
+			log.Error(err, "cleanup phJob pod error, will reconcile it after 1 min.")
+			return err
+		}
+		// log.Info("cleanup phJob pod succeeded.")
+		return nil
+	}
+
+	return nil
+}
+
 // check whether the pod is in pending state longer than deadline
 func (r *PhJobReconciler) readyStateTimeout(phJob *primehubv1alpha1.PhJob, pod *corev1.Pod) bool {
 	now := metav1.Now()
@@ -388,10 +434,6 @@ func (r *PhJobReconciler) readyStateTimeout(phJob *primehubv1alpha1.PhJob, pod *
 
 // check whether the job has ActiveDeadlineSeconds field set and if it is exceeded.
 func (r *PhJobReconciler) pastActiveDeadline(phJob *primehubv1alpha1.PhJob) bool {
-	// if user didn't set ActiveDeadlineSeconds, use default value which is 1 day (86400)
-	if phJob.Spec.ActiveDeadlineSeconds == nil {
-		phJob.Spec.ActiveDeadlineSeconds = &r.DefaultActiveDeadlineSeconds
-	}
 
 	// Set the ActiveDeadlineSeconds to 0 to disable the function
 	if *phJob.Spec.ActiveDeadlineSeconds == int64(0) || phJob.Status.StartTime == nil {

@@ -42,16 +42,17 @@ const (
 type PhJobSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	DisplayName           string `json:"displayName"`
-	UserId                string `json:"userId"`
-	UserName              string `json:"userName,omitempty"`
-	Group                 string `json:"group"`
-	InstanceType          string `json:"instanceType"`
-	Image                 string `json:"image"`
-	Command               string `json:"command"`
-	Cancel                bool   `json:"cancel,omitempty"`
-	RequeueLimit          *int32 `json:"requeueLimit,omitempty"`
-	ActiveDeadlineSeconds *int64 `json:"activeDeadlineSeconds,omitempty"`
+	DisplayName             string `json:"displayName"`
+	UserId                  string `json:"userId"`
+	UserName                string `json:"userName,omitempty"`
+	Group                   string `json:"group"`
+	InstanceType            string `json:"instanceType"`
+	Image                   string `json:"image"`
+	Command                 string `json:"command"`
+	Cancel                  bool   `json:"cancel,omitempty"`
+	RequeueLimit            *int32 `json:"requeueLimit,omitempty"`
+	ActiveDeadlineSeconds   *int64 `json:"activeDeadlineSeconds,omitempty"`
+	TTLSecondsAfterFinished *int32 `json:"ttlSecondsAfterFinished,omitempty"`
 }
 
 // PhJobStatus defines the observed state of PhJob
