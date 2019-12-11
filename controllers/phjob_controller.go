@@ -263,8 +263,9 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{RequeueAfter: ttlDuration}, nil
 	} else if phJob.Status.StartTime != nil && *phJob.Spec.ActiveDeadlineSeconds != int64(0) { // Job in Running
 		activeDeadlineSeconds := time.Second * time.Duration(*phJob.Spec.ActiveDeadlineSeconds)
-		log.Info("phJob is still running, reconcile it after active deadline seconds.", "activeDeadlineSeconds", activeDeadlineSeconds)
-		return ctrl.Result{RequeueAfter: activeDeadlineSeconds}, nil
+		next := phJob.Status.StartTime.Add(activeDeadlineSeconds).Sub(time.Now())
+		log.Info("phJob is still running, reconcile it after for active deadline", "next", next)
+		return ctrl.Result{RequeueAfter: next}, nil
 	}
 
 	return ctrl.Result{RequeueAfter: nextCheck}, nil
