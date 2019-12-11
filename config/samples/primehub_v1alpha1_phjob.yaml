@@ -7,7 +7,7 @@ spec:
   command: |
     echo start
     data
-    sleep 100
+    sleep 5
     date
     echo complete
   displayName: "Test Job"

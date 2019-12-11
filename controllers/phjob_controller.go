@@ -414,6 +414,10 @@ func (r *PhJobReconciler) handleTTL(ctx context.Context, phJob *primehubv1alpha1
 		// log.Info("cleanup phJob pod for it has been terminated for a given ttl.")
 		err := r.deletePod(ctx, podkey)
 		if err != nil {
+			if apierrors.IsNotFound(err) { // pod doesn't exist
+				log.Info("cleanup phJob pod failed since pod not found")
+				return nil
+			}
 			log.Error(err, "cleanup phJob pod error, will reconcile it after 1 min.")
 			return err
 		}
