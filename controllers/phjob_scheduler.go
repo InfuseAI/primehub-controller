@@ -250,35 +250,33 @@ func (r *PHJobScheduler) filter(phJob *primehubv1alpha1.PhJob) (bool, error) {
 	return false, nil
 }
 
-func (r *PHJobScheduler) group(phJobList *primehubv1alpha1.PhJobList) (*map[string][]primehubv1alpha1.PhJob, error) {
-	phJobsGroupMapping := make(map[string][]primehubv1alpha1.PhJob)
+func (r *PHJobScheduler) group(phJobList *primehubv1alpha1.PhJobList) (*map[string][]*primehubv1alpha1.PhJob, error) {
+	phJobsGroupMapping := make(map[string][]*primehubv1alpha1.PhJob)
 
 	phJobItems := phJobList.Items
 	for _, phJob := range phJobItems {
 		if _, ok := phJobsGroupMapping[phJob.Spec.GroupId]; !ok {
-			phJobsGroupMapping[phJob.Spec.GroupId] = []primehubv1alpha1.PhJob{}
+			phJobsGroupMapping[phJob.Spec.GroupId] = []*primehubv1alpha1.PhJob{}
 		}
 
-		phJobsGroupMapping[phJob.Spec.GroupId] = append(phJobsGroupMapping[phJob.Spec.GroupId], phJob)
+		phJobsGroupMapping[phJob.Spec.GroupId] = append(phJobsGroupMapping[phJob.Spec.GroupId], phJob.DeepCopy())
 	}
 
 	return &phJobsGroupMapping, nil
 }
 
-func (r *PHJobScheduler) sort(phJobs *[]primehubv1alpha1.PhJob, cmpFunc PhjobCompareFunc) {
+func (r *PHJobScheduler) sort(phJobs *[]*primehubv1alpha1.PhJob, cmpFunc PhjobCompareFunc) {
 	phJobsValues := *phJobs
 	sort.Slice(phJobsValues, func(i int, j int) bool {
-		return cmpFunc(&phJobsValues[i], &phJobsValues[j])
+		return cmpFunc(phJobsValues[i], phJobsValues[j])
 	})
 }
 
-func (r *PHJobScheduler) scheduleByStrictOrder(phJobsRef *[]primehubv1alpha1.PhJob, usersRemainingQuotaRef *map[string]ResourceQuota, groupRemainingQuota *ResourceQuota) error {
-	ctx := context.Background()
+func (r *PHJobScheduler) scheduleByStrictOrder(phJobsRef *[]*primehubv1alpha1.PhJob, usersRemainingQuotaRef *map[string]ResourceQuota, groupRemainingQuota *ResourceQuota) error {
 	phJobs := *phJobsRef
 	usersRemainingQuota := *usersRemainingQuotaRef
 
-	needUpdatedIdx := 0
-	for jobIdx, phJob := range phJobs {
+	for _, phJob := range phJobs {
 		instanceInfo, err := r.getInstanceTypeInfo(phJob.Spec.InstanceType)
 		if err != nil {
 			return err
@@ -290,7 +288,7 @@ func (r *PHJobScheduler) scheduleByStrictOrder(phJobsRef *[]primehubv1alpha1.PhJ
 
 		_, foundUser := usersRemainingQuota[phJob.Spec.UserName]
 		if !foundUser {
-			userRemainingQuota, err := r.getUserRemainingQuota(&phJob)
+			userRemainingQuota, err := r.getUserRemainingQuota(phJob)
 			if err != nil {
 				return err
 			}
@@ -305,6 +303,8 @@ func (r *PHJobScheduler) scheduleByStrictOrder(phJobsRef *[]primehubv1alpha1.PhJ
 		if groupValid == false {
 			break
 		}
+
+		phJob.Status.Phase = primehubv1alpha1.JobReady
 
 		if groupRemainingQuota.cpu != nil {
 			groupRemainingQuota.cpu.Sub(*instanceRequestedQuota.cpu)
@@ -324,13 +324,6 @@ func (r *PHJobScheduler) scheduleByStrictOrder(phJobsRef *[]primehubv1alpha1.PhJ
 		if usersRemainingQuota[phJob.Spec.UserName].memory != nil {
 			usersRemainingQuota[phJob.Spec.UserName].memory.Sub(*instanceRequestedQuota.memory)
 		}
-
-		needUpdatedIdx = jobIdx + 1
-	}
-	for i := 0; i < needUpdatedIdx; i++ {
-		phJobCopy := phJobs[i].DeepCopy()
-		phJobCopy.Status.Phase = primehubv1alpha1.JobReady
-		r.Status().Update(ctx, phJobCopy)
 	}
 	return nil
 }
@@ -369,12 +362,15 @@ func (r *PHJobScheduler) Schedule() {
 		if err != nil {
 			r.Log.Error(err, "failed to validate phjob")
 			continue
-		} else {
-			if valid == false {
-				phJobCopy := phJob.DeepCopy()
-				phJobCopy.Status.Phase = primehubv1alpha1.JobFailed
-				phJobCopy.Status.Reason = "Your instance type resource limit is bigger than your user or group quota."
-				r.Status().Update(ctx, phJobCopy)
+		}
+		if valid == false {
+			phJobCopy := phJob.DeepCopy()
+			phJobCopy.Status.Phase = primehubv1alpha1.JobFailed
+			phJobCopy.Status.Reason = "Your instance type resource limit is bigger than your user or group quota."
+			err := r.Status().Update(ctx, phJobCopy)
+			if err != nil {
+				r.Log.Error(err, "update phjob status failed")
+				continue
 			}
 		}
 
@@ -403,13 +399,25 @@ func (r *PHJobScheduler) Schedule() {
 
 		r.sort(&phJobs, compareByCreationTimestamp)
 
-		groupRemainingQuota, err := r.getGroupRemainingQuota(&phJobs[0])
+		groupRemainingQuota, err := r.getGroupRemainingQuota(phJobs[0])
 		if err != nil {
 			r.Log.Error(err, "cannot get group remaining quota")
 			continue
 		}
 		usersRemainingQuota := make(map[string]ResourceQuota)
 		r.scheduleByStrictOrder(&phJobs, &usersRemainingQuota, groupRemainingQuota)
+
+		for _, phJob := range phJobs {
+			if phJob.Status.Phase == primehubv1alpha1.JobReady {
+				r.Log.Info("scheduled", "phjob", phJob.Name)
+				phJobCopy := phJob.DeepCopy()
+				err := r.Status().Update(ctx, phJobCopy)
+				if err != nil {
+					r.Log.Error(err, "update phjob status failed")
+					continue
+				}
+			}
+		}
 	}
 
 	r.Log.Info("end of scheduling")

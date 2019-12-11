@@ -116,7 +116,7 @@ func main() {
 
 	phJobScheduler := controllers.PHJobScheduler{
 		Client:        mgr.GetClient(),
-		Log:           ctrl.Log.WithName("Scheduler").WithName("PhJob"),
+		Log:           ctrl.Log.WithName("scheduler").WithName("PhJob"),
 		GraphqlClient: graphqlClient,
 	}
 	go wait.Until(phJobScheduler.Schedule, time.Second*30, wait.NeverStop)
