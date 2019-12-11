@@ -193,6 +193,15 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			}
 		}
 
+		if *phJob.Spec.TTLSecondsAfterFinished != int32(0) { // has ttl set
+			ttlDuration := time.Second * time.Duration(*phJob.Spec.TTLSecondsAfterFinished)
+			next := phJob.Status.FinishTime.Add(ttlDuration).Sub(time.Now())
+			if next > 0 {
+				log.Info("phJob has finished, reconcile it after ttl.", "next", next)
+				return ctrl.Result{RequeueAfter: next}, nil
+			}
+		}
+
 		return ctrl.Result{RequeueAfter: nextCheck}, nil
 	}
 

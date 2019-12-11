@@ -18,4 +18,4 @@ spec:
   image: "base-notebook"
   requeueLimit: 1
   # activeDeadlineSeconds: 10
-  # ttlSecondsAfterFinished: 10
+  ttlSecondsAfterFinished: 60
