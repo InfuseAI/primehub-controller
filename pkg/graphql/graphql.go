@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"io/ioutil"
-	corev1 "k8s.io/api/core/v1"
 	"net/http"
 	"strings"
+
+	corev1 "k8s.io/api/core/v1"
 )
 
 // Type definitions of data transfer objects (DTO) from graphql
@@ -242,9 +243,29 @@ func (c GraphqlClient) FetchGroupInfo(groupId string) (*DtoGroup, error) {
 	}
 	data := map[string]interface{}{}
 	json.Unmarshal(body, &data)
+
+	if data["data"] == nil {
+		return nil, errors.New("can not find data in response")
+	}
+	if data["data"].(map[string]interface{})["group"] == nil {
+		return nil, errors.New("can not find group in response")
+	}
+
 	var group DtoGroup
 	jsonObj, _ := json.Marshal(data["data"].(map[string]interface{})["group"].(map[string]interface{}))
 	json.Unmarshal(jsonObj, &group)
+	if data["data"].(map[string]interface{})["group"].(map[string]interface{})["quotaCpu"] == nil {
+		group.QuotaCpu = -1
+	}
+	if data["data"].(map[string]interface{})["group"].(map[string]interface{})["quotaGpu"] == nil {
+		group.QuotaGpu = -1
+	}
+	if data["data"].(map[string]interface{})["group"].(map[string]interface{})["projectQuotaCpu"] == nil {
+		group.ProjectQuotaCpu = -1
+	}
+	if data["data"].(map[string]interface{})["group"].(map[string]interface{})["projectQuotaGpu"] == nil {
+		group.ProjectQuotaGpu = -1
+	}
 	return &group, nil
 }
 
@@ -272,8 +293,22 @@ func (c GraphqlClient) FetchInstanceTypeInfo(instanceTypeId string) (*DtoInstanc
 	}
 	data := map[string]interface{}{}
 	json.Unmarshal(body, &data)
+
+	if data["data"] == nil {
+		return nil, errors.New("can not find data in response")
+	}
+	if data["data"].(map[string]interface{})["instanceType"] == nil {
+		return nil, errors.New("can not find instanceType in response")
+	}
+	if data["data"].(map[string]interface{})["instanceType"].(map[string]interface{})["spec"] == nil {
+		return nil, errors.New("can not find instanceType.spec in response")
+	}
+
 	var instanceType DtoInstanceType
 	jsonObj, _ := json.Marshal(data["data"].(map[string]interface{})["instanceType"].(map[string]interface{}))
 	json.Unmarshal(jsonObj, &instanceType)
+	if data["data"].(map[string]interface{})["instanceType"].(map[string]interface{})["spec"].(map[string]interface{})["requests.cpu"] == nil {
+		instanceType.Spec.RequestsCpu = -1
+	}
 	return &instanceType, nil
 }

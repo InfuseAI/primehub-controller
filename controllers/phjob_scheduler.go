@@ -42,13 +42,13 @@ func NewResourceQuota() *ResourceQuota {
 
 func ConvertToResourceQuota(cpu float32, gpu float32, memory string) (*ResourceQuota, error) {
 	var resourceQuota ResourceQuota = *NewResourceQuota()
-	if cpu <= 0 {
+	if cpu < 0 {
 		resourceQuota.cpu = nil
 	} else {
 		resourceQuota.cpu.SetMilli(int64(cpu*1000 + 0.5))
 	}
 
-	if gpu <= 0 {
+	if gpu < 0 {
 		resourceQuota.gpu = nil
 	} else {
 		resourceQuota.gpu.Set(int64(gpu + 0.5))
