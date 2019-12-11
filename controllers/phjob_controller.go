@@ -257,11 +257,11 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		}
 	}
 
-	if inFinalPhase(phJob.Status.Phase) { // Job in Succeeded, Failed, Unknown status.
+	if inFinalPhase(phJob.Status.Phase) && *phJob.Spec.TTLSecondsAfterFinished != int32(0) { // Job in Succeeded, Failed, Unknown status.
 		ttlDuration := time.Second * time.Duration(*phJob.Spec.TTLSecondsAfterFinished)
 		log.Info("phJob has finished, reconcile it after ttl.", "ttlDuration", ttlDuration)
 		return ctrl.Result{RequeueAfter: ttlDuration}, nil
-	} else if phJob.Status.StartTime != nil { // Job in Running
+	} else if phJob.Status.StartTime != nil && *phJob.Spec.ActiveDeadlineSeconds != int64(0) { // Job in Running
 		activeDeadlineSeconds := time.Second * time.Duration(*phJob.Spec.ActiveDeadlineSeconds)
 		log.Info("phJob is still running, reconcile it after active deadline seconds.", "activeDeadlineSeconds", activeDeadlineSeconds)
 		return ctrl.Result{RequeueAfter: activeDeadlineSeconds}, nil
