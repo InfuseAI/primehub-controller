@@ -405,7 +405,10 @@ func (r *PHJobScheduler) Schedule() {
 			continue
 		}
 		usersRemainingQuota := make(map[string]ResourceQuota)
-		r.scheduleByStrictOrder(&phJobs, &usersRemainingQuota, groupRemainingQuota)
+		err = r.scheduleByStrictOrder(&phJobs, &usersRemainingQuota, groupRemainingQuota)
+		if err != nil {
+			r.Log.Error(err, "schedule by strict order failed")
+		}
 
 		for _, phJob := range phJobs {
 			if phJob.Status.Phase == primehubv1alpha1.JobReady {

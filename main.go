@@ -70,6 +70,8 @@ func main() {
 		o.Development = true
 	}))
 
+	stopChan := ctrl.SetupSignalHandler()
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:             scheme,
 		MetricsBindAddress: metricsAddr,
@@ -119,12 +121,12 @@ func main() {
 		Log:           ctrl.Log.WithName("scheduler").WithName("PhJob"),
 		GraphqlClient: graphqlClient,
 	}
-	go wait.Until(phJobScheduler.Schedule, time.Second*1, wait.NeverStop)
+	go wait.Until(phJobScheduler.Schedule, time.Second*1, stopChan)
 
 	// +kubebuilder:scaffold:builder
 
 	setupLog.Info("starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err := mgr.Start(stopChan); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}

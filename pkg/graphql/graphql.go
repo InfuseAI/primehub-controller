@@ -244,28 +244,32 @@ func (c GraphqlClient) FetchGroupInfo(groupId string) (*DtoGroup, error) {
 	data := map[string]interface{}{}
 	json.Unmarshal(body, &data)
 
-	if data["data"] == nil {
+	data, ok := data["data"].(map[string]interface{})
+	if !ok {
 		return nil, errors.New("can not find data in response")
 	}
-	if data["data"].(map[string]interface{})["group"] == nil {
+	_group, ok := data["group"].(map[string]interface{})
+	if !ok {
 		return nil, errors.New("can not find group in response")
 	}
 
 	var group DtoGroup
-	jsonObj, _ := json.Marshal(data["data"].(map[string]interface{})["group"].(map[string]interface{}))
+	jsonObj, _ := json.Marshal(_group)
 	json.Unmarshal(jsonObj, &group)
-	if data["data"].(map[string]interface{})["group"].(map[string]interface{})["quotaCpu"] == nil {
+
+	if _group["quotaCpu"] == nil {
 		group.QuotaCpu = -1
 	}
-	if data["data"].(map[string]interface{})["group"].(map[string]interface{})["quotaGpu"] == nil {
+	if _group["quotaGpu"] == nil {
 		group.QuotaGpu = -1
 	}
-	if data["data"].(map[string]interface{})["group"].(map[string]interface{})["projectQuotaCpu"] == nil {
+	if _group["projectQuotaCpu"] == nil {
 		group.ProjectQuotaCpu = -1
 	}
-	if data["data"].(map[string]interface{})["group"].(map[string]interface{})["projectQuotaGpu"] == nil {
+	if _group["projectQuotaGpu"] == nil {
 		group.ProjectQuotaGpu = -1
 	}
+
 	return &group, nil
 }
 
@@ -294,20 +298,23 @@ func (c GraphqlClient) FetchInstanceTypeInfo(instanceTypeId string) (*DtoInstanc
 	data := map[string]interface{}{}
 	json.Unmarshal(body, &data)
 
-	if data["data"] == nil {
+	data, ok := data["data"].(map[string]interface{})
+	if !ok {
 		return nil, errors.New("can not find data in response")
 	}
-	if data["data"].(map[string]interface{})["instanceType"] == nil {
+	_instanceType, ok := data["instanceType"].(map[string]interface{})
+	if !ok {
 		return nil, errors.New("can not find instanceType in response")
 	}
-	if data["data"].(map[string]interface{})["instanceType"].(map[string]interface{})["spec"] == nil {
+	_spec, ok := _instanceType["spec"].(map[string]interface{})
+	if !ok {
 		return nil, errors.New("can not find instanceType.spec in response")
 	}
 
 	var instanceType DtoInstanceType
-	jsonObj, _ := json.Marshal(data["data"].(map[string]interface{})["instanceType"].(map[string]interface{}))
+	jsonObj, _ := json.Marshal(_instanceType)
 	json.Unmarshal(jsonObj, &instanceType)
-	if data["data"].(map[string]interface{})["instanceType"].(map[string]interface{})["spec"].(map[string]interface{})["requests.cpu"] == nil {
+	if _spec["requests.cpu"] == nil {
 		instanceType.Spec.RequestsCpu = -1
 	}
 	return &instanceType, nil
