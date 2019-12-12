@@ -119,7 +119,7 @@ func main() {
 		Log:           ctrl.Log.WithName("scheduler").WithName("PhJob"),
 		GraphqlClient: graphqlClient,
 	}
-	go wait.Until(phJobScheduler.Schedule, time.Second*30, wait.NeverStop)
+	go wait.Until(phJobScheduler.Schedule, time.Second*1, wait.NeverStop)
 
 	// +kubebuilder:scaffold:builder
 
