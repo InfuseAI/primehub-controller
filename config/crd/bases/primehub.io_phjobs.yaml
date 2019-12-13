@@ -7,10 +7,10 @@ metadata:
   name: phjobs.primehub.io
 spec:
   additionalPrinterColumns:
-  - JSONPath: .spec.user
+  - JSONPath: .spec.userName
     name: User
     type: string
-  - JSONPath: .spec.group
+  - JSONPath: .spec.groupName
     name: Group
     type: string
   - JSONPath: .status.phase
