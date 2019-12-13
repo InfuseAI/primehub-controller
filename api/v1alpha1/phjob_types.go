@@ -45,7 +45,8 @@ type PhJobSpec struct {
 	DisplayName             string `json:"displayName"`
 	UserId                  string `json:"userId"`
 	UserName                string `json:"userName,omitempty"`
-	Group                   string `json:"group"`
+	GroupId                 string `json:"groupId"`
+	GroupName               string `json:"groupName"`
 	InstanceType            string `json:"instanceType"`
 	Image                   string `json:"image"`
 	Command                 string `json:"command"`
@@ -70,8 +71,8 @@ type PhJobStatus struct {
 
 // +kubebuilder:subresource:status
 // +kubebuilder:object:root=true
-// +kubebuilder:printcolumn:name="User",type="string",JSONPath=".spec.user"
-// +kubebuilder:printcolumn:name="Group",type="string",JSONPath=".spec.group"
+// +kubebuilder:printcolumn:name="User",type="string",JSONPath=".spec.userName"
+// +kubebuilder:printcolumn:name="Group",type="string",JSONPath=".spec.groupName"
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.phase",description="Status of the job"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 

@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"io/ioutil"
-	corev1 "k8s.io/api/core/v1"
 	"net/http"
 	"strings"
+
+	corev1 "k8s.io/api/core/v1"
 )
 
 // Type definitions of data transfer objects (DTO) from graphql
@@ -185,4 +186,136 @@ func (c GraphqlClient) FetchByUserId(userId string) (*DtoResult, error) {
 	}
 
 	return &result, nil
+}
+
+func (c GraphqlClient) QueryServer(requestData map[string]interface{}) ([]byte, error) {
+	requestJson, _ := json.Marshal(requestData)
+
+	request, err := http.NewRequest(http.MethodPost, c.graphqlEndpoint, strings.NewReader(string(requestJson)))
+	if err != nil {
+		return nil, err
+	}
+
+	request.Header.Add("Content-Type", "application/json")
+	request.Header.Add("Authorization", "Bearer "+c.graphqlSecret)
+	client := &http.Client{}
+	response, err := client.Do(request)
+	if err != nil {
+		return nil, err
+	}
+
+	if response.StatusCode != 200 {
+		return nil, errors.New("graphql query failed: " + response.Status)
+	}
+
+	defer response.Body.Close()
+	body, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		return nil, err
+	}
+	return body, nil
+}
+
+func (c GraphqlClient) FetchGroupInfo(groupId string) (*DtoGroup, error) {
+	query := `
+	query ($id: ID!) {
+		group(where: {id: $id}) { 
+					name
+					id
+					quotaCpu
+					quotaGpu
+					quotaMemory
+					projectQuotaCpu
+					projectQuotaGpu
+					projectQuotaMemory 
+	  }
+	}
+	`
+	requestData := map[string]interface{}{
+		"query": query,
+		"variables": map[string]interface{}{
+			"id": groupId,
+		},
+	}
+	body, err := c.QueryServer(requestData)
+	if err != nil {
+		return nil, err
+	}
+	data := map[string]interface{}{}
+	json.Unmarshal(body, &data)
+
+	data, ok := data["data"].(map[string]interface{})
+	if !ok {
+		return nil, errors.New("can not find data in response")
+	}
+	_group, ok := data["group"].(map[string]interface{})
+	if !ok {
+		return nil, errors.New("can not find group in response")
+	}
+
+	var group DtoGroup
+	jsonObj, _ := json.Marshal(_group)
+	json.Unmarshal(jsonObj, &group)
+
+	if _group["quotaCpu"] == nil {
+		group.QuotaCpu = -1
+	}
+	if _group["quotaGpu"] == nil {
+		group.QuotaGpu = -1
+	}
+	if _group["projectQuotaCpu"] == nil {
+		group.ProjectQuotaCpu = -1
+	}
+	if _group["projectQuotaGpu"] == nil {
+		group.ProjectQuotaGpu = -1
+	}
+
+	return &group, nil
+}
+
+func (c GraphqlClient) FetchInstanceTypeInfo(instanceTypeId string) (*DtoInstanceType, error) {
+	query := `
+	query ($id: ID!) {
+		instanceType(where: {id: $id}) { 
+					name
+					id
+					description
+					spec
+					global
+	  }
+	}
+	`
+	requestData := map[string]interface{}{
+		"query": query,
+		"variables": map[string]interface{}{
+			"id": instanceTypeId,
+		},
+	}
+	body, err := c.QueryServer(requestData)
+	if err != nil {
+		return nil, err
+	}
+	data := map[string]interface{}{}
+	json.Unmarshal(body, &data)
+
+	data, ok := data["data"].(map[string]interface{})
+	if !ok {
+		return nil, errors.New("can not find data in response")
+	}
+	_instanceType, ok := data["instanceType"].(map[string]interface{})
+	if !ok {
+		return nil, errors.New("can not find instanceType in response")
+	}
+	_spec, ok := _instanceType["spec"].(map[string]interface{})
+	if !ok {
+		return nil, errors.New("can not find instanceType.spec in response")
+	}
+
+	var instanceType DtoInstanceType
+	jsonObj, _ := json.Marshal(_instanceType)
+	json.Unmarshal(jsonObj, &instanceType)
+	if _spec["requests.cpu"] == nil {
+		instanceType.Spec.RequestsCpu = -1
+	}
+	return &instanceType, nil
 }
