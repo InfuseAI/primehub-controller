@@ -6,6 +6,7 @@ import (
 	"time"
 
 	primehubv1alpha1 "primehub-controller/api/v1alpha1"
+	"primehub-controller/pkg/escapism"
 	"primehub-controller/pkg/graphql"
 
 	"github.com/go-logr/logr"
@@ -160,7 +161,7 @@ func (r *PHJobScheduler) getUserRemainingQuota(phJob *primehubv1alpha1.PhJob) (*
 	if err != nil {
 		return nil, err
 	}
-	userUsage, err := r.getCurrentUsage(phJob.Namespace, user_aggregation_key, phJob.Spec.UserName)
+	userUsage, err := r.getCurrentUsage(phJob.Namespace, user_aggregation_key, escapism.Escape(phJob.Spec.UserName))
 	if err != nil {
 		return nil, err
 	}
