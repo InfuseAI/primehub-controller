@@ -11,6 +11,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/karlseguin/ccache"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	corev1 "k8s.io/api/core/v1"
@@ -367,6 +368,8 @@ func (r *PHJobScheduler) Schedule() {
 			phJobCopy := phJob.DeepCopy()
 			phJobCopy.Status.Phase = primehubv1alpha1.JobFailed
 			phJobCopy.Status.Reason = "Your instance type resource limit is bigger than your user or group quota."
+			now := metav1.Now()
+			phJob.Status.FinishTime = &now
 			err := r.Status().Update(ctx, phJobCopy)
 			if err != nil {
 				r.Log.Error(err, "update phjob status failed")
