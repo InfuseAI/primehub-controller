@@ -18,7 +18,7 @@ func escapeChar(c string, escape_char string) string {
 	return safechars
 }
 
-func Escape(input string) string {
+func EscapeToDSLLabel(input string) string {
 	safestring := ""
 	for _, char := range input {
 		if !unicode.IsLower(char) && !unicode.IsDigit(char) {

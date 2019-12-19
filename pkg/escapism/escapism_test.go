@@ -11,8 +11,8 @@ func TestEscapeChar(t *testing.T) {
 	}
 }
 
-func TestEscape(t *testing.T) {
-	safestring := Escape("test@test.com")
+func TestEscapeToDSLLabel(t *testing.T) {
+	safestring := EscapeToDSLLabel("test@test.com")
 	if safestring != "test-40test-2ecom" {
 		t.Error("Wrong escape string")
 	}

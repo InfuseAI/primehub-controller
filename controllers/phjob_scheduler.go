@@ -111,7 +111,7 @@ func (r *PHJobScheduler) getCurrentUsage(namespace string, aggregation_key strin
 	ctx := context.Background()
 
 	pods := corev1.PodList{}
-	err := r.Client.List(ctx, &pods, client.InNamespace(namespace), client.MatchingLabels(map[string]string{aggregation_key: aggregation_value}))
+	err := r.Client.List(ctx, &pods, client.InNamespace(namespace), client.MatchingLabels(map[string]string{aggregation_key: escapism.EscapeToDSLLabel(aggregation_value)}))
 	if err != nil {
 		return nil, err
 	}
@@ -161,7 +161,7 @@ func (r *PHJobScheduler) getUserRemainingQuota(phJob *primehubv1alpha1.PhJob) (*
 	if err != nil {
 		return nil, err
 	}
-	userUsage, err := r.getCurrentUsage(phJob.Namespace, user_aggregation_key, escapism.Escape(phJob.Spec.UserName))
+	userUsage, err := r.getCurrentUsage(phJob.Namespace, user_aggregation_key, phJob.Spec.UserName)
 	if err != nil {
 		return nil, err
 	}
