@@ -6,6 +6,7 @@ import (
 	"time"
 
 	primehubv1alpha1 "primehub-controller/api/v1alpha1"
+	"primehub-controller/pkg/escapism"
 	"primehub-controller/pkg/graphql"
 
 	"github.com/go-logr/logr"
@@ -110,7 +111,7 @@ func (r *PHJobScheduler) getCurrentUsage(namespace string, aggregation_key strin
 	ctx := context.Background()
 
 	pods := corev1.PodList{}
-	err := r.Client.List(ctx, &pods, client.InNamespace(namespace), client.MatchingLabels(map[string]string{aggregation_key: aggregation_value}))
+	err := r.Client.List(ctx, &pods, client.InNamespace(namespace), client.MatchingLabels(map[string]string{aggregation_key: escapism.EscapeToDSLLabel(aggregation_value)}))
 	if err != nil {
 		return nil, err
 	}
