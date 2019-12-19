@@ -7,14 +7,18 @@ package escapism
 
 import (
 	"encoding/hex"
+	"log"
 	"unicode"
 )
 
 func escapeChar(c string, escape_char string) string {
 	bytechars := []byte(c)
 	var safechars string
-	safechars += escape_char
-	safechars += hex.EncodeToString(bytechars)
+	for _, bytechar := range bytechars {
+		safechars += escape_char
+		var temp = []byte{bytechar}
+		safechars += hex.EncodeToString(temp)
+	}
 	return safechars
 }
 
@@ -28,4 +32,25 @@ func EscapeToDSLLabel(input string) string {
 		}
 	}
 	return safestring
+}
+
+func UnescapeDSLLabel(input string) string {
+	var bytestring []byte
+
+	total_len := len(input)
+	for index := 0; index < total_len; index++ {
+		char := input[index]
+		if string(char) == "-" {
+			temp, err := hex.DecodeString(input[index+1 : index+3])
+			if err != nil {
+				log.Print(err)
+				return ""
+			}
+			bytestring = append(bytestring, temp...)
+			index = index + 2
+		} else {
+			bytestring = append(bytestring, char)
+		}
+	}
+	return string(bytestring)
 }
