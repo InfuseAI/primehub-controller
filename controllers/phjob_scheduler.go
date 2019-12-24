@@ -111,7 +111,8 @@ func (r *PHJobScheduler) getCurrentUsage(namespace string, aggregation_key strin
 	ctx := context.Background()
 
 	pods := corev1.PodList{}
-	err := r.Client.List(ctx, &pods, client.InNamespace(namespace), client.MatchingLabels(map[string]string{aggregation_key: escapism.EscapeToDSLLabel(aggregation_value)}))
+	escaped_aggregation_value := escapism.EscapeToPrimehubLabel(aggregation_value)
+	err := r.Client.List(ctx, &pods, client.InNamespace(namespace), client.MatchingLabels(map[string]string{aggregation_key: escaped_aggregation_value}))
 	if err != nil {
 		return nil, err
 	}

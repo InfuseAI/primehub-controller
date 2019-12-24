@@ -22,7 +22,7 @@ func escapeChar(c string, escape_char string) string {
 	return safechars
 }
 
-func EscapeToDSLLabel(input string) string {
+func EscapeToDNSLabel(input string) string {
 	safestring := ""
 	for _, char := range input {
 		if !unicode.IsLower(char) && !unicode.IsDigit(char) {
@@ -34,7 +34,7 @@ func EscapeToDSLLabel(input string) string {
 	return safestring
 }
 
-func UnescapeDSLLabel(input string) string {
+func UnescapeDNSLabel(input string) string {
 	var bytestring []byte
 
 	total_len := len(input)
@@ -53,4 +53,12 @@ func UnescapeDSLLabel(input string) string {
 		}
 	}
 	return string(bytestring)
+}
+
+func EscapeToPrimehubLabel(input string) string {
+	return "escaped-" + EscapeToDNSLabel(input)
+}
+
+func UnescapePrimehubLabel(input string) string {
+	return UnescapeDNSLabel(input[8:])
 }
