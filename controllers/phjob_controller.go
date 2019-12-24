@@ -88,8 +88,8 @@ func (r *PhJobReconciler) buildPod(phJob *primehubv1alpha1.PhJob) (*corev1.Pod, 
 	pod.Spec = podSpec
 	pod.Labels = map[string]string{
 		"app":               "primehub-job",
-		"primehub.io/group": escapism.EscapeToDSLLabel(phJob.Spec.GroupName),
-		"primehub.io/user":  escapism.EscapeToDSLLabel(phJob.Spec.UserName),
+		"primehub.io/group": escapism.EscapeToPrimehubLabel(phJob.Spec.GroupName),
+		"primehub.io/user":  escapism.EscapeToPrimehubLabel(phJob.Spec.UserName),
 	}
 	pod.Spec.InitContainers = append(pod.Spec.InitContainers, corev1.Container{
 		Name:            "admission-is-not-found",
