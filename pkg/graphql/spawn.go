@@ -38,6 +38,7 @@ type Spawner struct {
 
 	NodeSelector map[string]string
 	Tolerations  []corev1.Toleration
+	Affinity     corev1.Affinity
 
 	// main container: resources requests and limits for
 	requestsCpu    resource.Quantity
@@ -98,6 +99,28 @@ func NewSpawnerByData(data DtoData, groupName string, instanceTypeName string, i
 	spawner.applyDatasets(data.User.Groups, groupName)
 
 	return spawner, nil
+}
+
+// ApplyNodeSelectorForOperator allow operator to set the nodeSelector to the pods it spawns.
+func (spawner *Spawner) ApplyNodeSelectorForOperator(nodeSelector map[string]string) {
+	if spawner.NodeSelector == nil {
+		spawner.NodeSelector = make(map[string]string)
+	}
+	for k, v := range nodeSelector {
+		spawner.NodeSelector[k] = v
+	}
+}
+
+// ApplyTolerationsForOperator allow operator to set the tolerations to the pods it spawns.
+func (spawner *Spawner) ApplyTolerationsForOperator(tolerations []corev1.Toleration) *Spawner {
+	spawner.Tolerations = append(spawner.Tolerations, tolerations...)
+	return spawner
+}
+
+// ApplyAffinityForOperator allow operator to set the Affinity to the pods it spawns.
+func (spawner *Spawner) ApplyAffinityForOperator(affinity corev1.Affinity) *Spawner {
+	spawner.Affinity = affinity
+	return spawner
 }
 
 func (spawner *Spawner) WithCommand(command []string) *Spawner {
@@ -541,4 +564,5 @@ func (spawner *Spawner) BuildPodSpec(podSpec *corev1.PodSpec) {
 		podSpec.NodeSelector[k] = v
 	}
 	podSpec.Tolerations = append(podSpec.Tolerations, spawner.Tolerations...)
+	podSpec.Affinity = &spawner.Affinity
 }

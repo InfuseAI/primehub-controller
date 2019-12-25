@@ -47,6 +47,10 @@ var (
 	setupLog = ctrl.Log.WithName("setup")
 )
 
+type tolerationsSliceStruct struct {
+	tolerationsSlice []corev1.Toleration
+}
+
 func init() {
 	_ = clientgoscheme.AddToScheme(scheme)
 
@@ -103,6 +107,22 @@ func main() {
 	graphqlClient := graphql.NewGraphqlClient(
 		viper.GetString("jobSubmission.graphqlEndpoint"),
 		viper.GetString("jobSubmission.graphqlSecret"))
+
+	nodeSelector := viper.GetStringMapString("jobSubmission.nodeSelector")
+
+	var tolerationsSlice []corev1.Toleration
+
+	err = viper.UnmarshalKey("jobSubmission.tolerations", &tolerationsSlice)
+	if err != nil {
+		panic(err.Error() + " cannot UnmarshalKey toleration")
+	}
+
+	var affinity corev1.Affinity
+	err = viper.UnmarshalKey("jobSubmission.affinity", &affinity)
+	if err != nil {
+		panic(err.Error() + " cannot UnmarshalKey affinity")
+	}
+
 	if err = (&controllers.PhJobReconciler{
 		Client:                         mgr.GetClient(),
 		Log:                            ctrl.Log.WithName("controllers").WithName("PhJob"),
@@ -111,6 +131,9 @@ func main() {
 		WorkingDirSize:                 resource.MustParse(viper.GetString("jobSubmission.workingDirSize")),
 		DefaultActiveDeadlineSeconds:   viper.GetInt64("jobSubmission.defaultActiveDeadlineSeconds"),
 		DefaultTTLSecondsAfterFinished: viper.GetInt32("jobSubmission.defaultTTLSecondsAfterFinished"),
+		NodeSelector:                   nodeSelector,
+		Tolerations:                    tolerationsSlice,
+		Affinity:                       affinity,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PhJob")
 		os.Exit(1)
