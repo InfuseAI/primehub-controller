@@ -81,7 +81,7 @@ func (r *PhJobReconciler) buildPod(phJob *primehubv1alpha1.PhJob) (*corev1.Pod, 
 	if spawner, err = graphql.NewSpawnerByData(result.Data, phJob.Spec.GroupName, phJob.Spec.InstanceType, phJob.Spec.Image, options); err != nil {
 		return nil, err
 	}
-	spawner.WithCommand([]string{"sh", "-c", phJob.Spec.Command})
+	spawner.WithCommand([]string{"sh", "-c", "sleep 1\n" + phJob.Spec.Command})
 	spawner.BuildPodSpec(&podSpec)
 
 	podSpec.RestartPolicy = corev1.RestartPolicyNever

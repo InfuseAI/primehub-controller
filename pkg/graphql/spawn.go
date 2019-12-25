@@ -3,11 +3,12 @@ package graphql
 import (
 	"errors"
 	"fmt"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 type SpawnerDataOptions struct {
@@ -184,7 +185,7 @@ func (spawner *Spawner) applyVolumeForGroup(launchGroup string, group DtoGroup) 
 		return
 	}
 
-	name := "project-" + group.Name
+	name := "project-" + strings.ToLower(group.Name)
 	mountPath := "/project/" + group.Name
 	homeSymlink := true
 	if group.HomeSymlink != nil {
@@ -213,6 +214,9 @@ func (spawner *Spawner) applyVolumeForGroup(launchGroup string, group DtoGroup) 
 }
 
 func (spawner *Spawner) applyDatasets(groups []DtoGroup, launchGroupName string) {
+	// TODO: if a dataset information shows multiple times and one of the information is a writable dataset, this dataset should give write permission to user.
+	applied := make(map[string]bool) // some datasets show multiple times
+
 	for _, group := range groups {
 		for _, dataset := range group.Datasets {
 			launchGroupOnly := false
@@ -224,7 +228,10 @@ func (spawner *Spawner) applyDatasets(groups []DtoGroup, launchGroupName string)
 			// 2. dataset is not launch group only
 			// 3. dataset is global dataset
 			if group.Name == launchGroupName || !launchGroupOnly || dataset.Global {
-				spawner.applyDataset(dataset)
+				if _, ok := applied[dataset.Name]; !ok {
+					spawner.applyDataset(dataset)
+					applied[dataset.Name] = true
+				}
 			}
 		}
 	}
