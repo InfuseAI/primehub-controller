@@ -47,10 +47,6 @@ var (
 	setupLog = ctrl.Log.WithName("setup")
 )
 
-type tolerationsSliceStruct struct {
-	tolerationsSlice []corev1.Toleration
-}
-
 func init() {
 	_ = clientgoscheme.AddToScheme(scheme)
 

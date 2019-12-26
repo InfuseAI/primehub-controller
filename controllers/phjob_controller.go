@@ -17,7 +17,6 @@ package controllers
 
 import (
 	"context"
-	"fmt"
 	"primehub-controller/pkg/graphql"
 	"strings"
 	"time"
@@ -93,7 +92,6 @@ func (r *PhJobReconciler) buildPod(phJob *primehubv1alpha1.PhJob) (*corev1.Pod, 
 	spawner.ApplyTolerationsForOperator(operatorTolerations)
 
 	operatorAffinity := r.Affinity
-	fmt.Println(operatorAffinity)
 	spawner.ApplyAffinityForOperator(operatorAffinity)
 
 	spawner.WithCommand([]string{"sh", "-c", "sleep 1\n" + phJob.Spec.Command})
