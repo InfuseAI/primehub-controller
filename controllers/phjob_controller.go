@@ -52,6 +52,9 @@ type PhJobReconciler struct {
 	WorkingDirSize                 resource.Quantity
 	DefaultActiveDeadlineSeconds   int64
 	DefaultTTLSecondsAfterFinished int32
+	NodeSelector                   map[string]string
+	Tolerations                    []corev1.Toleration
+	Affinity                       corev1.Affinity
 }
 
 func (r *PhJobReconciler) buildPod(phJob *primehubv1alpha1.PhJob) (*corev1.Pod, error) {
@@ -81,6 +84,16 @@ func (r *PhJobReconciler) buildPod(phJob *primehubv1alpha1.PhJob) (*corev1.Pod, 
 	if spawner, err = graphql.NewSpawnerByData(result.Data, phJob.Spec.GroupName, phJob.Spec.InstanceType, phJob.Spec.Image, options); err != nil {
 		return nil, err
 	}
+
+	operatorNodeSelector := r.NodeSelector
+	spawner.ApplyNodeSelectorForOperator(operatorNodeSelector)
+
+	operatorTolerations := r.Tolerations
+	spawner.ApplyTolerationsForOperator(operatorTolerations)
+
+	operatorAffinity := r.Affinity
+	spawner.ApplyAffinityForOperator(operatorAffinity)
+
 	spawner.WithCommand([]string{"sh", "-c", "sleep 1\n" + phJob.Spec.Command})
 	spawner.BuildPodSpec(&podSpec)
 
