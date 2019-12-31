@@ -332,7 +332,7 @@ func (r *PHJobScheduler) scheduleByStrictOrder(phJobsRef *[]*primehubv1alpha1.Ph
 }
 
 func (r *PHJobScheduler) Schedule() {
-	r.Log.Info("start scheduling")
+	r.Log.V(1).Info("start scheduling")
 
 	ctx := context.Background()
 
@@ -341,7 +341,7 @@ func (r *PHJobScheduler) Schedule() {
 		r.Log.Error(err, "cannot get phjob list")
 		return
 	}
-	r.Log.Info("list completed", "len of phjobs", len(phJobList.Items))
+	r.Log.V(1).Info("list completed", "len of phjobs", len(phJobList.Items))
 
 	i := 0
 	for _, phJob := range phJobList.Items {
@@ -397,10 +397,10 @@ func (r *PHJobScheduler) Schedule() {
 		r.Log.Error(err, "cannot group phjob list")
 		return
 	}
-	r.Log.Info("group completed", "len of groups", len(*phJobsGroupMapping))
+	r.Log.V(1).Info("group completed", "len of groups", len(*phJobsGroupMapping))
 
 	for groupId, phJobs := range *phJobsGroupMapping {
-		r.Log.Info("start processing group", "group id", groupId)
+		r.Log.V(1).Info("start processing group", "group id", groupId)
 
 		r.sort(&phJobs, compareByCreationTimestamp)
 
@@ -428,5 +428,5 @@ func (r *PHJobScheduler) Schedule() {
 		}
 	}
 
-	r.Log.Info("end of scheduling")
+	r.Log.V(1).Info("end of scheduling")
 }
