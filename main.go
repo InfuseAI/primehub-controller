@@ -26,13 +26,14 @@ import (
 
 	"primehub-controller/controllers"
 
+	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	ctrlzap "sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -61,13 +62,29 @@ func main() {
 
 	var metricsAddr string
 	var enableLeaderElection bool
+	var debug bool
+
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
+	flag.BoolVar(&debug, "debug", false, "enables debug logs")
 	flag.Parse()
 
-	ctrl.SetLogger(zap.New(func(o *zap.Options) {
+	// Levels in logr correspond to custom debug levels in Zap.
+	// Any given level in logr is represents by its inverse in Zap (zapLevel = -1*logrLevel).
+	// For example V(2) is equivalent to log level -2 in Zap, while V(1) is equivalent to Zap's DebugLevel.
+	// zap.InfoLevel = 0; zap.DebugLevel = -1
+	// r.Log.Info() is INFO in Zap
+	// r.Log.V(1).Info() is DEBUG in Zap
+	// ref: https://github.com/go-logr/zapr
+	l := zap.NewAtomicLevelAt(zap.InfoLevel)
+	if debug == true {
+		l = zap.NewAtomicLevelAt(zap.DebugLevel)
+	}
+
+	ctrl.SetLogger(ctrlzap.New(func(o *ctrlzap.Options) {
 		o.Development = true
+		o.Level = &l
 	}))
 
 	stopChan := ctrl.SetupSignalHandler()
