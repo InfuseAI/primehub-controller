@@ -198,4 +198,21 @@ func loadConfig() {
 	if _, err := resource.ParseQuantity(viper.GetString("jobSubmission.workingDirSize")); err != nil {
 		panic(fmt.Errorf("cannot parse jobSubmission.workingDirSize: %v", err))
 	}
+
+	// Check customImage.buildJob.resources
+	resourceNames := []string{"cpu", "memory"}
+	if len(viper.GetStringMap("customImage.buildJob.resources.requests")) > 0 {
+		for _, resourceName := range resourceNames {
+			if _, err := resource.ParseQuantity(viper.GetString("customImage.buildJob.resources.requests." + resourceName)); err != nil {
+				panic(fmt.Errorf("cannot parse customImage.buildJob.resources.requests.%s: %v", resourceName, err))
+			}
+		}
+	}
+	if len(viper.GetStringMap("customImage.buildJob.resources.limits")) > 0 {
+		for _, resourceName := range resourceNames {
+			if _, err := resource.ParseQuantity(viper.GetString("customImage.buildJob.resources.limits." + resourceName)); err != nil {
+				panic(fmt.Errorf("cannot parse customImage.buildJob.resources.limits.%s: %v", resourceName, err))
+			}
+		}
+	}
 }

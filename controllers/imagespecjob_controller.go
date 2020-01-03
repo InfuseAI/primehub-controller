@@ -22,12 +22,14 @@ import (
 	"text/template"
 
 	"github.com/go-logr/logr"
+	"github.com/spf13/viper"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	primehubv1alpha1 "primehub-controller/api/v1alpha1"
 )
@@ -213,6 +215,21 @@ func buildPod(imageSpecJob primehubv1alpha1.ImageSpecJob, podName string, docker
 	containerName := "build-and-push"
 	containerImage := "quay.io/buildah/stable:v1.11.3"
 	privileged := true
+	sizeLimit, _ := resource.ParseQuantity("10Gi")
+
+	podResources := corev1.ResourceRequirements{}
+	if len(viper.GetStringMap("customimage.buildjob.resources.requests")) > 0 {
+		requests := corev1.ResourceList{}
+		requests[corev1.ResourceCPU], _ = resource.ParseQuantity(viper.GetString("customImage.buildJob.resources.requests.cpu"))
+		requests[corev1.ResourceMemory], _ = resource.ParseQuantity(viper.GetString("customImage.buildJob.resources.requests.memory"))
+		podResources.Requests = requests
+	}
+	if len(viper.GetStringMap("customimage.buildjob.resources.limits")) > 0 {
+		limits := corev1.ResourceList{}
+		limits[corev1.ResourceCPU], _ = resource.ParseQuantity(viper.GetString("customImage.buildJob.resources.limits.cpu"))
+		limits[corev1.ResourceMemory], _ = resource.ParseQuantity(viper.GetString("customImage.buildJob.resources.limits.memory"))
+		podResources.Limits = limits
+	}
 
 	pod := corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -267,7 +284,9 @@ func buildPod(imageSpecJob primehubv1alpha1.ImageSpecJob, podName string, docker
 				{
 					Name: "varlibcontainers",
 					VolumeSource: corev1.VolumeSource{
-						EmptyDir: &corev1.EmptyDirVolumeSource{},
+						EmptyDir: &corev1.EmptyDirVolumeSource{
+							SizeLimit: &sizeLimit,
+						},
 					},
 				},
 				{
@@ -291,6 +310,8 @@ func buildPod(imageSpecJob primehubv1alpha1.ImageSpecJob, podName string, docker
 			},
 		},
 	}
+
+	pod.Spec.Containers[0].Resources = podResources
 
 	if imageSpecJob.Spec.PullSecret != "" {
 		pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
