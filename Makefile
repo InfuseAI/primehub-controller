@@ -21,6 +21,10 @@ test: generate fmt vet manifests
 manager: generate fmt vet
 	go build -o bin/manager main.go
 
+# Build ee manager binary
+ee-manager: generate fmt ee-vet
+	go build -tags ee -o bin/manager main.go
+
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet manifests
 	go run ./main.go
@@ -45,6 +49,10 @@ fmt:
 # Run go vet against code
 vet:
 	go vet ./...
+
+# Run go vet against code
+ee-vet:
+	go vet -tags ee ./...
 
 # Generate code
 generate: controller-gen
