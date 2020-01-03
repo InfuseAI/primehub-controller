@@ -1,13 +1,16 @@
-version: "2"
 domain: io
 repo: primehub-controller
 resources:
 - group: primehub
-  version: v1alpha1
   kind: ImageSpec
-- group: primehub
   version: v1alpha1
+- group: primehub
   kind: ImageSpecJob
-- group: primehub
   version: v1alpha1
+- group: primehub
   kind: PhJob
+  version: v1alpha1
+- group: primehub
+  kind: Foo
+  version: v1alpha1
+version: "2"

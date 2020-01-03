@@ -1,0 +1,20 @@
+# permissions to do viewer foos.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: foo-viewer-role
+rules:
+- apiGroups:
+  - primehub.io
+  resources:
+  - foos
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - primehub.io
+  resources:
+  - foos/status
+  verbs:
+  - get

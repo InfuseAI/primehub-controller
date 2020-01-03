@@ -159,6 +159,14 @@ func main() {
 	}
 	go wait.Until(phJobScheduler.Schedule, time.Second*1, stopChan)
 
+	if err = (&controllers.FooReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("Foo"),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Foo")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	setupLog.Info("starting manager")
