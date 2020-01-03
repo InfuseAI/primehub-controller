@@ -4,14 +4,14 @@ customImage:
   # Prefix for image. (e.g. 'gcr.io/infuseai' for 'gcr.io/infuseai/primehub-controller:be20ee69c5')
   pushRepoPrefix: gcr.io/infuseai
 
-  buildah:
+  buildJob:
     resources:
       requests:
-        cpu: 100m
-        memory: 50Mi
+        cpu: 500m
+        memory: 100Mi
       limits:
-        cpu: 1000m
-        memory: 500Mi
+        cpu: 2000m
+        memory: 1000Mi
 
 jobSubmission:
   graphqlEndpoint: https://primehub.local/graphql
