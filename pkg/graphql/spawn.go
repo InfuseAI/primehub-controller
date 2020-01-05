@@ -237,25 +237,39 @@ func (spawner *Spawner) applyVolumeForGroup(launchGroup string, group DtoGroup) 
 }
 
 func (spawner *Spawner) applyDatasets(groups []DtoGroup, launchGroupName string) {
-	// TODO: if a dataset information shows multiple times and one of the information is a writable dataset, this dataset should give write permission to user.
-	applied := make(map[string]bool) // some datasets show multiple times
+
+	launchGroupDataset := make(map[string]DtoDataset)
+	globalDataset := make(map[string]DtoDataset)
+	allDataset := make(map[string]DtoDataset)
 
 	for _, group := range groups {
 		for _, dataset := range group.Datasets {
-			launchGroupOnly := false
-			if dataset.LaunchGroupOnly != nil {
-				launchGroupOnly = *dataset.LaunchGroupOnly
+			if group.Name == launchGroupName { // collect lauch group dataset
+				launchGroupDataset[dataset.Name] = dataset
 			}
-			// dataset is used while
-			// 1. dataset in launch group
-			// 2. dataset is not launch group only
-			// 3. dataset is global dataset
-			if group.Name == launchGroupName || !launchGroupOnly || dataset.Global {
-				if _, ok := applied[dataset.Name]; !ok {
-					spawner.applyDataset(dataset)
-					applied[dataset.Name] = true
-				}
+			if group.Name == "everyone" { // collect global dataset
+				globalDataset[dataset.Name] = dataset
 			}
+
+			if _, ok := allDataset[dataset.Name]; !ok { // all dataset
+				allDataset[dataset.Name] = dataset
+			}
+		}
+	}
+
+	for datasetName, dataset := range allDataset {
+		flag := false
+		dataset.Writable = false // decided by dataset in launch group or global
+		if lgDataset, ok := launchGroupDataset[datasetName]; ok {
+			dataset.Writable = lgDataset.Writable
+			flag = true
+		}
+		if gDataset, ok := globalDataset[datasetName]; ok {
+			dataset.Writable = dataset.Writable || gDataset.Writable
+			flag = true
+		}
+		if flag == true {
+			spawner.applyDataset(dataset)
 		}
 	}
 

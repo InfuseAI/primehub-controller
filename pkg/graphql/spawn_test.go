@@ -2,11 +2,12 @@ package graphql
 
 import (
 	"encoding/json"
-	"github.com/stretchr/testify/assert"
 	"io/ioutil"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	serial "k8s.io/apimachinery/pkg/runtime/serializer/json"
-	"testing"
 )
 
 // Test basic behavior of group, image, instancetype.
@@ -139,12 +140,12 @@ func TestGroupVolume(t *testing.T) {
 	}
 }
 
-func TestDatasetLaunchGroupOnly(t *testing.T) {
-	newDataset := func(name string, global bool, launchGroupOnly bool) DtoDataset {
+func TestDatasetMountedandPermission(t *testing.T) {
+	newDataset := func(name string, global bool, writable bool) DtoDataset {
 		return DtoDataset{
-			Name:            name,
-			Global:          global,
-			LaunchGroupOnly: &launchGroupOnly,
+			Name:     name,
+			Global:   global,
+			Writable: writable,
 			Spec: DtoDatasetSpec{
 				EnableUploadServer: false,
 				Type:               "pv",
@@ -153,37 +154,54 @@ func TestDatasetLaunchGroupOnly(t *testing.T) {
 		}
 	}
 
-	checkDataset := func(spawner *Spawner, dataset string) bool {
+	checkDatasetPermission := func(spawner *Spawner, dataset string, writable bool) bool {
+
+		for _, volumeMount := range spawner.volumeMounts {
+			if volumeMount.Name == "dataset-"+dataset && volumeMount.ReadOnly == !writable {
+				return true
+			}
+		}
+		return false
+	}
+
+	checkDatasetMounted := func(spawner *Spawner, dataset string) bool {
 
 		for _, volume := range spawner.volumes {
 			if volume.Name == "dataset-"+dataset {
 				return true
 			}
 		}
-
 		return false
 	}
 
+	// newDataset(name string, global bool, writable bool)
 	groups := []DtoGroup{
 		{
 			Name: "group1",
 			Datasets: []DtoDataset{
-				newDataset("dataset1-1", false, true),
-				newDataset("dataset1-2", false, false),
+				newDataset("d1", false, true),
+				newDataset("d2", false, true),
+				newDataset("d3", true, true),
+				newDataset("d4", true, true),
 			},
 		},
 		{
 			Name: "group2",
 			Datasets: []DtoDataset{
-				newDataset("dataset2-1", false, true),
-				newDataset("dataset2-2", false, false),
+				newDataset("d1", false, false),
+				newDataset("d2", false, false),
 			},
+		},
+		{
+			Name:     "group3",
+			Datasets: []DtoDataset{},
 		},
 		{
 			Name: "everyone",
 			Datasets: []DtoDataset{
-				newDataset("dataset3-1", true, true),
-				newDataset("dataset3-2", true, false),
+				newDataset("d3", true, false),
+				newDataset("d4", true, false),
+				newDataset("d5", true, true), // global and writable, special case
 			},
 		},
 	}
@@ -192,24 +210,54 @@ func TestDatasetLaunchGroupOnly(t *testing.T) {
 		spawner := Spawner{}
 		spawner.applyDatasets(groups, "group1")
 
-		assert.True(t, checkDataset(&spawner, "dataset1-1"))
-		assert.True(t, checkDataset(&spawner, "dataset1-2"))
-		assert.True(t, !checkDataset(&spawner, "dataset2-1"))
-		assert.True(t, checkDataset(&spawner, "dataset2-2"))
-		assert.True(t, checkDataset(&spawner, "dataset3-1"))
-		assert.True(t, checkDataset(&spawner, "dataset3-2"))
+		assert.True(t, checkDatasetPermission(&spawner, "d1", true))
+		assert.True(t, checkDatasetPermission(&spawner, "d2", true))
+		assert.True(t, checkDatasetPermission(&spawner, "d3", true))
+		assert.True(t, checkDatasetPermission(&spawner, "d4", true))
+		assert.True(t, checkDatasetPermission(&spawner, "d5", true))
+	})
+
+	t.Run("group2", func(t *testing.T) {
+		spawner := Spawner{}
+		spawner.applyDatasets(groups, "group2")
+
+		assert.True(t, checkDatasetPermission(&spawner, "d1", false))
+		assert.True(t, checkDatasetPermission(&spawner, "d2", false))
+		assert.True(t, checkDatasetPermission(&spawner, "d3", false))
+		assert.True(t, checkDatasetPermission(&spawner, "d4", false))
+		assert.True(t, checkDatasetPermission(&spawner, "d5", true))
+	})
+
+	t.Run("group3", func(t *testing.T) {
+		spawner := Spawner{}
+		spawner.applyDatasets(groups, "group3")
+
+		//should not be mounted, global: false
+		assert.True(t, !checkDatasetMounted(&spawner, "d1"))
+		//should not be mounted, global: false
+		assert.True(t, !checkDatasetMounted(&spawner, "d2"))
+		//mounted since global true, but readOnly
+		assert.True(t, checkDatasetPermission(&spawner, "d3", false))
+		//mounted since global true, but readOnly
+		assert.True(t, checkDatasetPermission(&spawner, "d4", false))
+		//global and writable
+		assert.True(t, checkDatasetPermission(&spawner, "d5", true))
 	})
 
 	t.Run("everyone", func(t *testing.T) {
 		spawner := Spawner{}
 		spawner.applyDatasets(groups, "everyone")
 
-		assert.True(t, !checkDataset(&spawner, "dataset1-1"))
-		assert.True(t, checkDataset(&spawner, "dataset1-2"))
-		assert.True(t, !checkDataset(&spawner, "dataset2-1"))
-		assert.True(t, checkDataset(&spawner, "dataset2-2"))
-		assert.True(t, checkDataset(&spawner, "dataset3-1"))
-		assert.True(t, checkDataset(&spawner, "dataset3-2"))
+		//should not be mounted, global: fals
+		assert.True(t, !checkDatasetMounted(&spawner, "d1"))
+		//should not be mounted, global: false, lauchgrouponly: true
+		assert.True(t, !checkDatasetMounted(&spawner, "d2"))
+		//mounted since global true, but readOnly
+		assert.True(t, checkDatasetPermission(&spawner, "d3", false))
+		//mounted since global true, but readOnly
+		assert.True(t, checkDatasetPermission(&spawner, "d4", false))
+		//global and writable
+		assert.True(t, checkDatasetPermission(&spawner, "d5", true))
 	})
 }
 
