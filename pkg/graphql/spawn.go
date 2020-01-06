@@ -439,7 +439,7 @@ func (spawner *Spawner) applyVolumeForWorkingDir(workingDirSize resource.Quantit
 }
 
 func (spawner *Spawner) applyResourceForInstanceType(instanceType DtoInstanceType) bool {
-	isGpu := instanceType.Spec.RequestsCpu > 0
+	isGpu := instanceType.Spec.LimitsGpu > 0
 
 	if instanceType.Spec.RequestsCpu > 0 {
 		spawner.requestsCpu.SetMilli(int64(instanceType.Spec.RequestsCpu * 1000))
