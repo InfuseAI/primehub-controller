@@ -22,8 +22,8 @@ manager: generate fmt vet
 	go build -o bin/manager main.go
 
 # Build ee manager binary
-ee-manager: generate fmt ee-vet
-	go build -tags ee -o bin/manager main.go
+ee-manager: ee-generate fmt ee-vet
+	go build -tags ee -o bin/manager ee_main.go
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet manifests
@@ -57,6 +57,9 @@ ee-vet:
 # Generate code
 generate: controller-gen
 	$(CONTROLLER_GEN) object:headerFile=./hack/boilerplate.go.txt paths="./..."
+
+ee-generate:
+	./ee-controller-gen object:headerFile=./hack/boilerplate.go.txt paths="./..."
 
 # Build the docker image
 docker-build: test
