@@ -28,3 +28,5 @@ config.yaml
 .vscode/*
 __debug_bin
 .DS_Store
+
+zz_generated.deepcopy.go
