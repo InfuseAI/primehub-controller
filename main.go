@@ -23,10 +23,8 @@ import (
 	"time"
 
 	primehubv1alpha1 "primehub-controller/api/v1alpha1"
-	eeprimehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
 
 	"primehub-controller/controllers"
-	eecontrollers "primehub-controller/ee/controllers"
 
 	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -54,7 +52,6 @@ func init() {
 	_ = clientgoscheme.AddToScheme(scheme)
 
 	_ = primehubv1alpha1.AddToScheme(scheme)
-	_ = eeprimehubv1alpha1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
 	_ = batchv1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
@@ -162,14 +159,6 @@ func main() {
 	}
 	go wait.Until(phJobScheduler.Schedule, time.Second*1, stopChan)
 
-	if err = (&eecontrollers.FooReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("Foo"),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Foo")
-		os.Exit(1)
-	}
 	// +kubebuilder:scaffold:builder
 
 	setupLog.Info("starting manager")
