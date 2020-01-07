@@ -208,7 +208,7 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			}
 		}
 
-		if *phJob.Spec.TTLSecondsAfterFinished != int32(0) { // has ttl set
+		if *phJob.Spec.TTLSecondsAfterFinished != int32(0) && phJob.Status.FinishTime != nil { // has ttl set
 			ttlDuration := time.Second * time.Duration(*phJob.Spec.TTLSecondsAfterFinished)
 			next := phJob.Status.FinishTime.Add(ttlDuration).Sub(time.Now())
 			if next > 0 {
@@ -422,6 +422,10 @@ func (r *PhJobReconciler) handleTTL(ctx context.Context, phJob *primehubv1alpha1
 
 	currentTime := time.Now()
 	ttlDuration := time.Second * time.Duration(*phJob.Spec.TTLSecondsAfterFinished)
+
+	if phJob.Status.FinishTime == nil {
+		return nil
+	}
 
 	if currentTime.After(phJob.Status.FinishTime.Add(ttlDuration)) {
 		// log.Info("cleanup phJob pod for it has been terminated for a given ttl.")
