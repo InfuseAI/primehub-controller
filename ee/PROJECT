@@ -1,0 +1,7 @@
+version: "2"
+domain: io
+repo: primehub-controller/ee
+resources:
+- group: primehub
+  version: v1alpha1
+  kind: Foo
