@@ -216,8 +216,7 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 				return ctrl.Result{RequeueAfter: next}, nil
 			}
 		}
-
-		return ctrl.Result{RequeueAfter: nextCheck}, nil
+		return ctrl.Result{}, nil
 	}
 
 	if phJob.Spec.RequeueLimit != nil {
@@ -238,7 +237,7 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	if phJobExceedsLimit { // phJob exceeds requeue limit or active deadline.
 		if err := r.deletePod(ctx, podkey); err != nil {
-			log.Error(err, "failed to delete pod when phJob exceeds requeue limit")
+			log.Error(err, "failed to delete pod")
 			return ctrl.Result{}, err
 		}
 		if phJob.Status.FinishTime == nil {
@@ -371,16 +370,24 @@ func (r *PhJobReconciler) updateStatus(
 	}
 
 	// set StartTime.
-	phJob.Status.StartTime = getStartTime(pod)
-	// log.Info("updateStatus", "pod status", pod.Status)
+	if phJob.Status.StartTime == nil {
+		now := metav1.Now()
+		phJob.Status.StartTime = &now
+	}
 
 	if pod.Status.Phase == corev1.PodSucceeded {
 		phJob.Status.Phase = primehubv1alpha1.JobSucceeded
-		phJob.Status.FinishTime = getFinishTime(pod)
+		if phJob.Status.FinishTime == nil {
+			now := metav1.Now()
+			phJob.Status.FinishTime = &now
+		}
 	}
 	if pod.Status.Phase == corev1.PodFailed {
 		phJob.Status.Phase = primehubv1alpha1.JobFailed
-		phJob.Status.FinishTime = getFinishTime(pod)
+		if phJob.Status.FinishTime == nil {
+			now := metav1.Now()
+			phJob.Status.FinishTime = &now
+		}
 		if len(pod.Status.ContainerStatuses) > 0 {
 			phJob.Status.Reason = pod.Status.ContainerStatuses[0].State.Terminated.Reason
 			phJob.Status.Message = pod.Status.ContainerStatuses[0].State.Terminated.Message
@@ -388,6 +395,10 @@ func (r *PhJobReconciler) updateStatus(
 	}
 	if pod.Status.Phase == corev1.PodUnknown {
 		phJob.Status.Phase = primehubv1alpha1.JobUnknown
+		if phJob.Status.FinishTime == nil {
+			now := metav1.Now()
+			phJob.Status.FinishTime = &now
+		}
 	}
 	if pod.Status.Phase == corev1.PodRunning {
 		phJob.Status.Phase = primehubv1alpha1.JobRunning
@@ -423,8 +434,15 @@ func (r *PhJobReconciler) handleTTL(ctx context.Context, phJob *primehubv1alpha1
 	currentTime := time.Now()
 	ttlDuration := time.Second * time.Duration(*phJob.Spec.TTLSecondsAfterFinished)
 
-	if phJob.Status.FinishTime == nil {
+	if phJob.Status.StartTime == nil && phJob.Status.FinishTime == nil {
+		log.Info("phjob in final phase (Succeeded, Failed, Unknown) without finish time and start time, it is incorrect!!!")
+		log.Info("will ignore it and do nothing.")
 		return nil
+	}
+
+	if phJob.Status.FinishTime == nil {
+		log.Info("phjob in final phase (Succeeded, Failed, Unknown) without finish time, using start time as finish time")
+		phJob.Status.FinishTime = phJob.Status.StartTime
 	}
 
 	if currentTime.After(phJob.Status.FinishTime.Add(ttlDuration)) {
@@ -506,37 +524,11 @@ func (r *PhJobReconciler) deletePod(ctx context.Context, podkey client.ObjectKey
 	return nil
 }
 
-func inFinalPhase(phase primehubv1alpha1.PhJobPhase) bool { // TODO: change the name
+func inFinalPhase(phase primehubv1alpha1.PhJobPhase) bool {
 	switch phase {
 	case primehubv1alpha1.JobSucceeded, primehubv1alpha1.JobFailed, primehubv1alpha1.JobUnknown, primehubv1alpha1.JobCancelled:
 		return true
 	default:
 		return false
 	}
-}
-
-func getStartTime(pod *corev1.Pod) *metav1.Time {
-	for _, cs := range pod.Status.ContainerStatuses {
-		if cs.Name == "main" {
-			if cs.State.Running != nil {
-				return cs.State.Running.StartedAt.DeepCopy()
-			} else if cs.State.Terminated != nil {
-				return cs.State.Terminated.StartedAt.DeepCopy()
-			}
-		}
-	}
-
-	return nil
-}
-
-func getFinishTime(pod *corev1.Pod) *metav1.Time {
-	for _, cs := range pod.Status.ContainerStatuses {
-		if cs.Name == "main" {
-			if cs.State.Terminated != nil {
-				return cs.State.Terminated.FinishedAt.DeepCopy()
-			}
-		}
-	}
-
-	return nil
 }
