@@ -216,8 +216,7 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 				return ctrl.Result{RequeueAfter: next}, nil
 			}
 		}
-
-		return ctrl.Result{RequeueAfter: nextCheck}, nil
+		return ctrl.Result{}, nil
 	}
 
 	if phJob.Spec.RequeueLimit != nil {
@@ -238,7 +237,7 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	if phJobExceedsLimit { // phJob exceeds requeue limit or active deadline.
 		if err := r.deletePod(ctx, podkey); err != nil {
-			log.Error(err, "failed to delete pod when phJob exceeds requeue limit")
+			log.Error(err, "failed to delete pod")
 			return ctrl.Result{}, err
 		}
 		if phJob.Status.FinishTime == nil {
@@ -532,30 +531,4 @@ func inFinalPhase(phase primehubv1alpha1.PhJobPhase) bool {
 	default:
 		return false
 	}
-}
-
-func getStartTime(pod *corev1.Pod) *metav1.Time {
-	for _, cs := range pod.Status.ContainerStatuses {
-		if cs.Name == "main" {
-			if cs.State.Running != nil {
-				return cs.State.Running.StartedAt.DeepCopy()
-			} else if cs.State.Terminated != nil {
-				return cs.State.Terminated.StartedAt.DeepCopy()
-			}
-		}
-	}
-
-	return nil
-}
-
-func getFinishTime(pod *corev1.Pod) *metav1.Time {
-	for _, cs := range pod.Status.ContainerStatuses {
-		if cs.Name == "main" {
-			if cs.State.Terminated != nil {
-				return cs.State.Terminated.FinishedAt.DeepCopy()
-			}
-		}
-	}
-
-	return nil
 }
