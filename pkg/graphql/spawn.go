@@ -519,9 +519,6 @@ func (spawner *Spawner) BuildPodSpec(podSpec *corev1.PodSpec) {
 	container.Resources.Limits = map[corev1.ResourceName]resource.Quantity{}
 	container.TerminationMessagePolicy = corev1.TerminationMessageFallbackToLogsOnError
 	container.ImagePullPolicy = corev1.PullIfNotPresent
-	var user int64 = 0
-	var group int64 = 0
-	container.SecurityContext = &corev1.SecurityContext{RunAsUser: &user, RunAsGroup: &group}
 
 	if !spawner.requestsCpu.IsZero() {
 		container.Resources.Requests["cpu"] = spawner.requestsCpu
