@@ -25,10 +25,11 @@ type LicenseStatus struct {
 	LicensedTo string `json:"licensed_to,omitempty"`
 	StartedAt  string `json:"started_at,omitempty"`
 	ExpiredAt  string `json:"expired_at,omitempty"`
-	MaxGroup   string `json:"max_group,omitempty"`
-	MaxNode    string `json:"max_node,omitempty"`
+	MaxGroup   int    `json:"max_group"`
+	MaxNode    int    `json:"max_node,omitempty"`
 }
 
+// +kubebuilder:subresource:status
 // +kubebuilder:object:root=true
 
 // License is the Schema for the licenses API

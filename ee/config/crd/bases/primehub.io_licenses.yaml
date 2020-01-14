@@ -13,6 +13,8 @@ spec:
     plural: licenses
     singular: license
   scope: ""
+  subresources:
+    status: {}
   validation:
     openAPIV3Schema:
       description: License is the Schema for the licenses API
@@ -47,13 +49,15 @@ spec:
             licensed_to:
               type: string
             max_group:
-              type: string
+              type: integer
             max_node:
-              type: string
+              type: integer
             reason:
               type: string
             started_at:
               type: string
+          required:
+          - max_group
           type: object
       type: object
   version: v1alpha1
