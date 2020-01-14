@@ -11,8 +11,8 @@ import (
 	"strings"
 )
 
-func Verify(signed_license string) (ok bool, err error) {
-	splits := strings.Split(signed_license, ".")
+func Verify(signedLicense string) (ok bool, err error) {
+	splits := strings.Split(signedLicense, ".")
 	if len(splits) != 2 {
 		return false, errors.New("malformed signed license key")
 	}
