@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"time"
 
 	primehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
 
@@ -63,6 +64,7 @@ func main() {
 		Scheme:            mgr.GetScheme(),
 		ResourceName:      license.RESOURCE_NAME,
 		ResourceNamespace: license.RESOURCE_NAMESPACE,
+		RequeueAfter:      license.CHECK_EXPIRY_INTERVAL,
 	}
 	if err := licenseReconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "License")

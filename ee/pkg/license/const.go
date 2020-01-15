@@ -1,5 +1,9 @@
 package license
 
+import (
+	"time"
+)
+
 const (
 	STATUS_EXPIRED   = "expired"
 	STATUS_UNEXPIRED = "unexpired"
@@ -7,10 +11,11 @@ const (
 )
 
 const (
-	TIME_LAYOUT        = "2006-01-02T15:04:05Z"
-	RESOURCE_NAME      = "primehub-license"
-	RESOURCE_NAMESPACE = "primehub"
-	SECRET_NAME        = "authoritative-secret"
+	TIME_LAYOUT           = "2006-01-02T15:04:05Z"
+	RESOURCE_NAME         = "primehub-license"
+	RESOURCE_NAMESPACE    = "primehub"
+	SECRET_NAME           = "authoritative-secret"
+	CHECK_EXPIRY_INTERVAL = 1 * time.Hour
 
 	/*
 		licensed_to: "Default"

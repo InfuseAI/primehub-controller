@@ -21,10 +21,49 @@ import (
 // LicenseReconciler reconciles a License object
 type LicenseReconciler struct {
 	client.Client
-	Log               logr.Logger
-	Scheme            *runtime.Scheme
+	Log    logr.Logger
+	Scheme *runtime.Scheme
+
 	ResourceName      string
 	ResourceNamespace string
+	RequeueAfter      time.Duration
+}
+
+func (r *LicenseReconciler) buildSecret(status *primehubv1alpha1.LicenseStatus) *corev1.Secret {
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      license.SECRET_NAME,
+			Namespace: r.ResourceNamespace,
+		},
+		// TODO: refactor using reflect and test reloader
+		Data: map[string][]byte{
+			"licensed_to": []byte(status.LicensedTo),
+			"expired":     []byte(status.Expired),
+			"reason":      []byte(status.Reason),
+			"started_at":  []byte(status.StartedAt),
+			"expired_at":  []byte(status.ExpiredAt),
+			"max_group":   []byte(strconv.Itoa(status.MaxGroup)),
+		},
+	}
+	return secret
+}
+
+func (r *LicenseReconciler) updateSecret(ctx context.Context, lic *primehubv1alpha1.License) (err error) {
+	desiredSecret := r.buildSecret(&lic.Status)
+	if err = ctrl.SetControllerReference(lic, desiredSecret, r.Scheme); err != nil {
+		return
+	}
+
+	secret := &corev1.Secret{}
+	if err = r.Get(ctx, client.ObjectKey{Namespace: r.ResourceNamespace, Name: license.SECRET_NAME}, secret); err != nil {
+		if apierrors.IsNotFound(err) {
+			err = r.Create(ctx, desiredSecret)
+		}
+	} else {
+		err = r.Update(ctx, desiredSecret)
+	}
+
+	return
 }
 
 func (r *LicenseReconciler) generateStatus(content map[string]string) (status primehubv1alpha1.LicenseStatus) {
@@ -33,7 +72,7 @@ func (r *LicenseReconciler) generateStatus(content map[string]string) (status pr
 	status.ExpiredAt = content["expired_at"]
 	status.MaxGroup, _ = strconv.Atoi(content["max_group"])
 	status.MaxNode, _ = strconv.Atoi(content["max_node"])
-	return status
+	return
 }
 
 func (r *LicenseReconciler) createDefaultLicense() (lic primehubv1alpha1.License, err error) {
@@ -53,8 +92,7 @@ func (r *LicenseReconciler) createDefaultLicense() (lic primehubv1alpha1.License
 		},
 	}
 	status := r.generateStatus(content)
-	// TODO: need to check 'started_at' and 'expired_at'
-	status.Expired = "check expired time"
+	status.Expired = license.STATUS_INVALID
 	status.Reason = "invalid since we can't valid your licensed key, using default now"
 	defaultLic.Status = status
 
@@ -64,7 +102,7 @@ func (r *LicenseReconciler) createDefaultLicense() (lic primehubv1alpha1.License
 // +kubebuilder:rbac:groups=primehub.io,resources=licenses,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=primehub.io,resources=licenses/status,verbs=get;update;patch
 
-func (r *LicenseReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+func (r *LicenseReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, err error) {
 	ctx := context.Background()
 	log := r.Log.WithValues("license", req.NamespacedName)
 
@@ -73,42 +111,47 @@ func (r *LicenseReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, nil
 	}
 
+	result = ctrl.Result{RequeueAfter: r.RequeueAfter}
+
 	lic := &primehubv1alpha1.License{}
-	if err := r.Get(ctx, client.ObjectKey{Namespace: r.ResourceNamespace, Name: r.ResourceName}, lic); err != nil {
+	if err = r.Get(ctx, client.ObjectKey{Namespace: r.ResourceNamespace, Name: r.ResourceName}, lic); err != nil {
 		if apierrors.IsNotFound(err) {
-			log.Info("License not found")
-			// TODO: create a default license
+			log.Info("License not found, use default")
+			defaultLic, _ := r.createDefaultLicense()
+
+			if err = r.Create(ctx, &defaultLic); err != nil {
+				log.Error(err, "failed to create default License")
+				return
+			}
 		} else {
 			log.Error(err, "unable to fetch License")
+			return
 		}
-		return ctrl.Result{}, nil
 	}
 
-	if ok, err := license.Verify(lic.Spec.SignedLicense); ok == false && err != nil {
-		log.Info(err.Error())
-		log.Info("Use default license")
+	lic = lic.DeepCopy()
+	verifiedLicense := license.NewLicense(lic.Spec.SignedLicense)
+	if verifiedLicense.Status == license.STATUS_INVALID {
+		log.Info(verifiedLicense.Err.Error())
 		defaultLic, _ := r.createDefaultLicense()
-		lic := lic.DeepCopy()
-		lic.Spec = defaultLic.Spec
 		lic.Status = defaultLic.Status
-		if err := r.Update(ctx, lic); err != nil {
-			log.Error(err, "failed to update License")
-			return ctrl.Result{}, err
-		}
 	} else {
-		// Decode message and fill in status field
-		content, _ := license.Decode(lic.Spec.SignedLicense)
-		lic := lic.DeepCopy()
-		// TODO: need to merge status instead of replacement
-		lic.Status = r.generateStatus(content)
-		log.Info("lic", "status", lic.Status)
-		if err := r.Status().Update(ctx, lic); err != nil {
-			log.Error(err, "failed to update License status")
-			return ctrl.Result{}, err
-		}
+		status := r.generateStatus(verifiedLicense.Decoded)
+		status.Expired = verifiedLicense.Status
+		lic.Status = status
+	}
+	if err = r.Status().Update(ctx, lic); err != nil {
+		log.Error(err, "failed to update License status")
+		return
 	}
 
-	return ctrl.Result{}, nil
+	if err = r.updateSecret(ctx, lic); err != nil {
+		log.Error(err, "failed to update Authoritative Secret")
+		return
+	}
+
+	log.Info("End of reconciling")
+	return
 }
 
 func (r *LicenseReconciler) EnsureLicense(mgr ctrl.Manager) (err error) {
