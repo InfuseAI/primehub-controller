@@ -369,19 +369,16 @@ func (r *PhJobReconciler) updateStatus(
 		return nil
 	}
 
-	// set StartTime.
-	if phJob.Status.StartTime == nil {
-		now := metav1.Now()
-		phJob.Status.StartTime = &now
-	}
-
 	if pod.Status.Phase == corev1.PodSucceeded {
 		phJob.Status.Phase = primehubv1alpha1.JobSucceeded
 		if phJob.Status.FinishTime == nil {
 			now := metav1.Now()
 			phJob.Status.FinishTime = &now
 		}
+		phJob.Status.Reason = "Finished"
+		phJob.Status.Message = "pod is finish and exit successfully."
 	}
+
 	if pod.Status.Phase == corev1.PodFailed {
 		phJob.Status.Phase = primehubv1alpha1.JobFailed
 		if phJob.Status.FinishTime == nil {
@@ -393,16 +390,37 @@ func (r *PhJobReconciler) updateStatus(
 			phJob.Status.Message = pod.Status.ContainerStatuses[0].State.Terminated.Message
 		}
 	}
+
 	if pod.Status.Phase == corev1.PodUnknown {
 		phJob.Status.Phase = primehubv1alpha1.JobUnknown
 		if phJob.Status.FinishTime == nil {
 			now := metav1.Now()
 			phJob.Status.FinishTime = &now
 		}
+		if len(pod.Status.Conditions) > 0 {
+			phJob.Status.Reason = pod.Status.Conditions[0].Reason
+			phJob.Status.Message = pod.Status.Conditions[0].Message
+		}
 	}
+
+	if pod.Status.Phase == corev1.PodPending {
+		if len(pod.Status.Conditions) > 0 {
+			phJob.Status.Reason = pod.Status.Conditions[0].Reason
+			phJob.Status.Message = pod.Status.Conditions[0].Message
+		}
+	}
+
 	if pod.Status.Phase == corev1.PodRunning {
 		phJob.Status.Phase = primehubv1alpha1.JobRunning
+		// set StartTime.
+		if phJob.Status.StartTime == nil {
+			now := metav1.Now()
+			phJob.Status.StartTime = &now
+		}
+		phJob.Status.Reason = "Running"
+		phJob.Status.Message = "pod is created and starts running."
 	}
+
 	log.Info("phJob phase: ", "phase", phJob.Status.Phase)
 	if err := r.updatePhJobStatus(ctx, phJob); err != nil {
 		return err
