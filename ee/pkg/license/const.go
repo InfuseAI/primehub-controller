@@ -1,8 +1,16 @@
 package license
 
 const (
+	STATUS_EXPIRED   = "expired"
+	STATUS_UNEXPIRED = "unexpired"
+	STATUS_INVALID   = "invalid"
+)
+
+const (
+	TIME_LAYOUT        = "2006-01-02T15:04:05Z"
 	RESOURCE_NAME      = "primehub-license"
 	RESOURCE_NAMESPACE = "primehub"
+	SECRET_NAME        = "authoritative-secret"
 
 	/*
 		licensed_to: "Default"
