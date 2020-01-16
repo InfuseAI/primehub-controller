@@ -4,19 +4,30 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"primehub-controller/pkg/graphql"
+	"time"
 
-	primehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
+	primehubv1alpha1 "primehub-controller/api/v1alpha1"
+	eeprimehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
 
-	"primehub-controller/ee/controllers"
+	"primehub-controller/controllers"
+	eecontrollers "primehub-controller/ee/controllers"
 	"primehub-controller/ee/pkg/license"
 
+	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/wait"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	ctrlzap "sigs.k8s.io/controller-runtime/pkg/log/zap"
+
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
+
 	// +kubebuilder:scaffold:imports
+
 	"github.com/spf13/viper"
 )
 
@@ -29,6 +40,9 @@ func init() {
 	_ = clientgoscheme.AddToScheme(scheme)
 
 	_ = primehubv1alpha1.AddToScheme(scheme)
+	_ = eeprimehubv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+	_ = batchv1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -37,14 +51,32 @@ func main() {
 
 	var metricsAddr string
 	var enableLeaderElection bool
+	var debug bool
+
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
+	flag.BoolVar(&debug, "debug", false, "enables debug logs")
 	flag.Parse()
 
-	ctrl.SetLogger(zap.New(func(o *zap.Options) {
+	// Levels in logr correspond to custom debug levels in Zap.
+	// Any given level in logr is represents by its inverse in Zap (zapLevel = -1*logrLevel).
+	// For example V(2) is equivalent to log level -2 in Zap, while V(1) is equivalent to Zap's DebugLevel.
+	// zap.InfoLevel = 0; zap.DebugLevel = -1
+	// r.Log.Info() is INFO in Zap
+	// r.Log.V(1).Info() is DEBUG in Zap
+	// ref: https://github.com/go-logr/zapr
+	l := zap.NewAtomicLevelAt(zap.InfoLevel)
+	if debug == true {
+		l = zap.NewAtomicLevelAt(zap.DebugLevel)
+	}
+
+	ctrl.SetLogger(ctrlzap.New(func(o *ctrlzap.Options) {
 		o.Development = true
+		o.Level = &l
 	}))
+
+	stopChan := ctrl.SetupSignalHandler()
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:             scheme,
@@ -57,7 +89,66 @@ func main() {
 		os.Exit(1)
 	}
 
-	licenseReconciler := &controllers.LicenseReconciler{
+	if err = (&controllers.ImageSpecReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("ImageSpec"),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ImageSpec")
+		os.Exit(1)
+	}
+	if err = (&controllers.ImageSpecJobReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("ImageSpecJob"),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ImageSpecJob")
+		os.Exit(1)
+	}
+
+	graphqlClient := graphql.NewGraphqlClient(
+		viper.GetString("jobSubmission.graphqlEndpoint"),
+		viper.GetString("jobSubmission.graphqlSecret"))
+
+	nodeSelector := viper.GetStringMapString("jobSubmission.nodeSelector")
+
+	var tolerationsSlice []corev1.Toleration
+
+	err = viper.UnmarshalKey("jobSubmission.tolerations", &tolerationsSlice)
+	if err != nil {
+		panic(err.Error() + " cannot UnmarshalKey toleration")
+	}
+
+	var affinity corev1.Affinity
+	err = viper.UnmarshalKey("jobSubmission.affinity", &affinity)
+	if err != nil {
+		panic(err.Error() + " cannot UnmarshalKey affinity")
+	}
+
+	if err = (&controllers.PhJobReconciler{
+		Client:                         mgr.GetClient(),
+		Log:                            ctrl.Log.WithName("controllers").WithName("PhJob"),
+		Scheme:                         mgr.GetScheme(),
+		GraphqlClient:                  graphqlClient,
+		WorkingDirSize:                 resource.MustParse(viper.GetString("jobSubmission.workingDirSize")),
+		DefaultActiveDeadlineSeconds:   viper.GetInt64("jobSubmission.defaultActiveDeadlineSeconds"),
+		DefaultTTLSecondsAfterFinished: viper.GetInt32("jobSubmission.defaultTTLSecondsAfterFinished"),
+		NodeSelector:                   nodeSelector,
+		Tolerations:                    tolerationsSlice,
+		Affinity:                       affinity,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "PhJob")
+		os.Exit(1)
+	}
+
+	phJobScheduler := controllers.PHJobScheduler{
+		Client:        mgr.GetClient(),
+		Log:           ctrl.Log.WithName("scheduler").WithName("PhJob"),
+		GraphqlClient: graphqlClient,
+	}
+	go wait.Until(phJobScheduler.Schedule, time.Second*1, stopChan)
+
+	licenseReconciler := &eecontrollers.LicenseReconciler{
 		Client:            mgr.GetClient(),
 		Log:               ctrl.Log.WithName("controllers").WithName("License"),
 		Scheme:            mgr.GetScheme(),
@@ -79,7 +170,7 @@ func main() {
 	}()
 
 	setupLog.Info("starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err := mgr.Start(stopChan); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
