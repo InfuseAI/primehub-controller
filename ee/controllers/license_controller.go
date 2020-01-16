@@ -164,7 +164,7 @@ func (r *LicenseReconciler) EnsureLicense(mgr ctrl.Manager) (err error) {
 	defer mgrSyncCtxCancel()
 
 	if synced := mgr.GetCache().WaitForCacheSync(mgrSyncCtx.Done()); !synced {
-		return errors.New("Timed out waiting for cachesync")
+		return errors.New("timed out waiting for cachesync")
 	}
 
 	lic := &primehubv1alpha1.License{}

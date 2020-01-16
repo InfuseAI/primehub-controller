@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"time"
 
 	primehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
 
