@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strconv"
 	"time"
 
@@ -16,6 +17,8 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	primehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
+
+	"github.com/fatih/structtag"
 )
 
 // LicenseReconciler reconciles a License object
@@ -30,20 +33,43 @@ type LicenseReconciler struct {
 }
 
 func (r *LicenseReconciler) buildSecret(status *primehubv1alpha1.LicenseStatus) *corev1.Secret {
+	s := reflect.ValueOf(*status)
+	t := s.Type()
+	data := map[string][]byte{}
+
+	for i := 0; i < t.NumField(); i++ {
+		sf := t.Field(i)
+		untypedValue := s.Field(i).Interface()
+
+		tag, err := structtag.Parse(string(sf.Tag))
+		if err != nil {
+			panic("unable to parse LicenseStatus tag")
+		}
+		jsonTag, err := tag.Get("json")
+		if err != nil {
+			panic("unable to get LicenseStatus json tag")
+		}
+
+		var value string
+		switch v := untypedValue.(type) {
+		case int:
+			value = strconv.Itoa(v)
+		case string:
+			value = v
+		default:
+			panic("unsupported LicenseStatus field type")
+		}
+
+		key := jsonTag.Name
+		data[key] = []byte(value)
+	}
+
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      license.SECRET_NAME,
 			Namespace: r.ResourceNamespace,
 		},
-		// TODO: refactor using reflect and test reloader
-		Data: map[string][]byte{
-			"licensed_to": []byte(status.LicensedTo),
-			"expired":     []byte(status.Expired),
-			"reason":      []byte(status.Reason),
-			"started_at":  []byte(status.StartedAt),
-			"expired_at":  []byte(status.ExpiredAt),
-			"max_group":   []byte(strconv.Itoa(status.MaxGroup)),
-		},
+		Data: data,
 	}
 	return secret
 }

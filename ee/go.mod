@@ -3,6 +3,7 @@ module primehub-controller/ee
 go 1.13
 
 require (
+	github.com/fatih/structtag v1.2.0
 	github.com/go-logr/logr v0.1.0
 	github.com/onsi/ginkgo v1.8.0
 	github.com/onsi/gomega v1.5.0
