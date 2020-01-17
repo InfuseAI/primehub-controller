@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"errors"
+	"os"
 	"reflect"
 	"strconv"
 	"time"
@@ -27,8 +28,8 @@ type LicenseReconciler struct {
 	Log    logr.Logger
 	Scheme *runtime.Scheme
 
-	ResourceName      string
-	ResourceNamespace string
+	resourceName      string
+	resourceNamespace string
 	RequeueAfter      time.Duration
 }
 
@@ -67,7 +68,7 @@ func (r *LicenseReconciler) buildSecret(status *primehubv1alpha1.LicenseStatus) 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      license.SECRET_NAME,
-			Namespace: r.ResourceNamespace,
+			Namespace: r.resourceNamespace,
 		},
 		Data: data,
 	}
@@ -81,7 +82,7 @@ func (r *LicenseReconciler) updateSecret(ctx context.Context, lic *primehubv1alp
 	}
 
 	secret := &corev1.Secret{}
-	if err = r.Get(ctx, client.ObjectKey{Namespace: r.ResourceNamespace, Name: license.SECRET_NAME}, secret); err != nil {
+	if err = r.Get(ctx, client.ObjectKey{Namespace: r.resourceNamespace, Name: license.SECRET_NAME}, secret); err != nil {
 		if apierrors.IsNotFound(err) {
 			err = r.Create(ctx, desiredSecret)
 		}
@@ -110,8 +111,8 @@ func (r *LicenseReconciler) createDefaultLicense() (lic primehubv1alpha1.License
 
 	defaultLic := primehubv1alpha1.License{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      r.ResourceName,
-			Namespace: r.ResourceNamespace,
+			Name:      r.resourceName,
+			Namespace: r.resourceNamespace,
 		},
 		Spec: primehubv1alpha1.LicenseSpec{
 			SignedLicense: signedLicense,
@@ -133,14 +134,14 @@ func (r *LicenseReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, err
 	log := r.Log.WithValues("license", req.NamespacedName)
 
 	// Skip if it's not in the same namespace
-	if req.Namespace != r.ResourceNamespace {
+	if req.Namespace != r.resourceNamespace {
 		return ctrl.Result{}, nil
 	}
 
 	result = ctrl.Result{RequeueAfter: r.RequeueAfter}
 
 	lic := &primehubv1alpha1.License{}
-	if err = r.Get(ctx, client.ObjectKey{Namespace: r.ResourceNamespace, Name: r.ResourceName}, lic); err != nil {
+	if err = r.Get(ctx, client.ObjectKey{Namespace: r.resourceNamespace, Name: r.resourceName}, lic); err != nil {
 		if apierrors.IsNotFound(err) {
 			log.Info("License not found, use default")
 			defaultLic, _ := r.createDefaultLicense()
@@ -194,7 +195,7 @@ func (r *LicenseReconciler) EnsureLicense(mgr ctrl.Manager) (err error) {
 	}
 
 	lic := &primehubv1alpha1.License{}
-	if err := r.Get(ctx, client.ObjectKey{Namespace: r.ResourceNamespace, Name: r.ResourceName}, lic); err != nil {
+	if err := r.Get(ctx, client.ObjectKey{Namespace: r.resourceNamespace, Name: r.resourceName}, lic); err != nil {
 		if apierrors.IsNotFound(err) {
 			log.Info("License not found, use default")
 			defaultLic, _ := r.createDefaultLicense()
@@ -208,6 +209,16 @@ func (r *LicenseReconciler) EnsureLicense(mgr ctrl.Manager) (err error) {
 }
 
 func (r *LicenseReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	// ref: https://kubernetes.io/docs/tasks/inject-data-application/environment-variable-expose-pod-information/
+	// Use the same namespace of PrimeHub Controller
+	namespace := os.Getenv("POD_NAMESPACE")
+	if namespace == "" {
+		namespace = license.DEFAULT_RESOURCE_NAMESPACE
+	}
+	r.resourceName = license.RESOURCE_NAME
+	r.resourceNamespace = namespace
+	r.RequeueAfter = license.CHECK_EXPIRY_INTERVAL
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&primehubv1alpha1.License{}).
 		Owns(&corev1.Secret{}).

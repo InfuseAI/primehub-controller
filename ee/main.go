@@ -12,7 +12,6 @@ import (
 
 	"primehub-controller/controllers"
 	eecontrollers "primehub-controller/ee/controllers"
-	"primehub-controller/ee/pkg/license"
 
 	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -149,12 +148,9 @@ func main() {
 	go wait.Until(phJobScheduler.Schedule, time.Second*1, stopChan)
 
 	licenseReconciler := &eecontrollers.LicenseReconciler{
-		Client:            mgr.GetClient(),
-		Log:               ctrl.Log.WithName("controllers").WithName("License"),
-		Scheme:            mgr.GetScheme(),
-		ResourceName:      license.RESOURCE_NAME,
-		ResourceNamespace: license.RESOURCE_NAMESPACE,
-		RequeueAfter:      license.CHECK_EXPIRY_INTERVAL,
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("License"),
+		Scheme: mgr.GetScheme(),
 	}
 	if err := licenseReconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "License")
