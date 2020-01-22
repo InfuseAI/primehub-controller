@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"time"
 
@@ -22,9 +23,9 @@ var (
 	GroupCache        = ccache.New(ccache.Configure().MaxSize(1000).ItemsToPrune(100))
 	InstanceTypeCache = ccache.New(ccache.Configure().MaxSize(1000).ItemsToPrune(100))
 
-	group_aggregation_key = "primehub.io/group"
-	user_aggregation_key  = "primehub.io/user"
-	cacheExpiredTime      = time.Minute * 10
+	groupAggregationKey = "primehub.io/group"
+	userAggregationKey  = "primehub.io/user"
+	cacheExpiredTime    = time.Minute * 10
 )
 
 // nil means it doesn't limit the quota
@@ -107,12 +108,19 @@ func (r *PHJobScheduler) getInstanceTypeInfo(instanceTypeId string) (*graphql.Dt
 	return InstanceTypeCache.Get(cacheKey).Value().(*graphql.DtoInstanceType), nil
 }
 
-func (r *PHJobScheduler) getCurrentUsage(namespace string, aggregation_key string, aggregation_value string) (*ResourceQuota, error) {
+func (r *PHJobScheduler) getCurrentUsage(namespace string, aggregationKeys []string, aggregationValues []string) (*ResourceQuota, error) {
+	if len(aggregationKeys) != len(aggregationValues) {
+		return nil, errors.New("length of key and value must be the same")
+	}
+
 	ctx := context.Background()
 
 	pods := corev1.PodList{}
-	escaped_aggregation_value := escapism.EscapeToPrimehubLabel(aggregation_value)
-	err := r.Client.List(ctx, &pods, client.InNamespace(namespace), client.MatchingLabels(map[string]string{aggregation_key: escaped_aggregation_value}))
+	labels := make(map[string]string)
+	for idx, aggregationKey := range aggregationKeys {
+		labels[aggregationKey] = escapism.EscapeToPrimehubLabel(aggregationValues[idx])
+	}
+	err := r.Client.List(ctx, &pods, client.InNamespace(namespace), client.MatchingLabels(labels))
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +145,7 @@ func (r *PHJobScheduler) getGroupRemainingQuota(phJob *primehubv1alpha1.PhJob) (
 	if err != nil {
 		return nil, err
 	}
-	groupUsage, err := r.getCurrentUsage(phJob.Namespace, group_aggregation_key, phJob.Spec.GroupName)
+	groupUsage, err := r.getCurrentUsage(phJob.Namespace, []string{groupAggregationKey}, []string{phJob.Spec.GroupName})
 	if err != nil {
 		return nil, err
 	}
@@ -157,12 +165,12 @@ func (r *PHJobScheduler) getGroupRemainingQuota(phJob *primehubv1alpha1.PhJob) (
 	return groupRemainingQuota, nil
 }
 
-func (r *PHJobScheduler) getUserRemainingQuota(phJob *primehubv1alpha1.PhJob) (*ResourceQuota, error) {
+func (r *PHJobScheduler) getUserRemainingQuotaInGroup(phJob *primehubv1alpha1.PhJob) (*ResourceQuota, error) {
 	groupInfo, err := r.getGroupInfo(phJob.Spec.GroupId)
 	if err != nil {
 		return nil, err
 	}
-	userUsage, err := r.getCurrentUsage(phJob.Namespace, user_aggregation_key, phJob.Spec.UserName)
+	userUsage, err := r.getCurrentUsage(phJob.Namespace, []string{groupAggregationKey, userAggregationKey}, []string{phJob.Spec.GroupName, phJob.Spec.UserName})
 	if err != nil {
 		return nil, err
 	}
@@ -291,7 +299,7 @@ func (r *PHJobScheduler) scheduleByStrictOrder(phJobsRef *[]*primehubv1alpha1.Ph
 
 		_, foundUser := usersRemainingQuota[phJob.Spec.UserName]
 		if !foundUser {
-			userRemainingQuota, err := r.getUserRemainingQuota(phJob)
+			userRemainingQuota, err := r.getUserRemainingQuotaInGroup(phJob)
 			if err != nil {
 				return err
 			}
