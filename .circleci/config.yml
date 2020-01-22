@@ -86,6 +86,10 @@ jobs:
       - setup_remote_docker
       # build the application image
       - run:
+          name: Code gen
+          command: |
+            make generate
+      - run:
           name: Build image
           no_output_timeout: 40m
           command: |
@@ -143,6 +147,11 @@ jobs:
             export PATH=$PATH:/usr/local/kubebuilder/bin
       - setup_remote_docker
       # build the application image
+      - run:
+          name: Code gen
+          command: |
+            make generate
+            cd ee && make generate
       - run:
           name: Build image
           no_output_timeout: 40m
