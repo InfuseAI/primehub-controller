@@ -123,13 +123,11 @@ jobs:
             fi
 
   build_ee:
-    working_directory: ~/primehub-controller/ee
     docker: # run the steps with Docker
       # CircleCI Go images available at: https://hub.docker.com/r/circleci/golang/
       - image: circleci/golang:1.12
     steps:
       - checkout:
-          path: ~/primehub-controller
       - run:
           name: Install kubebuilder
           command: |
@@ -160,7 +158,7 @@ jobs:
                     EE_CONTAINER_NAME="${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}"
             fi
             echo "Container name set to ${EE_CONTAINER_NAME}:${DOCKER_TAG}"
-            make docker-build IMG=${EE_CONTAINER_NAME}:${DOCKER_TAG}
+            make docker-build-ee IMG=${EE_CONTAINER_NAME}:${DOCKER_TAG}
       # deploy the image
       - run:
           name: Deploy to Docker Hub
