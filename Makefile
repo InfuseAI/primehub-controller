@@ -54,6 +54,10 @@ generate: controller-gen
 docker-build:
 	docker build . -t ${IMG}
 
+# Build the ee docker image
+docker-build-ee:
+	docker build -f Dockerfile.ee . -t ${IMG}
+
 # Push the docker image
 docker-push:
 	docker push ${IMG}
