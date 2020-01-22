@@ -1,12 +1,11 @@
 version: 2
 jobs:
-  build:
+  unit_test_ce:
     docker: # run the steps with Docker
       # CircleCI Go images available at: https://hub.docker.com/r/circleci/golang/
       - image: circleci/golang:1.12
     steps:
       - checkout
-
       - run:
           name: Install kubebuilder
           command: |
@@ -20,9 +19,71 @@ jobs:
             # (you'll need to set the KUBEBUILDER_ASSETS env var if you put it somewhere else)
             sudo mv /tmp/kubebuilder_2.1.0_${os}_${arch} /usr/local/kubebuilder
             export PATH=$PATH:/usr/local/kubebuilder/bin
-
       - setup_remote_docker
+      - run:
+          name: Unit tests
+          no_output_timeout: 40m
+          command: |
+            make test
+            go tool cover -html=cover.out -o coverage.html
+            mkdir -p /tmp/artifacts
+            mv coverage.html /tmp/artifacts
+      - store_artifacts:
+          path: /tmp/artifacts
 
+  unit_test_ee:
+    working_directory: ~/primehub-controller/ee
+    docker: # run the steps with Docker
+      # CircleCI Go images available at: https://hub.docker.com/r/circleci/golang/
+      - image: circleci/golang:1.12
+    steps:
+      - checkout:
+          path: ~/primehub-controller
+      - run:
+          name: Install kubebuilder
+          command: |
+            os=$(go env GOOS)
+            arch=$(go env GOARCH)
+
+            # download kubebuilder and extract it to tmp
+            curl -sL https://go.kubebuilder.io/dl/2.1.0/${os}/${arch} | tar -xz -C /tmp/
+
+            # move to a long-term location and put it on your path
+            # (you'll need to set the KUBEBUILDER_ASSETS env var if you put it somewhere else)
+            sudo mv /tmp/kubebuilder_2.1.0_${os}_${arch} /usr/local/kubebuilder
+            export PATH=$PATH:/usr/local/kubebuilder/bin
+      - setup_remote_docker
+      - run:
+          name: Unit tests
+          no_output_timeout: 40m
+          command: |
+            make test
+            go tool cover -html=cover.out -o coverage.html
+            mkdir -p /tmp/artifacts
+            mv coverage.html /tmp/artifacts
+      - store_artifacts:
+          path: /tmp/artifacts
+
+  build_ce:
+    docker: # run the steps with Docker
+      # CircleCI Go images available at: https://hub.docker.com/r/circleci/golang/
+      - image: circleci/golang:1.12
+    steps:
+      - checkout
+      - run:
+          name: Install kubebuilder
+          command: |
+            os=$(go env GOOS)
+            arch=$(go env GOARCH)
+
+            # download kubebuilder and extract it to tmp
+            curl -sL https://go.kubebuilder.io/dl/2.1.0/${os}/${arch} | tar -xz -C /tmp/
+
+            # move to a long-term location and put it on your path
+            # (you'll need to set the KUBEBUILDER_ASSETS env var if you put it somewhere else)
+            sudo mv /tmp/kubebuilder_2.1.0_${os}_${arch} /usr/local/kubebuilder
+            export PATH=$PATH:/usr/local/kubebuilder/bin
+      - setup_remote_docker
       # build the application image
       - run:
           name: Build image
@@ -40,7 +101,6 @@ jobs:
             fi
             echo "Container name set to ${CONTAINER_NAME}:${DOCKER_TAG}"
             make docker-build IMG=${CONTAINER_NAME}:${DOCKER_TAG}
- 
       # deploy the image
       - run:
           name: Deploy to Docker Hub
@@ -62,19 +122,83 @@ jobs:
                   docker push ${CONTAINER_NAME}:${DOCKER_TAG}
             fi
 
+  build_ee:
+    working_directory: ~/primehub-controller/ee
+    docker: # run the steps with Docker
+      # CircleCI Go images available at: https://hub.docker.com/r/circleci/golang/
+      - image: circleci/golang:1.12
+    steps:
+      - checkout:
+          path: ~/primehub-controller
+      - run:
+          name: Install kubebuilder
+          command: |
+            os=$(go env GOOS)
+            arch=$(go env GOARCH)
+
+            # download kubebuilder and extract it to tmp
+            curl -sL https://go.kubebuilder.io/dl/2.1.0/${os}/${arch} | tar -xz -C /tmp/
+
+            # move to a long-term location and put it on your path
+            # (you'll need to set the KUBEBUILDER_ASSETS env var if you put it somewhere else)
+            sudo mv /tmp/kubebuilder_2.1.0_${os}_${arch} /usr/local/kubebuilder
+            export PATH=$PATH:/usr/local/kubebuilder/bin
+      - setup_remote_docker
+      # build the application image
+      - run:
+          name: Build image
+          no_output_timeout: 40m
+          command: |
+            echo "Looking for Docker deployment options"
+            if [ ! -n "${DOCKER_TAG:-}" ]
+                then
+                    DOCKER_TAG=$(echo "${CIRCLE_SHA1}" | cut -c1-10)
+            fi
+            # If not set, define CONTAINER_NAME
+            if [[ ! -n "${EE_CONTAINER_NAME:-}" ]]
+                then
+                    EE_CONTAINER_NAME="${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}"
+            fi
+            echo "Container name set to ${EE_CONTAINER_NAME}:${DOCKER_TAG}"
+            make docker-build IMG=${EE_CONTAINER_NAME}:${DOCKER_TAG}
+      # deploy the image
+      - run:
+          name: Deploy to Docker Hub
+          no_output_timeout: 40m
+          command: |
+            echo "Looking for Docker deployment options"
+            if [ ! -n "${DOCKER_TAG:-}" ]
+                then
+                    DOCKER_TAG=$(echo "${CIRCLE_SHA1}" | cut -c1-10)
+            fi
+            # If not set, define CONTAINER_NAME
+            if [[ ! -n "${EE_CONTAINER_NAME:-}" ]]
+                then
+                    CONTAINER_NAME="${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}-ee"
+            fi
+            echo "Container name set to ${EE_CONTAINER_NAME}:${DOCKER_TAG}"
+            if [[ -n "$DOCKER_PASS" ]]; then
+                  docker login -u $DOCKER_USER -p $DOCKER_PASS
+                  docker push ${EE_CONTAINER_NAME}:${DOCKER_TAG}
+            fi
+
 workflows:
   version: 2
   latest_builds:
     jobs:
-      - build:
+      - unit_test_ce
+      - unit_test_ee
+      - build_ce:
+          requires:
+            - unit_test_ce
+            - unit_test_ee
           filters:
             branches:
               only: master
-  release_builds:
-    jobs:
-      - build:
+      - build_ee:
+          requires:
+            - unit_test_ce
+            - unit_test_ee
           filters:
-            tags:
-              only: /v.*/
             branches:
-              ignore: /.*/  
+              only: master
