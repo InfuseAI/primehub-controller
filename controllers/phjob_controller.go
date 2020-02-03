@@ -167,10 +167,13 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	nextCheck := 1 * time.Minute
 	phJobExceedsRequeueLimit := false
 	phJobExceedsLimit := false
+	var failureReason primehubv1alpha1.PhJobReason
 	var failureMessage string
 
 	if phJob.Status.Phase == "" { // New Job, move it into pending state.
 		phJob.Status.Phase = primehubv1alpha1.JobPending
+		phJob.Status.Reason = primehubv1alpha1.JobReasonOverQuota
+		phJob.Status.Message = "Insufficient group/user quota"
 	}
 	if phJob.Status.Requeued == nil {
 		phJob.Status.Requeued = new(int32)
@@ -184,6 +187,8 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		}
 
 		phJob.Status.Phase = primehubv1alpha1.JobCancelled
+		phJob.Status.Reason = primehubv1alpha1.JobReasonCancelled
+		phJob.Status.Message = "Cancelled by user"
 		if phJob.Status.FinishTime == nil {
 			now := metav1.Now()
 			phJob.Status.FinishTime = &now
@@ -229,9 +234,11 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	if phJobExceedsRequeueLimit {
 		phJobExceedsLimit = true
+		failureReason = primehubv1alpha1.JobReasonOverRequeueLimit
 		failureMessage = "phJob has failed because it was requeued more than specified times"
 	} else if r.pastActiveDeadline(phJob) {
 		phJobExceedsLimit = true
+		failureReason = primehubv1alpha1.JobReasonOverActivateDeadline
 		failureMessage = "phJob has failed because it was active longer than specified deadline"
 	}
 
@@ -245,7 +252,8 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			phJob.Status.FinishTime = &now
 		}
 		phJob.Status.Phase = primehubv1alpha1.JobFailed
-		phJob.Status.Reason = failureMessage
+		phJob.Status.Reason = failureReason
+		phJob.Status.Message = "Job failed due to System Error: " + failureMessage
 		if !apiequality.Semantic.DeepEqual(*oldStatus, phJob.Status) {
 			if err := r.updatePhJobStatus(ctx, phJob); err != nil {
 				return ctrl.Result{RequeueAfter: errorCheckAfter}, err
@@ -352,6 +360,12 @@ func (r *PhJobReconciler) updateStatus(
 	if phJobReadyTimeout || admissionReject { // phjob ready state timeout or admission reject, requeue the phjob.
 		*phJob.Status.Requeued += int32(1)
 		phJob.Status.Phase = primehubv1alpha1.JobPending
+		if admissionReject {
+			phJob.Status.Reason = primehubv1alpha1.JobReasonOverQuota
+			phJob.Status.Message = "Back to pending due to: insufficient group/user quota"
+		} else if !strings.Contains(phJob.Status.Message, "Back to pending due to:") {
+			phJob.Status.Message = "Back to pending due to: " + phJob.Status.Message
+		}
 		if err := r.updatePhJobStatus(ctx, phJob); err != nil {
 			return err
 		}
@@ -360,7 +374,8 @@ func (r *PhJobReconciler) updateStatus(
 
 	if createPodFailed {
 		phJob.Status.Phase = primehubv1alpha1.JobFailed
-		phJob.Status.Reason = createPodFailedReason
+		phJob.Status.Reason = primehubv1alpha1.JobReasonPodCreationFailed
+		phJob.Status.Message = createPodFailedReason
 		now := metav1.Now()
 		phJob.Status.FinishTime = &now
 		if err := r.updatePhJobStatus(ctx, phJob); err != nil {
@@ -375,8 +390,8 @@ func (r *PhJobReconciler) updateStatus(
 			now := metav1.Now()
 			phJob.Status.FinishTime = &now
 		}
-		phJob.Status.Reason = "Finished"
-		phJob.Status.Message = "pod is finish and exit successfully."
+		phJob.Status.Reason = primehubv1alpha1.JobReasonPodSucceeded
+		phJob.Status.Message = "Job completed"
 	}
 
 	if pod.Status.Phase == corev1.PodFailed {
@@ -386,8 +401,8 @@ func (r *PhJobReconciler) updateStatus(
 			phJob.Status.FinishTime = &now
 		}
 		if len(pod.Status.ContainerStatuses) > 0 {
-			phJob.Status.Reason = pod.Status.ContainerStatuses[0].State.Terminated.Reason
-			phJob.Status.Message = pod.Status.ContainerStatuses[0].State.Terminated.Message
+			phJob.Status.Reason = primehubv1alpha1.JobReasonPodFailed
+			phJob.Status.Message = "Job failed due to " + pod.Status.ContainerStatuses[0].State.Terminated.Reason + ": " + pod.Status.ContainerStatuses[0].State.Terminated.Message
 		}
 	}
 
@@ -398,14 +413,14 @@ func (r *PhJobReconciler) updateStatus(
 			phJob.Status.FinishTime = &now
 		}
 		if len(pod.Status.Conditions) > 0 {
-			phJob.Status.Reason = pod.Status.Conditions[0].Reason
-			phJob.Status.Message = pod.Status.Conditions[0].Message
+			phJob.Status.Reason = primehubv1alpha1.JobReasonPodUnknown
+			phJob.Status.Message = "[" + pod.Status.Conditions[0].Reason + "] " + pod.Status.Conditions[0].Message
 		}
 	}
 
 	if pod.Status.Phase == corev1.PodPending {
 		if len(pod.Status.Conditions) > 0 {
-			phJob.Status.Reason = pod.Status.Conditions[0].Reason
+			phJob.Status.Reason = primehubv1alpha1.JobReasonPodPending
 			phJob.Status.Message = pod.Status.Conditions[0].Message
 		}
 	}
@@ -417,8 +432,8 @@ func (r *PhJobReconciler) updateStatus(
 			now := metav1.Now()
 			phJob.Status.StartTime = &now
 		}
-		phJob.Status.Reason = "Running"
-		phJob.Status.Message = "pod is created and starts running."
+		phJob.Status.Reason = primehubv1alpha1.JobReasonPodRunning
+		phJob.Status.Message = "Job is currently running"
 	}
 
 	log.Info("phJob phase: ", "phase", phJob.Status.Phase)
