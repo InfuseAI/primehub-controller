@@ -62,7 +62,7 @@ func (r *PhJobReconciler) buildPod(phJob *primehubv1alpha1.PhJob) (*corev1.Pod, 
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        "phjob-" + phJob.ObjectMeta.Name,
+			Name:        phJob.ObjectMeta.Name,
 			Namespace:   phJob.Namespace,
 			Annotations: phJob.ObjectMeta.Annotations,
 			Labels:      phJob.ObjectMeta.Labels,
@@ -129,7 +129,7 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("phjob", req.NamespacedName)
 	podkey := client.ObjectKey{
 		Namespace: req.Namespace,
-		Name:      "phjob-" + req.Name,
+		Name:      req.Name,
 	}
 
 	log.Info("start Reconcile")
