@@ -25,12 +25,12 @@ import (
 // +kubebuilder:validation:Enum=Job
 type JobType string
 
-// +kubebuilder:validation:Enum=Pending;Ready;Running;Succeeded;Failed;Cancelled;Unknown
+// +kubebuilder:validation:Enum=Pending;Preparing;Running;Succeeded;Failed;Cancelled;Unknown
 type PhJobPhase string
 
 const (
 	JobPending   PhJobPhase = "Pending"
-	JobReady     PhJobPhase = "Ready"
+	JobPreparing PhJobPhase = "Preparing"
 	JobRunning   PhJobPhase = "Running"
 	JobSucceeded PhJobPhase = "Succeeded"
 	JobFailed    PhJobPhase = "Failed"

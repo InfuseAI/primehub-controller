@@ -39,8 +39,8 @@ import (
 )
 
 var (
-	// DefaultJobReadyTimeout is the phJob ready state timeout value
-	DefaultJobReadyTimeout = time.Duration(180) * time.Second
+	// DefaultJobPreparingTimeout is the phJob preparing state timeout value
+	DefaultJobPreparingTimeout = time.Duration(180) * time.Second
 )
 
 // PhJobReconciler reconciles a PhJob object
@@ -263,7 +263,7 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{RequeueAfter: nextCheck}, nil
 	}
 
-	if phJob.Status.Phase != primehubv1alpha1.JobPending { // only Job in Ready, Running will reconcile the pod.
+	if phJob.Status.Phase != primehubv1alpha1.JobPending { // only Job in Preparing, Running will reconcile the pod.
 		log.Info("reconcile Pod start")
 		if err := r.reconcilePod(ctx, phJob, podkey); err != nil {
 			log.Error(err, "reconcilePod error.")
@@ -301,7 +301,7 @@ func (r *PhJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *PhJobReconciler) reconcilePod(ctx context.Context, phJob *primehubv1alpha1.PhJob, podkey client.ObjectKey) error {
 	log := r.Log.WithValues("phjob", phJob.Namespace)
-	phJobReadyTimeout := false
+	phJobPreparingTimeout := false
 	admissionReject := false
 	createPodFailed := false
 	createPodFailedReason := ""
@@ -332,19 +332,19 @@ func (r *PhJobReconciler) reconcilePod(ctx context.Context, phJob *primehubv1alp
 	} else { // pod exist, check the status of current pod and update the phJob
 		log.Info("pod exist, check the status of current pod and update the phJob")
 		if pod.Status.Phase == corev1.PodPending { // if pod is in pending phase check timeout
-			if r.readyStateTimeout(phJob, pod) {
-				log.Info("phJob is in ready state longer then deadline. Going to requeue the phJob.")
+			if r.preparingStateTimeout(phJob, pod) {
+				log.Info("phJob is in preparing state longer then deadline. Going to requeue the phJob.")
 				if err := r.deletePod(ctx, podkey); err != nil {
-					log.Error(err, "failed to delete pod after ready state timeout")
+					log.Error(err, "failed to delete pod after preparing state timeout")
 					return err
 				}
-				phJobReadyTimeout = true
+				phJobPreparingTimeout = true
 			}
 		}
 
 	}
 
-	return r.updateStatus(ctx, phJob, pod, phJobReadyTimeout, admissionReject, createPodFailed, createPodFailedReason)
+	return r.updateStatus(ctx, phJob, pod, phJobPreparingTimeout, admissionReject, createPodFailed, createPodFailedReason)
 
 }
 
@@ -353,11 +353,11 @@ func (r *PhJobReconciler) updateStatus(
 	ctx context.Context,
 	phJob *primehubv1alpha1.PhJob,
 	pod *corev1.Pod,
-	phJobReadyTimeout, admissionReject, createPodFailed bool,
+	phJobPreparingTimeout, admissionReject, createPodFailed bool,
 	createPodFailedReason string) error {
 
 	log := r.Log.WithValues("phjob", phJob.Namespace)
-	if phJobReadyTimeout || admissionReject { // phjob ready state timeout or admission reject, requeue the phjob.
+	if phJobPreparingTimeout || admissionReject { // phjob preparing state timeout or admission reject, requeue the phjob.
 		*phJob.Status.Requeued += int32(1)
 		phJob.Status.Phase = primehubv1alpha1.JobPending
 		if admissionReject {
@@ -497,11 +497,11 @@ func (r *PhJobReconciler) handleTTL(ctx context.Context, phJob *primehubv1alpha1
 }
 
 // check whether the pod is in pending state longer than deadline
-func (r *PhJobReconciler) readyStateTimeout(phJob *primehubv1alpha1.PhJob, pod *corev1.Pod) bool {
+func (r *PhJobReconciler) preparingStateTimeout(phJob *primehubv1alpha1.PhJob, pod *corev1.Pod) bool {
 	now := metav1.Now()
 	start := pod.ObjectMeta.CreationTimestamp.Time
 	duration := now.Time.Sub(start)
-	return duration >= DefaultJobReadyTimeout
+	return duration >= DefaultJobPreparingTimeout
 }
 
 // check whether the job has ActiveDeadlineSeconds field set and if it is exceeded.

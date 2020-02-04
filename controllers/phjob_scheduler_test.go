@@ -165,7 +165,7 @@ func TestScheduleByStrictOrder1(t *testing.T) {
 
 	phJobScheduler.scheduleByStrictOrder(&phJobs, &usersRemainingQuota, groupRemainingQuota)
 
-	if phJobs[0].Status.Phase != primehubv1alpha1.JobReady || phJobs[1].Status.Phase != primehubv1alpha1.JobReady || phJobs[2].Status.Phase == primehubv1alpha1.JobReady {
+	if phJobs[0].Status.Phase != primehubv1alpha1.JobPreparing || phJobs[1].Status.Phase != primehubv1alpha1.JobPreparing || phJobs[2].Status.Phase == primehubv1alpha1.JobPreparing {
 		t.Error("Wrong Scheduling")
 	}
 }
@@ -194,7 +194,7 @@ func TestScheduleByStrictOrder2(t *testing.T) {
 
 	phJobScheduler.scheduleByStrictOrder(&phJobs, &usersRemainingQuota, groupRemainingQuota)
 
-	if phJobs[0].Status.Phase != primehubv1alpha1.JobReady || phJobs[1].Status.Phase == primehubv1alpha1.JobReady || phJobs[2].Status.Phase == primehubv1alpha1.JobReady {
+	if phJobs[0].Status.Phase != primehubv1alpha1.JobPreparing || phJobs[1].Status.Phase == primehubv1alpha1.JobPreparing || phJobs[2].Status.Phase == primehubv1alpha1.JobPreparing {
 		t.Error("Wrong Scheduling")
 	}
 }
@@ -223,7 +223,7 @@ func TestScheduleByStrictOrder3(t *testing.T) {
 
 	phJobScheduler.scheduleByStrictOrder(&phJobs, &usersRemainingQuota, groupRemainingQuota)
 
-	if phJobs[0].Status.Phase != primehubv1alpha1.JobReady || phJobs[1].Status.Phase == primehubv1alpha1.JobReady || phJobs[2].Status.Phase != primehubv1alpha1.JobReady {
+	if phJobs[0].Status.Phase != primehubv1alpha1.JobPreparing || phJobs[1].Status.Phase == primehubv1alpha1.JobPreparing || phJobs[2].Status.Phase != primehubv1alpha1.JobPreparing {
 		t.Error("Wrong Scheduling")
 	}
 }

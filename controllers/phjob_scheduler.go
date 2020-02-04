@@ -315,7 +315,7 @@ func (r *PHJobScheduler) scheduleByStrictOrder(phJobsRef *[]*primehubv1alpha1.Ph
 			break
 		}
 
-		phJob.Status.Phase = primehubv1alpha1.JobReady
+		phJob.Status.Phase = primehubv1alpha1.JobPreparing
 
 		if groupRemainingQuota.cpu != nil {
 			groupRemainingQuota.cpu.Sub(*instanceRequestedQuota.cpu)
@@ -425,7 +425,7 @@ func (r *PHJobScheduler) Schedule() {
 		}
 
 		for _, phJob := range phJobs {
-			if phJob.Status.Phase == primehubv1alpha1.JobReady {
+			if phJob.Status.Phase == primehubv1alpha1.JobPreparing {
 				r.Log.Info("scheduled", "phjob", phJob.Name)
 				phJobCopy := phJob.DeepCopy()
 				err := r.Status().Update(ctx, phJobCopy)
