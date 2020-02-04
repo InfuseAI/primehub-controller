@@ -432,8 +432,16 @@ func (r *PhJobReconciler) updateStatus(
 			now := metav1.Now()
 			phJob.Status.StartTime = &now
 		}
-		phJob.Status.Reason = primehubv1alpha1.JobReasonPodRunning
-		phJob.Status.Message = "Job is currently running"
+
+		// when node lost, pod will keep in running phase,
+		// so we should show the correct message
+		if pod.Status.Reason == "NodeLost" {
+			phJob.Status.Reason = primehubv1alpha1.JobReasonPodRunning
+			phJob.Status.Message = pod.Status.Message
+		} else {
+			phJob.Status.Reason = primehubv1alpha1.JobReasonPodRunning
+			phJob.Status.Message = "Job is currently running"
+		}
 	}
 
 	log.Info("phJob phase: ", "phase", phJob.Status.Phase)
