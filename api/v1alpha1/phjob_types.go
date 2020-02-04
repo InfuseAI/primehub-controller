@@ -38,6 +38,21 @@ const (
 	JobUnknown   PhJobPhase = "Unknown"
 )
 
+type PhJobReason string
+
+const (
+	JobReasonOverRequeueLimit     PhJobReason = "OverRequeueLimit"
+	JobReasonOverActivateDeadline PhJobReason = "OverActivateDeadline"
+	JobReasonOverQuota            PhJobReason = "OverQuota"
+	JobReasonCancelled            PhJobReason = "Cancelled"
+	JobReasonPodCreationFailed    PhJobReason = "PodCreationFailed"
+	JobReasonPodFailed            PhJobReason = "PodFailed"
+	JobReasonPodUnknown           PhJobReason = "PodUnknown"
+	JobReasonPodPending           PhJobReason = "PodPending"
+	JobReasonPodRunning           PhJobReason = "PodRunning"
+	JobReasonPodSucceeded         PhJobReason = "PodSucceeded"
+)
+
 // PhJobSpec defines the desired state of PhJob
 type PhJobSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
@@ -61,7 +76,7 @@ type PhJobStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 	Phase      PhJobPhase   `json:"phase"`
-	Reason     string       `json:"reason,omitempty"`
+	Reason     PhJobReason  `json:"reason,omitempty"`
 	Message    string       `json:"message,omitempty"`
 	PodName    string       `json:"podName,omitempty"`
 	StartTime  *metav1.Time `json:"startTime,omitempty"`

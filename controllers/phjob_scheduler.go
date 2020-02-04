@@ -377,7 +377,8 @@ func (r *PHJobScheduler) Schedule() {
 		if valid == false {
 			phJobCopy := phJob.DeepCopy()
 			phJobCopy.Status.Phase = primehubv1alpha1.JobFailed
-			phJobCopy.Status.Reason = "Your instance type resource limit is bigger than your user or group quota."
+			phJobCopy.Status.Reason = primehubv1alpha1.JobReasonOverQuota
+			phJobCopy.Status.Message = "Your instance type resource limit is bigger than your user or group quota."
 			now := metav1.Now()
 			phJobCopy.Status.FinishTime = &now
 			err := r.Status().Update(ctx, phJobCopy)
