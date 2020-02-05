@@ -98,6 +98,9 @@ func NewSpawnerByData(data DtoData, groupName string, instanceTypeName string, i
 	// Dataset
 	spawner.applyDatasets(data.User.Groups, groupName)
 
+	// User and Group env variables
+	spawner.applyUserAndGroupEnv(data.User.Username, groupName)
+
 	return spawner, nil
 }
 
@@ -504,6 +507,20 @@ func (spawner *Spawner) applyImageForImageSpec(spec DtoImageSpec, isGpu bool) {
 	}
 
 	spawner.imagePullSecret = spec.PullSecret
+}
+
+func (spawner *Spawner) applyUserAndGroupEnv(userName string, groupName string) {
+	user := corev1.EnvVar{
+		Name:  "PRIMEHUB_USER",
+		Value: userName,
+	}
+
+	group := corev1.EnvVar{
+		Name:  "PRIMEHUB_GROUP",
+		Value: groupName,
+	}
+
+	spawner.env = append(spawner.env, user, group)
 }
 
 func (spawner *Spawner) BuildPodSpec(podSpec *corev1.PodSpec) {

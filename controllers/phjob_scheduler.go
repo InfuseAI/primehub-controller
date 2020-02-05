@@ -25,7 +25,7 @@ var (
 
 	groupAggregationKey = "primehub.io/group"
 	userAggregationKey  = "primehub.io/user"
-	cacheExpiredTime    = time.Minute * 10
+	cacheExpiredTime    = time.Minute
 )
 
 // nil means it doesn't limit the quota
