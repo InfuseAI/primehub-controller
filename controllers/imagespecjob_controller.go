@@ -39,6 +39,8 @@ type ImageSpecJobReconciler struct {
 	client.Client
 	Log    logr.Logger
 	Scheme *runtime.Scheme
+
+	EphemeralStorage resource.Quantity
 }
 
 // +kubebuilder:rbac:groups=primehub.io,resources=imagespecjobs,verbs=get;list;watch;create;update;patch;delete
@@ -95,7 +97,7 @@ func (r *ImageSpecJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 		}
 
 		dockerfile := generateDockerfile(imageSpecJob)
-		pod = *buildPod(imageSpecJob, podName, dockerfile)
+		pod = *r.buildPod(imageSpecJob, podName, dockerfile)
 		if err := ctrl.SetControllerReference(&imageSpecJob, &pod, r.Scheme); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -211,11 +213,10 @@ func generateRandomString(n int) (string, error) {
 	return string(bytes), nil
 }
 
-func buildPod(imageSpecJob primehubv1alpha1.ImageSpecJob, podName string, dockerfile string) *corev1.Pod {
+func (r *ImageSpecJobReconciler) buildPod(imageSpecJob primehubv1alpha1.ImageSpecJob, podName string, dockerfile string) *corev1.Pod {
 	containerName := "build-and-push"
 	containerImage := "quay.io/buildah/stable:v1.11.3"
 	privileged := true
-	sizeLimit, _ := resource.ParseQuantity("10Gi")
 
 	podResources := corev1.ResourceRequirements{}
 	if len(viper.GetStringMap("customimage.buildjob.resources.requests")) > 0 {
@@ -285,7 +286,7 @@ func buildPod(imageSpecJob primehubv1alpha1.ImageSpecJob, podName string, docker
 					Name: "varlibcontainers",
 					VolumeSource: corev1.VolumeSource{
 						EmptyDir: &corev1.EmptyDirVolumeSource{
-							SizeLimit: &sizeLimit,
+							SizeLimit: &r.EphemeralStorage,
 						},
 					},
 				},
