@@ -46,8 +46,6 @@ func init() {
 }
 
 func main() {
-	loadConfig()
-
 	var metricsAddr string
 	var enableLeaderElection bool
 	var debug bool
@@ -75,6 +73,8 @@ func main() {
 		o.Level = &l
 	}))
 
+	loadConfig()
+
 	stopChan := ctrl.SetupSignalHandler()
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
@@ -97,9 +97,10 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controllers.ImageSpecJobReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("ImageSpecJob"),
-		Scheme: mgr.GetScheme(),
+		Client:           mgr.GetClient(),
+		Log:              ctrl.Log.WithName("controllers").WithName("ImageSpecJob"),
+		Scheme:           mgr.GetScheme(),
+		EphemeralStorage: resource.MustParse(viper.GetString("customImage.buildJob.ephemeralStorage")),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ImageSpecJob")
 		os.Exit(1)
@@ -201,6 +202,13 @@ func loadConfig() {
 	// Check jobSubmission.workingDirSize must correct
 	if _, err := resource.ParseQuantity(viper.GetString("jobSubmission.workingDirSize")); err != nil {
 		panic(fmt.Errorf("cannot parse jobSubmission.workingDirSize: %v", err))
+	}
+
+	viper.SetDefault("customImage.buildJob.ephemeralStorage", "10Gi")
+	// Check customImage.buildJob.ephemeralStorage
+	if _, err := resource.ParseQuantity(viper.GetString("customImage.buildJob.ephemeralStorage")); err != nil {
+		setupLog.Info("cannot parse customImage.buildJob.ephemeralStorage, use default value")
+		viper.Set("customImage.buildJob.ephemeralStorage", "10Gi")
 	}
 
 	// Check customImage.buildJob.resources
