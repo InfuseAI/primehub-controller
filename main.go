@@ -18,18 +18,17 @@ package main
 import (
 	"flag"
 	"fmt"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"os"
+	primehubv1alpha1 "primehub-controller/api/v1alpha1"
 	"primehub-controller/pkg/graphql"
 	"time"
-
-	primehubv1alpha1 "primehub-controller/api/v1alpha1"
 
 	"primehub-controller/controllers"
 
 	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/wait"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -153,14 +152,21 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err = (&controllers.PhScheduleReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("PhSchedule"),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "PhSchedule")
+		os.Exit(1)
+	}
+	// +kubebuilder:scaffold:builder
+
 	phJobScheduler := controllers.PHJobScheduler{
 		Client:        mgr.GetClient(),
 		Log:           ctrl.Log.WithName("scheduler").WithName("PhJob"),
 		GraphqlClient: graphqlClient,
 	}
 	go wait.Until(phJobScheduler.Schedule, time.Second*1, stopChan)
-
-	// +kubebuilder:scaffold:builder
 
 	setupLog.Info("starting manager")
 	if err := mgr.Start(stopChan); err != nil {

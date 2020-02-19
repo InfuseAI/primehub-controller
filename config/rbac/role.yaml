@@ -88,3 +88,23 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - primehub.io
+  resources:
+  - phschedules
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - primehub.io
+  resources:
+  - phschedules/status
+  verbs:
+  - get
+  - patch
+  - update

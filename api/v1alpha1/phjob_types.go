@@ -84,6 +84,11 @@ type PhJobStatus struct {
 	Requeued   *int32       `json:"requeued,omitempty"`
 }
 
+type PhJobTemplateSpec struct {
+	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
+	Spec PhJobSpec `json:"spec,omitempty" protobuf:"bytes,2,opt,name=spec"`
+}
+
 // +kubebuilder:subresource:status
 // +kubebuilder:object:root=true
 // +kubebuilder:printcolumn:name="User",type="string",JSONPath=".spec.userName"
