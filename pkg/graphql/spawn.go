@@ -211,8 +211,9 @@ func (spawner *Spawner) applyVolumeForGroup(launchGroup string, group DtoGroup) 
 		return
 	}
 
-	name := "project-" + strings.ToLower(group.Name)
-	mountPath := "/project/" + group.Name
+	groupName := strings.ToLower(strings.ReplaceAll(group.Name, "_", "-"))
+	name := "project-" + groupName
+	mountPath := "/project/" + groupName
 	homeSymlink := true
 	if group.HomeSymlink != nil {
 		homeSymlink = *group.HomeSymlink
