@@ -1,0 +1,32 @@
+apiVersion: primehub.io/v1alpha1
+kind: PhSchedule
+metadata:
+  name: schedule-zt2f4m
+  namespace: hub
+spec:
+  # The schedule setting
+  schedule:
+    type: "custom"
+    # The schedule in Cron format, see https://en.wikipedia.org/wiki/Cron.
+    cron: "0 0 1 * *"
+  jobTemplate:
+    # Standard object's metadata of the jobs created from this template.
+    metadata:
+      annotations: {}
+      labels: {}
+    # Specification of the desired behavior of the phjob.
+    spec:
+      command: |-
+        echo "helloworld"
+      displayName: hello
+      userId: de8c7e02-5665-4d27-a098-15c9f5c9ed82
+      userName: phadmin
+      groupId: e0822034-0e23-41ac-9254-d1952d524869
+      groupName: phusers
+      image: base-notebook
+      instanceType: cpu-only
+status:
+  # If the cron format correct
+  valid: true
+  # Next run time
+  nextRunTime: "2020-03-01T00:00:00Z"
