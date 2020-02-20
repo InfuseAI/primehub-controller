@@ -1,3 +1,10 @@
+![logo](https://github.com/InfuseAI/primehub/raw/master/docs/media/logo.png?raw=true "PrimeHub")
+
+[![CircleCI](https://circleci.com/gh/InfuseAI/primehub.svg?style=svg)](https://circleci.com/gh/InfuseAI/primehub-controller)
+[![ee docker](https://img.shields.io/docker/pulls/infuseai/primehub-controller-ee?label=ee%20docker%20pulls)](https://hub.docker.com/r/infuseai/primehub-controller-ee)
+[![ce docker](https://img.shields.io/docker/pulls/infuseai/primehub-controller?label=ce%20docker%20pulls)](https://hub.docker.com/r/infuseai/primehub-controller)
+
+
 # PrimeHub Controller
 
 ## Custom Image
