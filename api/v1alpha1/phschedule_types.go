@@ -20,27 +20,25 @@ import (
 )
 
 
-// +kubebuilder:validation:Enum=Inactive;Hourly;Daily;Weekly;Monthly;Yearly;Custom
-type ScheduleType string
+// +kubebuilder:validation:Enum=inactive;daily;weekly;monthly;custom
+type RecurrenceType string
 
 const (
-	ScheduleTypeInactive ScheduleType = "Inactive"
-	ScheduleTypeHourly ScheduleType = "Hourly"
-	ScheduleTypeDaily ScheduleType = "Daily"
-	ScheduleTypeWeekly ScheduleType = "Weekly"
-	ScheduleTypeMonthly ScheduleType = "Monthly"
-	ScheduleTypeYearly ScheduleType = "Yearly"
-	ScheduleTypeCustom ScheduleType = "Custom"
+	RecurrenceTypeInactive RecurrenceType = "inactive"
+	RecurrenceTypeDaily RecurrenceType = "daily"		// 0 4 * * *
+	RecurrenceTypeWeekly RecurrenceType = "weekly"		// 0 4 * * 0
+	RecurrenceTypeMonthly RecurrenceType = "monthly"	// 0 4 1 * *
+	RecurrenceTypeCustom RecurrenceType = "custom"
 )
 
-type ScheduleOption struct {
-	Type ScheduleType `json:"type"`
+type Recurrence struct {
+	Type RecurrenceType `json:"type"`
 	Cron string `json:"cron,omitempty"`
 }
 
 // PhScheduleSpec defines the desired state of PhSchedule
 type PhScheduleSpec struct {
-	Schedule ScheduleOption `json:"schedule"`
+	Recurrence Recurrence `json:"recurrence"`
 	JobTemplate PhJobTemplateSpec `json:"jobTemplate"`
 }
 

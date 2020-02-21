@@ -95,26 +95,24 @@ spec:
                   - userId
                   type: object
               type: object
-            schedule:
+            recurrence:
               properties:
                 cron:
                   type: string
                 type:
                   enum:
-                  - Inactive
-                  - Hourly
-                  - Daily
-                  - Weekly
-                  - Monthly
-                  - Yearly
-                  - Custom
+                  - inactive
+                  - daily
+                  - weekly
+                  - monthly
+                  - custom
                   type: string
               required:
               - type
               type: object
           required:
           - jobTemplate
-          - schedule
+          - recurrence
           type: object
         status:
           description: PhScheduleStatus defines the observed state of PhSchedule
