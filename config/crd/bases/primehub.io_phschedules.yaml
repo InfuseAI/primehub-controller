@@ -15,6 +15,9 @@ spec:
   - JSONPath: .spec.jobTemplate.spec.groupName
     name: Group
     type: string
+  - JSONPath: .status.active
+    name: Active
+    type: boolean
   - JSONPath: .status.nextRunTime
     name: NextRun
     type: string
@@ -28,7 +31,8 @@ spec:
     plural: phschedules
     singular: phschedule
   scope: ""
-  subresources: {}
+  subresources:
+    status: {}
   validation:
     openAPIV3Schema:
       description: PhSchedule is the Schema for the phschedules API
@@ -117,6 +121,10 @@ spec:
         status:
           description: PhScheduleStatus defines the observed state of PhSchedule
           properties:
+            active:
+              type: boolean
+            message:
+              type: string
             nextRunTime:
               format: date-time
               type: string

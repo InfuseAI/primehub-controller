@@ -86,7 +86,7 @@ type PhJobStatus struct {
 
 type PhJobTemplateSpec struct {
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
-	Spec PhJobSpec `json:"spec,omitempty" protobuf:"bytes,2,opt,name=spec"`
+	Spec              PhJobSpec `json:"spec,omitempty" protobuf:"bytes,2,opt,name=spec"`
 }
 
 // +kubebuilder:subresource:status
