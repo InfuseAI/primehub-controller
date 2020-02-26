@@ -49,7 +49,7 @@ type PhScheduleReconciler struct {
 
 func (r *PhScheduleReconciler) buildPhJob(phSchedule *primehubv1alpha1.PhSchedule) (*primehubv1alpha1.PhJob, error) {
 	log := r.Log.WithValues("phschedule", phSchedule.Name)
-	t := time.Now()
+	t := time.Now().UTC()
 	hash, err := generateRandomString(4)
 	phJobName := "job-" + t.Format("200601021504") + "-" + hash
 
@@ -87,12 +87,6 @@ func (r *PhScheduleReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 	ctx := context.Background()
 	log := r.Log.WithValues("phschedule", req.Name)
 
-	log.Info("start Reconcile")
-	startTime := time.Now()
-	defer func() {
-		log.Info("Finished Reconciling phJob ", "ReconcileTime", time.Since(startTime))
-	}()
-
 	phSchedule := &primehubv1alpha1.PhSchedule{}
 	if err := r.Get(ctx, req.NamespacedName, phSchedule); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -102,6 +96,12 @@ func (r *PhScheduleReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 			log.Error(err, "unable to fetch PhShceduleJob")
 		}
 	}
+
+	log.Info("start Reconcile")
+	startTime := time.Now()
+	defer func() {
+		log.Info("Finished Reconciling phSchedule ", "phSchedule", phSchedule, "ReconcileTime", time.Since(startTime))
+	}()
 
 	phSchedule = phSchedule.DeepCopy()
 	recurType := phSchedule.Spec.Recurrence.Type
@@ -171,13 +171,19 @@ func (r *PhScheduleReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 		} else { // error occurs when creating pod
 			log.Error(err, "cron failed to create phJob", "phJob")
 		}
+
+		log.Info("[In Cron]: after create phjob update nextRunTime", "phSchedule", phSchedule.Name, "recurrence", recurrence, "nextRun", nextRun.String())
+		nextRun = metav1.NewTime(r.PhScheduleCronMap[phSchedule.Name].c.Entry(phScheduleCron.entryID).Next)
+		phSchedule.Status.NextRunTime = &nextRun
+		if err := r.updatePhScheduleStatus(ctx, phSchedule); err != nil {
+		}
 	}
 
 	if !ok { // phSchedule has no cron in controller yet, create one
 		log.Info("phSchedule has no cron, create one")
 		phScheduleCron = &PhScheduleCron{}
 
-		c := cron.New()
+		c := cron.New(cron.WithLocation(time.UTC)) // use UTC TimeZone
 		entryID, _ = c.AddFunc(recurrence, createPhJob)
 
 		phScheduleCron.c = c
@@ -189,8 +195,9 @@ func (r *PhScheduleReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 		r.PhScheduleCronMap[phSchedule.Name] = phScheduleCron
 
 	} else { // phSchedule already has cron in controller, check if the spec changed
-
+		log.Info("phSchedule has cron, check if the spec changed ")
 		if recurType != phScheduleCron.recurType || recurrence != phScheduleCron.recurrence {
+			log.Info("phSchedule spec changed ")
 			// clear old cron job entry, and create a new one
 			phScheduleCron.c.Stop()
 			phScheduleCron.c.Remove(phScheduleCron.entryID)
@@ -202,7 +209,6 @@ func (r *PhScheduleReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 			phScheduleCron.recurrence = recurrence
 			phScheduleCron.c.Start()
 		}
-
 	}
 
 	nextRun = metav1.NewTime(r.PhScheduleCronMap[phSchedule.Name].c.Entry(phScheduleCron.entryID).Next)
@@ -215,7 +221,7 @@ func (r *PhScheduleReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 		return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
 	}
 
-	return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
+	return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
 }
 
 func (r *PhScheduleReconciler) SetupWithManager(mgr ctrl.Manager) error {

@@ -52,7 +52,7 @@ type PhScheduleStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:printcolumn:name="User",type="string",JSONPath=".spec.jobTemplate.spec.userName"
 // +kubebuilder:printcolumn:name="Group",type="string",JSONPath=".spec.jobTemplate.spec.groupName"
-// +kubebuilder:printcolumn:name="Active",type="boolean",JSONPath=".status.active"
+// +kubebuilder:printcolumn:name="Valid",type="boolean",JSONPath=".status.valid"
 // +kubebuilder:printcolumn:name="NextRun",type="string",JSONPath=".status.nextRunTime"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:subresource:status

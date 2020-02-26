@@ -15,8 +15,8 @@ spec:
   - JSONPath: .spec.jobTemplate.spec.groupName
     name: Group
     type: string
-  - JSONPath: .status.active
-    name: Active
+  - JSONPath: .status.valid
+    name: Valid
     type: boolean
   - JSONPath: .status.nextRunTime
     name: NextRun

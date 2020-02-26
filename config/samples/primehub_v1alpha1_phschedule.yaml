@@ -95,3 +95,67 @@ status:
   # Next run time
   nextRunTime: "2020-03-01T00:00:00Z"
   active: true
+---
+apiVersion: primehub.io/v1alpha1
+kind: PhSchedule
+metadata:
+  generateName: schedule-
+  namespace: hub
+spec:
+  # The schedule setting
+  recurrence:
+    type: "daily"
+  jobTemplate:
+    # Standard object's metadata of the jobs created from this template.
+    metadata:
+      annotations: {}
+      labels: {}
+    # Specification of the desired behavior of the phjob.
+    spec:
+      command: |-
+        echo "helloworld"
+      displayName: hello
+      userId: 65fa98af-62d7-4efc-8587
+      userName: phadmin
+      groupId: da4cab31-5d86-4313-8084-e3d9f554e4d8
+      groupName: phusers
+      image: base-notebook
+      instanceType: cpu-only
+status:
+  # If the cron format correct
+  valid: true
+  # Next run time
+  nextRunTime: "2020-03-01T00:00:00Z"
+  active: true
+---
+apiVersion: primehub.io/v1alpha1
+kind: PhSchedule
+metadata:
+  generateName: schedule-
+  namespace: hub
+spec:
+  # The schedule setting
+  recurrence:
+    type: "daily"
+  jobTemplate:
+    # Standard object's metadata of the jobs created from this template.
+    metadata:
+      annotations: {}
+      labels: {}
+    # Specification of the desired behavior of the phjob.
+    spec:
+      command: |-
+        echo "helloworld"
+      displayName: hello
+      userId: 65fa98af-62d7-4efc-8587
+      userName: phadmin
+      groupId: da4cab31-5d86-4313-8084-e3d9f554e4d8
+      groupName: phusers
+      image: base-notebook
+      instanceType: cpu
+status:
+  # If the cron format correct
+  valid: true
+  # Next run time
+  nextRunTime: "2020-03-01T00:00:00Z"
+  active: true
