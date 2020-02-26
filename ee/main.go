@@ -151,8 +151,10 @@ func main() {
 	}
 
 	if err = (&controllers.PhScheduleReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("PhSchedule"),
+		Client:            mgr.GetClient(),
+		Log:               ctrl.Log.WithName("controllers").WithName("PhSchedule"),
+		PhScheduleCronMap: make(map[string]*controllers.PhScheduleCron),
+		GraphqlClient:     graphqlClient,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PhSchedule")
 		os.Exit(1)
