@@ -147,7 +147,7 @@ spec:
       command: |-
         echo "helloworld"
       displayName: hello
-      userId: 65fa98af-62d7-4efc-8587
+      userId: 65fa98af-62d7-4efc-8587-193024d1ff0e
       userName: phadmin
       groupId: da4cab31-5d86-4313-8084-e3d9f554e4d8
       groupName: phusers

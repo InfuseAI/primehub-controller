@@ -43,16 +43,15 @@ type PhScheduleSpec struct {
 
 // PhScheduleStatus defines the observed state of PhSchedule
 type PhScheduleStatus struct {
-	Valid       bool         `json:"valid,omitempty"`
+	Invalid     bool         `json:"invalid,omitempty"`
 	NextRunTime *metav1.Time `json:"nextRunTime,omitempty"`
 	Message     string       `json:"message,omitempty"`
-	Active      bool         `json:"active,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:printcolumn:name="User",type="string",JSONPath=".spec.jobTemplate.spec.userName"
 // +kubebuilder:printcolumn:name="Group",type="string",JSONPath=".spec.jobTemplate.spec.groupName"
-// +kubebuilder:printcolumn:name="Valid",type="boolean",JSONPath=".status.valid"
+// +kubebuilder:printcolumn:name="Invalid",type="boolean",JSONPath=".status.invalid"
 // +kubebuilder:printcolumn:name="NextRun",type="string",JSONPath=".status.nextRunTime"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:subresource:status

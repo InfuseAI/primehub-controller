@@ -15,8 +15,8 @@ spec:
   - JSONPath: .spec.jobTemplate.spec.groupName
     name: Group
     type: string
-  - JSONPath: .status.valid
-    name: Valid
+  - JSONPath: .status.invalid
+    name: Invalid
     type: boolean
   - JSONPath: .status.nextRunTime
     name: NextRun
@@ -121,15 +121,13 @@ spec:
         status:
           description: PhScheduleStatus defines the observed state of PhSchedule
           properties:
-            active:
+            invalid:
               type: boolean
             message:
               type: string
             nextRunTime:
               format: date-time
               type: string
-            valid:
-              type: boolean
           type: object
       type: object
   version: v1alpha1
