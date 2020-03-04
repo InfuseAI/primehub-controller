@@ -27,10 +27,9 @@ spec:
       instanceType: cpu-only
 status:
   # If the cron format correct
-  valid: true
+  invalid: false
   # Next run time
   nextRunTime: "2020-03-01T00:00:00Z"
-  active: true
 ---
 apiVersion: primehub.io/v1alpha1
 kind: PhSchedule
@@ -59,10 +58,9 @@ spec:
       instanceType: cpu-only
 status:
   # If the cron format correct
-  valid: true
+  invalid: false
   # Next run time
   nextRunTime: "2020-03-01T00:00:00Z"
-  active: true
 ---
 apiVersion: primehub.io/v1alpha1
 kind: PhSchedule
@@ -91,10 +89,9 @@ spec:
       instanceType: cpu-only
 status:
   # If the cron format correct
-  valid: true
+  invalid: false
   # Next run time
   nextRunTime: "2020-03-01T00:00:00Z"
-  active: true
 ---
 apiVersion: primehub.io/v1alpha1
 kind: PhSchedule
@@ -123,10 +120,9 @@ spec:
       instanceType: cpu-only
 status:
   # If the cron format correct
-  valid: true
+  invalid: false
   # Next run time
   nextRunTime: "2020-03-01T00:00:00Z"
-  active: true
 ---
 apiVersion: primehub.io/v1alpha1
 kind: PhSchedule
@@ -155,7 +151,6 @@ spec:
       instanceType: cpu
 status:
   # If the cron format correct
-  valid: true
+  invalid: false
   # Next run time
   nextRunTime: "2020-03-01T00:00:00Z"
-  active: true
