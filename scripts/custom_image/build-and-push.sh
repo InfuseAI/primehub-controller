@@ -16,13 +16,22 @@ function init() {
 }
 
 function build() {
-  local -a AUTFILE_FLAGS
+  local -a AUTHFILE_FLAGS
   echo "[Step: build]"
   echo "Fetching base image: $BASE_IMAGE"
   if [ -f $PULL_SECRET_AUTHFILE ]; then
     AUTHFILE_FLAGS+=(--authfile "$PULL_SECRET_AUTHFILE")
   fi
   buildah --storage-driver overlay "${AUTHFILE_FLAGS[@]}" pull $BASE_IMAGE
+  echo
+  echo "Obtaining USER from $BASE_IMAGE"
+  user=$(buildah --storage-driver overlay inspect --format '{{.OCIv1.Config.User}}' $BASE_IMAGE)
+  if [[ -n $user ]]; then
+    echo "Appending 'USER $user' to Dockerfile"
+    echo "USER $user" >> /Dockerfile
+  else
+    echo "Failed to obtain. Skipped"
+  fi
   echo
   echo "Building image: $TARGET_IMAGE"
   buildah --storage-driver overlay bud -f /Dockerfile -t $TARGET_IMAGE .
