@@ -34,11 +34,10 @@ import (
 )
 
 type PhScheduleCron struct {
-	c             *cron.Cron
-	entryID       cron.EntryID
-	recurType     primehubv1alpha1.RecurrenceType
-	recurrence    string
-	prevPhJobName string
+	c          *cron.Cron
+	entryID    cron.EntryID
+	recurType  primehubv1alpha1.RecurrenceType
+	recurrence string
 	// (TODO) add timezone
 }
 
@@ -174,29 +173,23 @@ func (r *PhScheduleReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 	createPhJob := func() {
 		log.Info("phSchedule is triggered, create phJob", "phSchedule", phSchedule.Name)
 
-		prevPhJobName := r.PhScheduleCronMap[phSchedule.Name].prevPhJobName
 		prevPhJobIsRunning := false
 
-		if prevPhJobName != "" {
-			// get prev phjob
-			phJobKey := client.ObjectKey{
-				Namespace: req.Namespace,
-				Name:      prevPhJobName,
-			}
-			phJob := &primehubv1alpha1.PhJob{}
-			if err := r.Get(ctx, phJobKey, phJob); err != nil {
-				if apierrors.IsNotFound(err) {
-					log.Info("prev PhSchedule does not exist")
-					prevPhJobIsRunning = false
-				} else {
-					log.Info("unable to fetch prev PhShceduleJob")
-					prevPhJobIsRunning = false
-				}
-			} else { // successfully get prev phjob
-				if phJob.Status.Phase == primehubv1alpha1.JobRunning {
-					log.Info("previous phSchedule phjob is still running, will not spawn next phjob")
-					prevPhJobIsRunning = true
-				}
+		phJobs := primehubv1alpha1.PhJobList{}
+		labels := make(map[string]string)
+		labels["phjob.primehub.io/scheduledBy"] = phSchedule.Name
+
+		err := r.Client.List(ctx, &phJobs, client.MatchingLabels(labels))
+		if err != nil {
+			log.Error(err, "phSchedule list previous phjobs failed.")
+			return
+		}
+
+		for _, phJob := range phJobs.Items {
+			if phJob.Status.Phase == primehubv1alpha1.JobPending || phJob.Status.Phase == primehubv1alpha1.JobPreparing || phJob.Status.Phase == primehubv1alpha1.JobRunning {
+				prevPhJobIsRunning = true
+				log.Info("prev phjob is still running, will not spawn next phjob")
+				break
 			}
 		}
 
@@ -225,17 +218,15 @@ func (r *PhScheduleReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 			}
 
 			log.Info("phSchedule successfully create phJob", "phJob", phJob.ObjectMeta.Name)
-			prevPhJobName = phJob.ObjectMeta.Name
+
 		}
 
-		r.PhScheduleCronMap[phSchedule.Name].prevPhJobName = prevPhJobName
 		nextRun = metav1.NewTime(r.PhScheduleCronMap[phSchedule.Name].c.Entry(phScheduleCron.entryID).Next)
 		phSchedule.Status.NextRunTime = &nextRun
 		if err := r.updatePhScheduleStatus(ctx, phSchedule); err != nil {
 		}
 	}
 
-	prevPhJobName := ""
 	if !ok { // phSchedule has no cron in controller yet, create one
 		log.Info("phSchedule has no cron, create one")
 		phScheduleCron = &PhScheduleCron{}
@@ -245,7 +236,7 @@ func (r *PhScheduleReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 
 	} else { // phSchedule already has cron in controller, overwite the spec
 		log.Info("phSchedule has cron, overwrite the old cron function to make it consistent with the spec")
-		prevPhJobName = phScheduleCron.prevPhJobName
+
 		// clear old cron job entry, and create a new one
 		phScheduleCron.c.Stop()
 		phScheduleCron.c.Remove(phScheduleCron.entryID)
@@ -255,7 +246,7 @@ func (r *PhScheduleReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 	phScheduleCron.entryID = entryID
 	phScheduleCron.recurType = recurType
 	phScheduleCron.recurrence = recurrence
-	phScheduleCron.prevPhJobName = prevPhJobName
+
 	phScheduleCron.c.Start()
 	r.PhScheduleCronMap[phSchedule.Name] = phScheduleCron
 
