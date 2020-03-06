@@ -28,8 +28,9 @@ import (
 	primehubv1alpha1 "primehub-controller/api/v1alpha1"
 	"primehub-controller/pkg/graphql"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"primehub-controller/pkg/escapism"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type PhScheduleCron struct {
@@ -94,6 +95,15 @@ func (r *PhScheduleReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 	if err := r.Get(ctx, req.NamespacedName, phSchedule); err != nil {
 		if apierrors.IsNotFound(err) {
 			log.Info("PhSchedule deleted")
+
+			// if PhSchedule is deleted, we should also make sure they have no cron in controller
+			phScheduleCron, ok := r.PhScheduleCronMap[req.Name]
+			if ok {
+				phScheduleCron.c.Stop()
+				phScheduleCron.c.Remove(phScheduleCron.entryID)
+				delete(r.PhScheduleCronMap, req.Name)
+			}
+
 			return ctrl.Result{}, nil
 		} else {
 			log.Error(err, "unable to fetch PhShceduleJob")
@@ -163,28 +173,52 @@ func (r *PhScheduleReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 	createPhJob := func() {
 		log.Info("phSchedule is triggered, create phJob", "phSchedule", phSchedule.Name)
 
-		// Maybe the spec isn't changed, but change happens in primehub.
-		// In this case, the reconcile will not be triggered
-		// and the cron job will still be spawned.
-		// So we build the phjob again in the cron function.
-		// If there is anything changed in primehub, this will catch the error.
-		phJob, err := r.buildPhJob(phSchedule)
+		prevPhJobIsRunning := false
+
+		phJobs := primehubv1alpha1.PhJobList{}
+		labels := make(map[string]string)
+		labels["phjob.primehub.io/scheduledBy"] = phSchedule.Name
+
+		err := r.Client.List(ctx, &phJobs, client.MatchingLabels(labels))
 		if err != nil {
-			log.Error(err, "phSchedule is triggered, but failed when building phJob", "phSchedule", phSchedule.Name)
-			phSchedule.Status.Invalid = true
-			phSchedule.Status.Message = err.Error()
-			phSchedule.Status.NextRunTime = nil
-			if err := r.updatePhScheduleStatus(ctx, phSchedule); err != nil {
-			}
+			log.Error(err, "phSchedule list previous phjobs failed.")
 			return
 		}
 
-		err = r.Client.Create(ctx, phJob)
+		for _, phJob := range phJobs.Items {
+			if phJob.Status.Phase == primehubv1alpha1.JobPending || phJob.Status.Phase == primehubv1alpha1.JobPreparing || phJob.Status.Phase == primehubv1alpha1.JobRunning {
+				prevPhJobIsRunning = true
+				log.Info("prev phjob is still running, will not spawn next phjob")
+				break
+			}
+		}
 
-		if err == nil { // create phJob successfully
+		// if prev phjob doesn't exist or is not running we can spawn the next job
+		if prevPhJobIsRunning == false {
+			// Maybe the spec isn't changed, but change happens in primehub.
+			// In this case, the reconcile will not be triggered
+			// and the cron job will still be spawned.
+			// So we build the phjob again in the cron function.
+			// If there is anything changed in primehub, this will catch the error.
+			phJob, err := r.buildPhJob(phSchedule)
+			if err != nil {
+				log.Error(err, "phSchedule is triggered, but failed when building phJob", "phSchedule", phSchedule.Name)
+				phSchedule.Status.Invalid = true
+				phSchedule.Status.Message = err.Error()
+				phSchedule.Status.NextRunTime = nil
+				if err := r.updatePhScheduleStatus(ctx, phSchedule); err != nil {
+				}
+				return
+			}
+
+			err = r.Client.Create(ctx, phJob)
+
+			if err != nil { // error occurs when creating phjob
+				log.Error(err, "phSchedule failed to create phJob", "phJob")
+			}
+
 			log.Info("phSchedule successfully create phJob", "phJob", phJob.ObjectMeta.Name)
-		} else { // error occurs when creating pod
-			log.Error(err, "phSchedule failed to create phJob", "phJob")
+
 		}
 
 		nextRun = metav1.NewTime(r.PhScheduleCronMap[phSchedule.Name].c.Entry(phScheduleCron.entryID).Next)
@@ -212,6 +246,7 @@ func (r *PhScheduleReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 	phScheduleCron.entryID = entryID
 	phScheduleCron.recurType = recurType
 	phScheduleCron.recurrence = recurrence
+
 	phScheduleCron.c.Start()
 	r.PhScheduleCronMap[phSchedule.Name] = phScheduleCron
 
