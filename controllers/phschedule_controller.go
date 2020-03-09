@@ -257,7 +257,7 @@ func (r *PhScheduleReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 	entryID, err = phScheduleCron.c.AddFunc("CRON_TZ="+location+" "+recurrence, createPhJob) // use system timezone
 	if err != nil {
 		log.Error(err, "controller cannot create cron job")
-		phSchedule.Status.Invalid = false
+		phSchedule.Status.Invalid = true
 		phSchedule.Status.Message = "controller cannot create cron job. " + err.Error()
 		phSchedule.Status.NextRunTime = nil
 		if err := r.updatePhScheduleStatus(ctx, phSchedule); err != nil {
