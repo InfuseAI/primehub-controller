@@ -51,7 +51,9 @@ type PhScheduleReconciler struct {
 
 func (r *PhScheduleReconciler) buildPhJob(phSchedule *primehubv1alpha1.PhSchedule) (*primehubv1alpha1.PhJob, error) {
 	log := r.Log.WithValues("phschedule", phSchedule.Name)
-	t := time.Now().UTC()
+
+	t := time.Now().UTC() // generate job name with timestamp based on UTC
+
 	hash, err := generateRandomString(6)
 	phJobName := "job-" + t.Format("200601021504") + "-" + hash
 
@@ -155,11 +157,21 @@ func (r *PhScheduleReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 		return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
 	}
 
+	// fetch timezone from system to sync the timezone
+
+	location, err := r.GraphqlClient.FetchTimeZone()
+	if err != nil {
+		log.Error(err, "cannot fetch timezone through graphql from timezone")
+		return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
+	}
+
+	log.Info("current timezone location is: ", "timezone", location)
+
 	phScheduleCron, ok := r.PhScheduleCronMap[phSchedule.Name]
 	var nextRun metav1.Time
 	var entryID cron.EntryID
 
-	_, err := r.buildPhJob(phSchedule)
+	_, err = r.buildPhJob(phSchedule)
 	if err != nil {
 		phSchedule.Status.Invalid = true
 		phSchedule.Status.Message = err.Error()
@@ -231,7 +243,7 @@ func (r *PhScheduleReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 		log.Info("phSchedule has no cron, create one")
 		phScheduleCron = &PhScheduleCron{}
 
-		c := cron.New(cron.WithLocation(time.UTC)) // use UTC TimeZone
+		c := cron.New()
 		phScheduleCron.c = c
 
 	} else { // phSchedule already has cron in controller, overwite the spec
@@ -242,7 +254,18 @@ func (r *PhScheduleReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 		phScheduleCron.c.Remove(phScheduleCron.entryID)
 	}
 
-	entryID, _ = phScheduleCron.c.AddFunc(recurrence, createPhJob)
+	entryID, err = phScheduleCron.c.AddFunc("CRON_TZ="+location+" "+recurrence, createPhJob) // use system timezone
+	if err != nil {
+		log.Error(err, "controller cannot create cron job")
+		phSchedule.Status.Invalid = true
+		phSchedule.Status.Message = "controller cannot create cron job. " + err.Error()
+		phSchedule.Status.NextRunTime = nil
+		if err := r.updatePhScheduleStatus(ctx, phSchedule); err != nil {
+			return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
+		}
+		return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
+	}
+
 	phScheduleCron.entryID = entryID
 	phScheduleCron.recurType = recurType
 	phScheduleCron.recurrence = recurrence
