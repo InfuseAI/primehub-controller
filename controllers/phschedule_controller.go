@@ -49,11 +49,10 @@ type PhScheduleReconciler struct {
 	GraphqlClient     *graphql.GraphqlClient
 }
 
-func (r *PhScheduleReconciler) buildPhJob(phSchedule *primehubv1alpha1.PhSchedule, location string) (*primehubv1alpha1.PhJob, error) {
+func (r *PhScheduleReconciler) buildPhJob(phSchedule *primehubv1alpha1.PhSchedule) (*primehubv1alpha1.PhJob, error) {
 	log := r.Log.WithValues("phschedule", phSchedule.Name)
 
-	timeLocation, err := time.LoadLocation(location) // generate job name with timestamp based on current timezone
-	t := time.Now().In(timeLocation)
+	t := time.Now().UTC() // generate job name with timestamp based on UTC
 
 	hash, err := generateRandomString(6)
 	phJobName := "job-" + t.Format("200601021504") + "-" + hash
@@ -119,16 +118,6 @@ func (r *PhScheduleReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 		log.Info("Finished Reconciling phSchedule ", "phSchedule", phSchedule, "ReconcileTime", time.Since(startTime))
 	}()
 
-	// fetch timezone from system to sync the timezone
-
-	location, err := r.GraphqlClient.FetchTimeZone()
-	if err != nil {
-		log.Error(err, "cannot fetch timezone through graphql from timezone")
-		return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
-	}
-
-	log.Info("current timezone location is: ", "timezone", location)
-
 	phSchedule = phSchedule.DeepCopy()
 	recurType := phSchedule.Spec.Recurrence.Type
 	var recurrence string
@@ -168,11 +157,21 @@ func (r *PhScheduleReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 		return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
 	}
 
+	// fetch timezone from system to sync the timezone
+
+	location, err := r.GraphqlClient.FetchTimeZone()
+	if err != nil {
+		log.Error(err, "cannot fetch timezone through graphql from timezone")
+		return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
+	}
+
+	log.Info("current timezone location is: ", "timezone", location)
+
 	phScheduleCron, ok := r.PhScheduleCronMap[phSchedule.Name]
 	var nextRun metav1.Time
 	var entryID cron.EntryID
 
-	_, err = r.buildPhJob(phSchedule, location)
+	_, err = r.buildPhJob(phSchedule)
 	if err != nil {
 		phSchedule.Status.Invalid = true
 		phSchedule.Status.Message = err.Error()
@@ -213,7 +212,7 @@ func (r *PhScheduleReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 			// and the cron job will still be spawned.
 			// So we build the phjob again in the cron function.
 			// If there is anything changed in primehub, this will catch the error.
-			phJob, err := r.buildPhJob(phSchedule, location)
+			phJob, err := r.buildPhJob(phSchedule)
 			if err != nil {
 				log.Error(err, "phSchedule is triggered, but failed when building phJob", "phSchedule", phSchedule.Name)
 				phSchedule.Status.Invalid = true
