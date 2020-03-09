@@ -49,9 +49,12 @@ type PhScheduleReconciler struct {
 	GraphqlClient     *graphql.GraphqlClient
 }
 
-func (r *PhScheduleReconciler) buildPhJob(phSchedule *primehubv1alpha1.PhSchedule) (*primehubv1alpha1.PhJob, error) {
+func (r *PhScheduleReconciler) buildPhJob(phSchedule *primehubv1alpha1.PhSchedule, location string) (*primehubv1alpha1.PhJob, error) {
 	log := r.Log.WithValues("phschedule", phSchedule.Name)
-	t := time.Now().UTC()
+
+	timeLocation, err := time.LoadLocation(location) // generate job name with timestamp based on current timezone
+	t := time.Now().In(timeLocation)
+
 	hash, err := generateRandomString(6)
 	phJobName := "job-" + t.Format("200601021504") + "-" + hash
 
@@ -116,6 +119,16 @@ func (r *PhScheduleReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 		log.Info("Finished Reconciling phSchedule ", "phSchedule", phSchedule, "ReconcileTime", time.Since(startTime))
 	}()
 
+	// fetch timezone from system to sync the timezone
+
+	location, err := r.GraphqlClient.FetchTimeZone()
+	if err != nil {
+		log.Error(err, "cannot fetch timezone through graphql from timezone")
+		return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
+	}
+
+	log.Info("current timezone location is: ", "timezone", location)
+
 	phSchedule = phSchedule.DeepCopy()
 	recurType := phSchedule.Spec.Recurrence.Type
 	var recurrence string
@@ -159,7 +172,7 @@ func (r *PhScheduleReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 	var nextRun metav1.Time
 	var entryID cron.EntryID
 
-	_, err := r.buildPhJob(phSchedule)
+	_, err = r.buildPhJob(phSchedule, location)
 	if err != nil {
 		phSchedule.Status.Invalid = true
 		phSchedule.Status.Message = err.Error()
@@ -200,7 +213,7 @@ func (r *PhScheduleReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 			// and the cron job will still be spawned.
 			// So we build the phjob again in the cron function.
 			// If there is anything changed in primehub, this will catch the error.
-			phJob, err := r.buildPhJob(phSchedule)
+			phJob, err := r.buildPhJob(phSchedule, location)
 			if err != nil {
 				log.Error(err, "phSchedule is triggered, but failed when building phJob", "phSchedule", phSchedule.Name)
 				phSchedule.Status.Invalid = true
@@ -231,7 +244,7 @@ func (r *PhScheduleReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 		log.Info("phSchedule has no cron, create one")
 		phScheduleCron = &PhScheduleCron{}
 
-		c := cron.New(cron.WithLocation(time.UTC)) // use UTC TimeZone
+		c := cron.New()
 		phScheduleCron.c = c
 
 	} else { // phSchedule already has cron in controller, overwite the spec
@@ -242,7 +255,7 @@ func (r *PhScheduleReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 		phScheduleCron.c.Remove(phScheduleCron.entryID)
 	}
 
-	entryID, _ = phScheduleCron.c.AddFunc(recurrence, createPhJob)
+	entryID, _ = phScheduleCron.c.AddFunc("CRON_TZ="+location+" "+recurrence, createPhJob) // use system timezone
 	phScheduleCron.entryID = entryID
 	phScheduleCron.recurType = recurType
 	phScheduleCron.recurrence = recurrence

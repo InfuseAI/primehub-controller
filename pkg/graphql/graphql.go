@@ -319,3 +319,49 @@ func (c GraphqlClient) FetchInstanceTypeInfo(instanceTypeId string) (*DtoInstanc
 	}
 	return &instanceType, nil
 }
+
+// FetchTimeZone get timezone from system
+func (c GraphqlClient) FetchTimeZone() (string, error) {
+
+	query := `
+	query {
+		system {
+			timezone {
+			name
+			offset
+			}
+		}
+	}
+	`
+	requestData := map[string]interface{}{
+		"query": query,
+	}
+
+	body, err := c.QueryServer(requestData)
+	if err != nil {
+		return "", err
+	}
+	data := map[string]interface{}{}
+	json.Unmarshal(body, &data)
+
+	data, ok := data["data"].(map[string]interface{})
+	if !ok {
+		return "", errors.New("can not find data in response")
+	}
+
+	_system, ok := data["system"].(map[string]interface{})
+	if !ok {
+		return "", errors.New("can not find system in response")
+	}
+
+	_timezone, ok := _system["timezone"].(map[string]interface{})
+	if !ok {
+		return "", errors.New("can not find system.timezone in response")
+	}
+
+	if _timezone["name"] == nil {
+		return "", errors.New("there is no system.timezone.name in response")
+	}
+
+	return _timezone["name"].(string), nil
+}
