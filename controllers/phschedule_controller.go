@@ -254,7 +254,18 @@ func (r *PhScheduleReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 		phScheduleCron.c.Remove(phScheduleCron.entryID)
 	}
 
-	entryID, _ = phScheduleCron.c.AddFunc("CRON_TZ="+location+" "+recurrence, createPhJob) // use system timezone
+	entryID, err = phScheduleCron.c.AddFunc("CRON_TZ="+location+" "+recurrence, createPhJob) // use system timezone
+	if err != nil {
+		log.Error(err, "controller cannot create cron job")
+		phSchedule.Status.Invalid = false
+		phSchedule.Status.Message = "controller cannot create cron job. " + err.Error()
+		phSchedule.Status.NextRunTime = nil
+		if err := r.updatePhScheduleStatus(ctx, phSchedule); err != nil {
+			return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
+		}
+		return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
+	}
+
 	phScheduleCron.entryID = entryID
 	phScheduleCron.recurType = recurType
 	phScheduleCron.recurrence = recurrence
