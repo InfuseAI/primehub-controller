@@ -134,7 +134,7 @@ func (r *PhScheduleReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 			if err := r.updatePhScheduleStatus(ctx, phSchedule); err != nil {
 				return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
 			}
-			return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
+			return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 		}
 	} else {
 		recurrence = getDefinedRecurrence(recurType)
@@ -154,7 +154,7 @@ func (r *PhScheduleReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 			return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
 		}
 		log.Info("the phSchedule is inactive, so delete cron and return")
-		return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
+		return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 	}
 
 	// fetch timezone from system to sync the timezone
@@ -162,7 +162,7 @@ func (r *PhScheduleReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 	location, err := r.GraphqlClient.FetchTimeZone()
 	if err != nil {
 		log.Error(err, "cannot fetch timezone through graphql from timezone")
-		return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
+		return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 	}
 
 	log.Info("current timezone location is: ", "timezone", location)
@@ -179,7 +179,7 @@ func (r *PhScheduleReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 		if err := r.updatePhScheduleStatus(ctx, phSchedule); err != nil {
 			return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
 		}
-		return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
+		return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 	}
 
 	createPhJob := func() {
@@ -282,7 +282,7 @@ func (r *PhScheduleReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 		return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
 	}
 
-	return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
+	return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 }
 
 func (r *PhScheduleReconciler) SetupWithManager(mgr ctrl.Manager) error {
