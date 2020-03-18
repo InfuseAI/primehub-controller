@@ -209,11 +209,12 @@ func loadConfig() {
 		panic(fmt.Errorf("cannot parse jobSubmission.workingDirSize: %v", err))
 	}
 
-	viper.SetDefault("customImage.buildJob.ephemeralStorage", "10Gi")
+	customImageDefaultEphemeralStorage := "30Gi"
+	viper.SetDefault("customImage.buildJob.ephemeralStorage", customImageDefaultEphemeralStorage)
 	// Check customImage.buildJob.ephemeralStorage
 	if _, err := resource.ParseQuantity(viper.GetString("customImage.buildJob.ephemeralStorage")); err != nil {
 		setupLog.Info("cannot parse customImage.buildJob.ephemeralStorage, use default value")
-		viper.Set("customImage.buildJob.ephemeralStorage", "10Gi")
+		viper.Set("customImage.buildJob.ephemeralStorage", customImageDefaultEphemeralStorage)
 	}
 
 	// Check customImage.buildJob.resources
