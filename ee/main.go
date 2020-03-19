@@ -159,6 +159,13 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "PhSchedule")
 		os.Exit(1)
 	}
+	if err = (&controllers.PhDeploymentReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("PhDeployment"),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "PhDeployment")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	phJobScheduler := controllers.PHJobScheduler{

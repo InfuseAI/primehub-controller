@@ -71,6 +71,26 @@ rules:
 - apiGroups:
   - primehub.io
   resources:
+  - phdeployments
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - primehub.io
+  resources:
+  - phdeployments/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - primehub.io
+  resources:
   - phjobs
   verbs:
   - create
