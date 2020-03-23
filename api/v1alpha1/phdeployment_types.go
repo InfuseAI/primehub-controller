@@ -32,11 +32,12 @@ const (
 type PhDeploymentSpec struct {
 	DisplayName string `json:"displayName"`
 	UserId      string `json:"userId"`
-	UserName    string `json:"userName,omitempty"`
+	UserName    string `json:"userName"`
 	GroupId     string `json:"groupId"`
 	GroupName   string `json:"groupName"`
 	Stop        bool   `json:"stop,omitempty"`
 	Description string `json:"description,omitempty"`
+	Predictor   []PhDeploymentPredictor `json:"predictors"`
 }
 
 type PhDeploymentMetadata map[string]string
@@ -46,8 +47,8 @@ type PhDeploymentPredictor struct {
 	Replicas        int                  `json:"replicas"`
 	ModelImage      string               `json:"modelImage"`
 	InstanceType    string               `json:"instanceType"`
-	ImagePullSecret string               `json:"imagePullSecret"`
-	Metadata        PhDeploymentMetadata `json:"metadata"`
+	ImagePullSecret string               `json:"imagePullSecret,omitempty"`
+	Metadata        PhDeploymentMetadata `json:"metadata,omitempty"`
 }
 
 // PhDeploymentStatus defines the observed state of PhDeployment
