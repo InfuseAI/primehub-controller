@@ -30,24 +30,24 @@ const (
 
 // PhDeploymentSpec defines the desired state of PhDeployment
 type PhDeploymentSpec struct {
-	DisplayName string               `json:"displayName"`
-	UserId      string               `json:"userId"`
-	UserName    string               `json:"userName,omitempty"`
-	GroupId     string               `json:"groupId"`
-	GroupName   string               `json:"groupName"`
-	Stop        bool                 `json:"stop,omitempty"`
-	Description string               `json:"description,omitempty"`
-	Metadata    PhDeploymentMetadata `json:"metadata"`
+	DisplayName string `json:"displayName"`
+	UserId      string `json:"userId"`
+	UserName    string `json:"userName,omitempty"`
+	GroupId     string `json:"groupId"`
+	GroupName   string `json:"groupName"`
+	Stop        bool   `json:"stop,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 
 type PhDeploymentMetadata map[string]string
 
 type PhDeploymentPredictor struct {
-	Name            string `json:"name"`
-	Replicas        int    `json:"replicas"`
-	ModelImage      string `json:"modelImage"`
-	InstanceType    string `json:"instanceType"`
-	ImagePullSecret string `json:"imagePullSecret"`
+	Name            string               `json:"name"`
+	Replicas        int                  `json:"replicas"`
+	ModelImage      string               `json:"modelImage"`
+	InstanceType    string               `json:"instanceType"`
+	ImagePullSecret string               `json:"imagePullSecret"`
+	Metadata        PhDeploymentMetadata `json:"metadata"`
 }
 
 // PhDeploymentStatus defines the observed state of PhDeployment
