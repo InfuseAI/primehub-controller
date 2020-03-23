@@ -42,6 +42,30 @@ spec:
               type: string
             groupName:
               type: string
+            predictors:
+              items:
+                properties:
+                  imagePullSecret:
+                    type: string
+                  instanceType:
+                    type: string
+                  metadata:
+                    additionalProperties:
+                      type: string
+                    type: object
+                  modelImage:
+                    type: string
+                  name:
+                    type: string
+                  replicas:
+                    type: integer
+                required:
+                - instanceType
+                - modelImage
+                - name
+                - replicas
+                type: object
+              type: array
             stop:
               type: boolean
             userId:
@@ -52,7 +76,9 @@ spec:
           - displayName
           - groupId
           - groupName
+          - predictors
           - userId
+          - userName
           type: object
         status:
           description: PhDeploymentStatus defines the observed state of PhDeployment
@@ -75,6 +101,30 @@ spec:
                         type: string
                       groupName:
                         type: string
+                      predictors:
+                        items:
+                          properties:
+                            imagePullSecret:
+                              type: string
+                            instanceType:
+                              type: string
+                            metadata:
+                              additionalProperties:
+                                type: string
+                              type: object
+                            modelImage:
+                              type: string
+                            name:
+                              type: string
+                            replicas:
+                              type: integer
+                          required:
+                          - instanceType
+                          - modelImage
+                          - name
+                          - replicas
+                          type: object
+                        type: array
                       stop:
                         type: boolean
                       userId:
@@ -85,7 +135,9 @@ spec:
                     - displayName
                     - groupId
                     - groupName
+                    - predictors
                     - userId
+                    - userName
                     type: object
                   time:
                     format: date-time
