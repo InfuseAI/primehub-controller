@@ -23,46 +23,46 @@ type PhDeploymentPhase string
 
 const (
 	DeploymentDeploying PhDeploymentPhase = "Deploying"
-	DeploymentDeployed 	PhDeploymentPhase = "Deployed"
-	DeploymentStopped 	PhDeploymentPhase = "Stopped"
-	DeploymentFailed	PhDeploymentPhase = "Failed"
+	DeploymentDeployed  PhDeploymentPhase = "Deployed"
+	DeploymentStopped   PhDeploymentPhase = "Stopped"
+	DeploymentFailed    PhDeploymentPhase = "Failed"
 )
 
 // PhDeploymentSpec defines the desired state of PhDeployment
 type PhDeploymentSpec struct {
-	DisplayName             string `json:"displayName"`
-	UserId                  string `json:"userId"`
-	UserName                string `json:"userName,omitempty"`
-	GroupId                 string `json:"groupId"`
-	GroupName               string `json:"groupName"`
-	Stop					bool   `json:"stop,omitempty"`
-	Description				string `json:"description,omitempty"`
-
-	metadata                PhDeploymentMetadata `json:"metadata"`
+	DisplayName string               `json:"displayName"`
+	UserId      string               `json:"userId"`
+	UserName    string               `json:"userName,omitempty"`
+	GroupId     string               `json:"groupId"`
+	GroupName   string               `json:"groupName"`
+	Stop        bool                 `json:"stop,omitempty"`
+	Description string               `json:"description,omitempty"`
+	Metadata    PhDeploymentMetadata `json:"metadata"`
 }
 
 type PhDeploymentMetadata map[string]string
 
 type PhDeploymentPredictor struct {
-	name					string `json:"name"`
-	Replicas				int `json:"replicas"`
-	ModelImage				string `json:"modelImage"`
-	InstanceType            string `json:"instanceType"`
+	Name            string `json:"name"`
+	Replicas        int    `json:"replicas"`
+	ModelImage      string `json:"modelImage"`
+	InstanceType    string `json:"instanceType"`
+	ImagePullSecret string `json:"imagePullSecret"`
 }
 
 // PhDeploymentStatus defines the observed state of PhDeployment
 type PhDeploymentStatus struct {
-	phase					PhDeploymentPhase `json:"phase"`
-	messsage				PhDeploymentPhase `json:"message"`
-	Replicas				int `json:"replicas"`
-	AvailableReplicas		int `json:"availableReplicas"`
-	Endpoint				string `json:"endpoint"`
-	History					[]PhDeploymentHistory `json:"history"`
+	Phase             PhDeploymentPhase     `json:"phase"`
+	Messsage          PhDeploymentPhase     `json:"message"`
+	Replicas          int                   `json:"replicas"`
+	AvailableReplicas int                   `json:"availableReplicas"`
+	Endpoint          string                `json:"endpoint"`
+	History           []PhDeploymentHistory `json:"history"`
 }
 
 type PhDeploymentHistory struct {
-	Time                    metav1.Time `json:"time"`
-	Spec					PhDeploymentSpec `json:"spec"`
+	Time metav1.Time      `json:"time"`
+	Spec PhDeploymentSpec `json:"spec"`
 }
 
 // +kubebuilder:object:root=true
