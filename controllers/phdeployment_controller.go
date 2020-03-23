@@ -17,6 +17,8 @@ package controllers
 
 import (
 	"context"
+	"k8s.io/api/extensions/v1beta1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -37,22 +39,41 @@ type PhDeploymentReconciler struct {
 	Log logr.Logger
 }
 
-func (r *PhDeploymentReconciler) buildSeldonDeployment(phDeployment primehubv1alpha1.PhDeployment) *seldonv1.SeldonDeployment {
-	// log := r.Log.WithValues("phDeployment", phDeployment.Name)
+func (r *PhDeploymentReconciler) buildSeldonDeployment(phDeployment *primehubv1alpha1.PhDeployment) (*seldonv1.SeldonDeployment, error) {
+	log := ctrl.Log.WithValues("phDeployment", phDeployment.Name)
 
-	hash, _ := generateRandomString(6)
-	seldonDeploymentName := phDeployment.Name + "-" + hash
+	//hash, _ := generateRandomString(6)
+	//seldonDeploymentName := phDeployment.Name + "-" + hash
+	seldonDeploymentName := phDeployment.Name
 
+	// Labels: map[string]string{
+	// 	"phjob.primehub.io/scheduledBy": phSchedule.Name,
+	// 	"primehub.io/group":             escapism.EscapeToPrimehubLabel(phSchedule.Spec.JobTemplate.Spec.GroupName),
+	// 	"primehub.io/user":              escapism.EscapeToPrimehubLabel(phSchedule.Spec.JobTemplate.Spec.UserName),
+	// },
+	// TODO group-id and user-id need to escapism
+	annotations := map[string]string{
+		"primehub.io/group": phDeployment.Spec.GroupId,
+		"primehub.io/user":  phDeployment.Spec.UserId,
+	}
+	log.Info("Annotations", "data", annotations)
+
+	ownerReference := metav1.NewControllerRef(phDeployment, phDeployment.GroupVersionKind())
 	seldonDeployment := &seldonv1.SeldonDeployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        seldonDeploymentName,
-			Namespace:   phDeployment.Namespace,
+			Name:            seldonDeploymentName,
+			Namespace:       phDeployment.Namespace,
+			Annotations:     annotations,
+			OwnerReferences: []metav1.OwnerReference{*ownerReference},
+		},
+		Spec: seldonv1.SeldonDeploymentSpec{
+			Name:        phDeployment.Name,
+			Predictors:  nil,
+			OauthKey:    "",
+			OauthSecret: "",
 			Annotations: phDeployment.ObjectMeta.Annotations,
-			// Labels: map[string]string{
-			// 	"phjob.primehub.io/scheduledBy": phSchedule.Name,
-			// 	"primehub.io/group":             escapism.EscapeToPrimehubLabel(phSchedule.Spec.JobTemplate.Spec.GroupName),
-			// 	"primehub.io/user":              escapism.EscapeToPrimehubLabel(phSchedule.Spec.JobTemplate.Spec.UserName),
-			// },
+			Protocol:    "",
+			Transport:   "",
 		},
 	}
 
@@ -63,46 +84,45 @@ func (r *PhDeploymentReconciler) buildSeldonDeployment(phDeployment primehubv1al
 
 	seldonPodSpec1 := &seldonv1.SeldonPodSpec{
 		Metadata: metav1.ObjectMeta{
-			Annotations: map[string]string{
-				"primehub.io/group":      phDeployment.Spec.GroupId,
-				"primehub.io/deployment": seldonDeploymentName,
-			},
+			Annotations: annotations,
+			Name:        seldonDeploymentName,
 		},
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{
 				{
 					Name:  "model",
-					Image: phDeployment.predictors[0].modelImage,
+					Image: phDeployment.Spec.Predictors[0].ModelImage,
 				},
 			},
 		},
 	}
 	componentSpecs = append(componentSpecs, seldonPodSpec1)
 
+	modelType := seldonv1.MODEL
+
 	graph := &seldonv1.PredictiveUnit{
 		Name: "model",
-		Type: seldonv1.MODEL,
-		Endpoint: seldonv1.Endpoint{
-			Type: REST,
+		Type: &modelType,
+		Endpoint: &seldonv1.Endpoint{
+			Type: seldonv1.REST,
 		},
 	}
 
 	predictors := make([]seldonv1.PredictorSpec, 0)
-	predictor1 := &seldonv1.PredictorSpec{
+	predictor1 := seldonv1.PredictorSpec{
 		Name:           "predictor1",
 		ComponentSpecs: componentSpecs,
 		Graph:          graph,
 		Replicas:       int32(1),
-		Annotation: map[string]string{
-			"predictor_version", "v1",
+		Annotations: map[string]string{
+			"predictor_version": "v1",
 		},
 	}
 	predictors = append(predictors, predictor1)
-
 	seldonDeployment.Spec.Predictors = predictors
 
-	return seldonDeployment
-
+	// TODO setup owner reference
+	return seldonDeployment, nil
 }
 
 // func (r *PhDeploymentReconciler) getInstanceTypeInfo(instanceTypeId string) (*graphql.DtoInstanceType, error) {
@@ -128,10 +148,10 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	phDeployment := &primehubv1alpha1.PhDeployment{}
 	if err := r.Get(ctx, req.NamespacedName, phDeployment); err != nil {
 		if apierrors.IsNotFound(err) {
-			log.Info("phDeployment deleted")
+			log.Info("PhDeployment deleted")
 			return ctrl.Result{}, nil
 		} else {
-			log.Error(err, "unable to fetch PhShceduleJob")
+			log.Error(err, "Unable to fetch PhShceduleJob")
 		}
 	}
 
@@ -144,9 +164,7 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	phDeployment = phDeployment.DeepCopy()
 
 	if phDeployment.Spec.Stop == true {
-
 		// delete seldondeployment and ingress
-
 		phDeployment.Status.Phase = primehubv1alpha1.DeploymentStopped
 		if err := r.updatePhDeploymentStatus(ctx, phDeployment); err != nil {
 			return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
@@ -154,22 +172,107 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	}
 
 	// create seldon deployment
-	seldonDeployment, err = r.buildSeldonDeployment(phDeployment)
+	seldonDeployment, err := r.buildSeldonDeployment(phDeployment)
 	if err == nil {
-		err = r.Client.Create(seldonDeployment)
+		err = r.Client.Create(ctx, seldonDeployment)
 	}
 
 	if err == nil {
-		log.Info("seldonDeployment created", "seldonDeployment", seldonDeployment)
+		log.Info("SeldonDeployment created", "seldonDeployment", seldonDeployment)
 	} else {
-		log.Error(err, "creating seldonDeployment failed")
+		log.Error(err, "Creating seldonDeployment failed")
 	}
 
-	// create ingress
+	// Fetch service status
+	selDep := seldonv1.SeldonDeployment{}
+	if err := r.Client.Get(ctx, client.ObjectKey{Namespace: seldonDeployment.Namespace, Name: seldonDeployment.Name}, &selDep); err != nil {
+		if apierrors.IsNotFound(err) {
+			log.Info("SeldonDeployment deleted")
+			return ctrl.Result{}, nil
+		} else {
+			log.Error(err, "Unable to fetch SeldonDeployment", "Namespace", seldonDeployment.Namespace, "Name", seldonDeployment.Name)
+		}
+	}
+	if selDep.Status.ServiceStatus == nil {
+		// Service Status might not be available for now
+		return ctrl.Result{RequeueAfter: 15 * time.Second}, err
+	}
+
+	// TODO was the service name always at first key ?
+	serviceName := ""
+	for k, _ := range selDep.Status.ServiceStatus {
+		if serviceName == "" {
+			serviceName = k
+		}
+	}
+
+	// TODO phDeployment should tell us servingHost ? Lets hardcode it first: hub.qrtt1.dev.primehub.io
+	servingHost := "hub.qrtt1.dev.primehub.io"
+
+	ingress, err := r.createIngress(ctx, phDeployment, serviceName, servingHost, log)
+	if err == nil {
+		log.Info("Ingress Created", "ingress", ingress.Name)
+	} else {
+		log.Error(err, "Failed to create ingress")
+	}
 
 	// update status based on seldon deployment
 
 	return ctrl.Result{}, nil
+}
+
+func (r *PhDeploymentReconciler) createIngress(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, serviceName string, servingHost string, log logr.Logger) (*v1beta1.Ingress, error) {
+	// create ingress
+	backend := v1beta1.IngressBackend{
+		// TODO get service name from seldonDeployment
+		ServiceName: serviceName,
+		ServicePort: intstr.IntOrString{
+			Type:   intstr.Int,
+			IntVal: 9000,
+		},
+	}
+	rules := []v1beta1.IngressRule{
+		{
+			Host: servingHost,
+			IngressRuleValue: v1beta1.IngressRuleValue{
+				HTTP: &v1beta1.HTTPIngressRuleValue{
+					Paths: []v1beta1.HTTPIngressPath{
+						{
+							Path:    "/deployment/" + phDeployment.Name + "/(.+)",
+							Backend: backend,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	ownerReference := metav1.NewControllerRef(phDeployment, phDeployment.GroupVersionKind())
+	ingress := &v1beta1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      phDeployment.Name,
+			Namespace: phDeployment.Namespace,
+			Annotations: map[string]string{
+				"kubernetes.io/ingress.class": "nginx",
+				"kubernetes.io/tls-acme":      "true",
+				// TODO was it possible to rewrite with standard ingress feature ?
+				"nginx.ingress.kubernetes.io/rewrite-target": "/$1",
+			},
+			OwnerReferences: []metav1.OwnerReference{*ownerReference},
+		},
+		Spec: v1beta1.IngressSpec{
+			TLS: []v1beta1.IngressTLS{{
+				Hosts: []string{servingHost},
+			},
+			},
+			Rules: rules,
+		},
+	}
+	err := r.Client.Create(ctx, ingress)
+	if err == nil {
+		return ingress, nil
+	}
+	return nil, err
 }
 
 func (r *PhDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {

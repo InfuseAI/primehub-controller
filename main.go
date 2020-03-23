@@ -37,6 +37,7 @@ import (
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	seldonv1 "primehub-controller/seldon/apis/v1"
 
 	// +kubebuilder:scaffold:imports
 
@@ -54,6 +55,7 @@ func init() {
 	_ = primehubv1alpha1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
 	_ = batchv1.AddToScheme(scheme)
+	_ = seldonv1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
 }
 

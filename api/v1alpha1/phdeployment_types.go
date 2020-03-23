@@ -30,14 +30,14 @@ const (
 
 // PhDeploymentSpec defines the desired state of PhDeployment
 type PhDeploymentSpec struct {
-	DisplayName string `json:"displayName"`
-	UserId      string `json:"userId"`
-	UserName    string `json:"userName"`
-	GroupId     string `json:"groupId"`
-	GroupName   string `json:"groupName"`
-	Stop        bool   `json:"stop,omitempty"`
-	Description string `json:"description,omitempty"`
-	Predictor   []PhDeploymentPredictor `json:"predictors"`
+	DisplayName string                  `json:"displayName"`
+	UserId      string                  `json:"userId"`
+	UserName    string                  `json:"userName"`
+	GroupId     string                  `json:"groupId"`
+	GroupName   string                  `json:"groupName"`
+	Stop        bool                    `json:"stop,omitempty"`
+	Description string                  `json:"description,omitempty"`
+	Predictors  []PhDeploymentPredictor `json:"predictors"`
 }
 
 type PhDeploymentMetadata map[string]string
