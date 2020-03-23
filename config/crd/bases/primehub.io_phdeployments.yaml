@@ -42,10 +42,6 @@ spec:
               type: string
             groupName:
               type: string
-            metadata:
-              additionalProperties:
-                type: string
-              type: object
             stop:
               type: boolean
             userId:
@@ -56,7 +52,6 @@ spec:
           - displayName
           - groupId
           - groupName
-          - metadata
           - userId
           type: object
         status:
@@ -80,10 +75,6 @@ spec:
                         type: string
                       groupName:
                         type: string
-                      metadata:
-                        additionalProperties:
-                          type: string
-                        type: object
                       stop:
                         type: boolean
                       userId:
@@ -94,7 +85,6 @@ spec:
                     - displayName
                     - groupId
                     - groupName
-                    - metadata
                     - userId
                     type: object
                   time:
