@@ -40,10 +40,6 @@ type PhDeploymentReconciler struct {
 }
 
 func (r *PhDeploymentReconciler) buildSeldonDeployment(phDeployment *primehubv1alpha1.PhDeployment) (*seldonv1.SeldonDeployment, error) {
-	log := ctrl.Log.WithValues("phDeployment", phDeployment.Name)
-
-	//hash, _ := generateRandomString(6)
-	//seldonDeploymentName := phDeployment.Name + "-" + hash
 	seldonDeploymentName := phDeployment.Name
 
 	// Labels: map[string]string{
@@ -56,7 +52,6 @@ func (r *PhDeploymentReconciler) buildSeldonDeployment(phDeployment *primehubv1a
 		"primehub.io/group": phDeployment.Spec.GroupId,
 		"primehub.io/user":  phDeployment.Spec.UserId,
 	}
-	log.Info("Annotations", "data", annotations)
 
 	ownerReference := metav1.NewControllerRef(phDeployment, phDeployment.GroupVersionKind())
 	seldonDeployment := &seldonv1.SeldonDeployment{
@@ -121,7 +116,6 @@ func (r *PhDeploymentReconciler) buildSeldonDeployment(phDeployment *primehubv1a
 	predictors = append(predictors, predictor1)
 	seldonDeployment.Spec.Predictors = predictors
 
-	// TODO setup owner reference
 	return seldonDeployment, nil
 }
 
@@ -149,10 +143,10 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	if err := r.Get(ctx, req.NamespacedName, phDeployment); err != nil {
 		if apierrors.IsNotFound(err) {
 			log.Info("PhDeployment deleted")
-			return ctrl.Result{}, nil
 		} else {
 			log.Error(err, "Unable to fetch PhShceduleJob")
 		}
+		return ctrl.Result{}, nil
 	}
 
 	log.Info("Start Reconcile PhDeployment")
@@ -162,9 +156,25 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	}()
 
 	phDeployment = phDeployment.DeepCopy()
-
 	if phDeployment.Spec.Stop == true {
-		// delete seldondeployment and ingress
+		// delete SeldonDeployment and Ingress
+		seldonDeployment := seldonv1.SeldonDeployment{}
+		if err := r.Client.Get(ctx, client.ObjectKey{Namespace: phDeployment.Namespace, Name: phDeployment.Name}, &seldonDeployment); err == nil {
+			if err := r.Client.Delete(ctx, &seldonDeployment); err != nil {
+				log.Error(err, "Unable to delete seldonDeployment")
+			}
+		}
+
+		ingress := v1beta1.Ingress{}
+		if err := r.Client.Get(ctx, client.ObjectKey{Namespace: phDeployment.Namespace, Name: phDeployment.Name}, &ingress); err == nil {
+			if err := r.Client.Delete(ctx, &ingress); err != nil {
+				log.Error(err, "Unable to delete ingress")
+			}
+		}
+
+		// FIXME here failed to update status
+		// ERROR	controllers.PhDeployment	failed to update PhDeployment status
+		// {"phDeployment": "user-defined-postfix", "error": "the server could not find the requested resource (put phdeployments.primehub.io user-defined-postfix)"}
 		phDeployment.Status.Phase = primehubv1alpha1.DeploymentStopped
 		if err := r.updatePhDeploymentStatus(ctx, phDeployment); err != nil {
 			return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
@@ -186,13 +196,9 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	// Fetch service status
 	selDep := seldonv1.SeldonDeployment{}
 	if err := r.Client.Get(ctx, client.ObjectKey{Namespace: seldonDeployment.Namespace, Name: seldonDeployment.Name}, &selDep); err != nil {
-		if apierrors.IsNotFound(err) {
-			log.Info("SeldonDeployment deleted")
-			return ctrl.Result{}, nil
-		} else {
-			log.Error(err, "Unable to fetch SeldonDeployment", "Namespace", seldonDeployment.Namespace, "Name", seldonDeployment.Name)
-		}
+		return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
 	}
+
 	if selDep.Status.ServiceStatus == nil {
 		// Service Status might not be available for now
 		return ctrl.Result{RequeueAfter: 15 * time.Second}, err
@@ -206,8 +212,8 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 		}
 	}
 
-	// TODO phDeployment should tell us servingHost ? Lets hardcode it first: hub.qrtt1.dev.primehub.io
-	servingHost := "hub.qrtt1.dev.primehub.io"
+	// TODO phDeployment should tell us servingHost ? Lets hardcode it first: hub.seldon.dev.primehub.io
+	servingHost := "hub.seldon.dev.primehub.io"
 
 	ingress, err := r.createIngress(ctx, phDeployment, serviceName, servingHost, log)
 	if err == nil {
