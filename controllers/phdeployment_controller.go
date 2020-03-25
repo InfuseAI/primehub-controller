@@ -162,6 +162,8 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 		if err := r.Client.Get(ctx, client.ObjectKey{Namespace: phDeployment.Namespace, Name: phDeployment.Name}, &seldonDeployment); err == nil {
 			if err := r.Client.Delete(ctx, &seldonDeployment); err != nil {
 				log.Error(err, "Unable to delete seldonDeployment")
+			} else {
+				log.Info("Delete SeldonDeployment", "phDeployment", phDeployment.Namespace+"/"+phDeployment.Name)
 			}
 		}
 
@@ -169,16 +171,17 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 		if err := r.Client.Get(ctx, client.ObjectKey{Namespace: phDeployment.Namespace, Name: phDeployment.Name}, &ingress); err == nil {
 			if err := r.Client.Delete(ctx, &ingress); err != nil {
 				log.Error(err, "Unable to delete ingress")
+			} else {
+				log.Info("Delete Ingress", "phDeployment", phDeployment.Namespace+"/"+phDeployment.Name)
 			}
 		}
 
-		// FIXME here failed to update status
-		// ERROR	controllers.PhDeployment	failed to update PhDeployment status
-		// {"phDeployment": "user-defined-postfix", "error": "the server could not find the requested resource (put phdeployments.primehub.io user-defined-postfix)"}
 		phDeployment.Status.Phase = primehubv1alpha1.DeploymentStopped
 		if err := r.updatePhDeploymentStatus(ctx, phDeployment); err != nil {
 			return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
 		}
+
+		return ctrl.Result{}, nil
 	}
 
 	// create seldon deployment

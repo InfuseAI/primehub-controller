@@ -66,6 +66,7 @@ type PhDeploymentHistory struct {
 	Spec PhDeploymentSpec `json:"spec"`
 }
 
+// +kubebuilder:subresource:status
 // +kubebuilder:object:root=true
 
 // PhDeployment is the Schema for the phdeployments API
