@@ -19,6 +19,7 @@ import (
 	"context"
 	"k8s.io/api/extensions/v1beta1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -39,8 +40,15 @@ type PhDeploymentReconciler struct {
 	Log logr.Logger
 }
 
-func (r *PhDeploymentReconciler) buildSeldonDeployment(phDeployment *primehubv1alpha1.PhDeployment) (*seldonv1.SeldonDeployment, error) {
+func (r *PhDeploymentReconciler) buildSeldonDeployment(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, log logr.Logger) (*seldonv1.SeldonDeployment, error) {
 	seldonDeploymentName := phDeployment.Name
+
+	cache := seldonv1.SeldonDeployment{}
+	if err := r.Client.Get(ctx, client.ObjectKey{Namespace: phDeployment.Namespace, Name: phDeployment.Name}, &cache); err == nil {
+		// TODO check anything changed, if it changed, we should update
+		// apiequality.Semantic.DeepEqual(*oldStatus, phJob.Status)
+		return cache.DeepCopy(), nil
+	}
 
 	// Labels: map[string]string{
 	// 	"phjob.primehub.io/scheduledBy": phSchedule.Name,
@@ -72,6 +80,7 @@ func (r *PhDeploymentReconciler) buildSeldonDeployment(phDeployment *primehubv1a
 		},
 	}
 
+	// TODO add resource to PodSpec
 	// instanceInfo, err := r.getInstanceTypeInfo(phJob.Spec.InstanceType)
 	// resources := ConvertToResourceQuota(instanceInfo.Spec.LimitsCpu, (float32)(instanceInfo.Spec.LimitsGpu), instanceInfo.Spec.LimitsMemory)
 
@@ -115,6 +124,11 @@ func (r *PhDeploymentReconciler) buildSeldonDeployment(phDeployment *primehubv1a
 	}
 	predictors = append(predictors, predictor1)
 	seldonDeployment.Spec.Predictors = predictors
+
+	if err := r.Client.Create(ctx, seldonDeployment); err == nil {
+		log.Error(err, "Failed to create SeldonDeployment")
+		return nil, err
+	}
 
 	return seldonDeployment, nil
 }
@@ -185,10 +199,7 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	}
 
 	// create seldon deployment
-	seldonDeployment, err := r.buildSeldonDeployment(phDeployment)
-	if err == nil {
-		err = r.Client.Create(ctx, seldonDeployment)
-	}
+	seldonDeployment, err := r.buildSeldonDeployment(ctx, phDeployment, log)
 
 	if err == nil {
 		log.Info("SeldonDeployment created", "seldonDeployment", seldonDeployment)
@@ -198,6 +209,9 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 
 	// Fetch service status
 	selDep := seldonv1.SeldonDeployment{}
+	// FIXME Get will die, after recreate CR
+	//primehub-controller/controllers.(*PhDeploymentReconciler).Reconcile(0xc0004a8b80, 0xc000725220, 0xd, 0xc0000a8e60, 0x14, 0x0, 0x0, 0x0, 0x0)
+	///Users/qrtt1/temp/primehub-controller/controllers/phdeployment_controller.go:212 +0xb1d
 	if err := r.Client.Get(ctx, client.ObjectKey{Namespace: seldonDeployment.Namespace, Name: seldonDeployment.Name}, &selDep); err != nil {
 		return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
 	}
@@ -207,16 +221,19 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 		return ctrl.Result{RequeueAfter: 15 * time.Second}, err
 	}
 
-	// TODO was the service name always at first key ?
 	serviceName := ""
-	for k, _ := range selDep.Status.ServiceStatus {
-		if serviceName == "" {
+	for k, v := range selDep.Status.ServiceStatus {
+		if strings.Contains(v.HttpEndpoint, ":9000") {
 			serviceName = k
+			break
 		}
 	}
 
-	// TODO phDeployment should tell us servingHost ? Lets hardcode it first: hub.seldon.dev.primehub.io
-	servingHost := "hub.seldon.dev.primehub.io"
+	servingHost := "unknown-domain"
+	primehubIngress := v1beta1.Ingress{}
+	if err := r.Client.Get(ctx, client.ObjectKey{Namespace: phDeployment.Namespace, Name: "primehub-graphql"}, &primehubIngress); err == nil {
+		servingHost = primehubIngress.Spec.Rules[0].Host
+	}
 
 	ingress, err := r.createIngress(ctx, phDeployment, serviceName, servingHost, log)
 	if err == nil {
