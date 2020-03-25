@@ -165,8 +165,9 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controllers.PhDeploymentReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("PhDeployment"),
+		Client:        mgr.GetClient(),
+		Log:           ctrl.Log.WithName("controllers").WithName("PhDeployment"),
+		GraphqlClient: graphqlClient,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PhDeployment")
 		os.Exit(1)

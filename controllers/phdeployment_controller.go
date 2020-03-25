@@ -17,10 +17,11 @@ package controllers
 
 import (
 	"context"
-	"k8s.io/api/extensions/v1beta1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"strings"
 	"time"
+
+	"k8s.io/api/extensions/v1beta1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -29,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	primehubv1alpha1 "primehub-controller/api/v1alpha1"
+	"primehub-controller/pkg/graphql"
 	seldonv1 "primehub-controller/seldon/apis/v1"
 
 	corev1 "k8s.io/api/core/v1"
@@ -37,18 +39,36 @@ import (
 // PhDeploymentReconciler reconciles a PhDeployment object
 type PhDeploymentReconciler struct {
 	client.Client
-	Log logr.Logger
+	Log           logr.Logger
+	GraphqlClient *graphql.GraphqlClient
 }
 
 func (r *PhDeploymentReconciler) buildSeldonDeployment(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, log logr.Logger) (*seldonv1.SeldonDeployment, error) {
 	seldonDeploymentName := phDeployment.Name
+	var err error
 
-	cache := seldonv1.SeldonDeployment{}
-	if err := r.Client.Get(ctx, client.ObjectKey{Namespace: phDeployment.Namespace, Name: phDeployment.Name}, &cache); err == nil {
-		// TODO check anything changed, if it changed, we should update
-		// apiequality.Semantic.DeepEqual(*oldStatus, phJob.Status)
-		return cache.DeepCopy(), nil
+	// TODO:
+	// Currently we only have one predictor, need to change when need to support multiple predictors
+	predictorInstanceType := phDeployment.Spec.Predictors[0].InstanceType
+	predictorImage := phDeployment.Spec.Predictors[0].ModelImage
+
+	// Get the instancetype, image from graphql
+	var result *graphql.DtoResult
+	if result, err = r.GraphqlClient.FetchByUserId(phDeployment.Spec.UserId); err != nil {
+		return nil, err
 	}
+	log.Info("info:", "phDeployment.Spec.Predictors[0].InstanceType", predictorInstanceType)
+
+	var spawner *graphql.Spawner
+	options := graphql.SpawnerDataOptions{}
+	podSpec := corev1.PodSpec{}
+	if spawner, err = graphql.NewSpawnerByData(result.Data, phDeployment.Spec.GroupName, predictorInstanceType, predictorImage, options); err != nil {
+		return nil, err
+	}
+
+	spawner.BuildPodSpec(&podSpec)
+	// BuildPodSpec assign the container with name "main" in spawn.go
+	podSpec.Containers[0].Name = "model"
 
 	// Labels: map[string]string{
 	// 	"phjob.primehub.io/scheduledBy": phSchedule.Name,
@@ -91,14 +111,15 @@ func (r *PhDeploymentReconciler) buildSeldonDeployment(ctx context.Context, phDe
 			Annotations: annotations,
 			Name:        seldonDeploymentName,
 		},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{
-				{
-					Name:  "model",
-					Image: phDeployment.Spec.Predictors[0].ModelImage,
-				},
-			},
-		},
+		// Spec: corev1.PodSpec{
+		// 	Containers: []corev1.Container{
+		// 		{
+		// 			Name:  "model",
+		// 			Image: predictorImage,
+		// 		},
+		// 	},
+		// },
+		Spec: podSpec,
 	}
 	componentSpecs = append(componentSpecs, seldonPodSpec1)
 
@@ -124,12 +145,9 @@ func (r *PhDeploymentReconciler) buildSeldonDeployment(ctx context.Context, phDe
 	}
 	predictors = append(predictors, predictor1)
 	seldonDeployment.Spec.Predictors = predictors
-
-	if err := r.Client.Create(ctx, seldonDeployment); err == nil {
-		log.Error(err, "Failed to create SeldonDeployment")
-		return nil, err
+	seldonDeployment.Spec.Annotations = map[string]string{
+		"a": "b",
 	}
-
 	return seldonDeployment, nil
 }
 
@@ -200,61 +218,93 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 
 	// create seldon deployment
 	seldonDeployment, err := r.buildSeldonDeployment(ctx, phDeployment, log)
-
-	if err == nil {
-		log.Info("SeldonDeployment created", "seldonDeployment", seldonDeployment)
+	cache := &seldonv1.SeldonDeployment{}
+	if err := r.Get(ctx, client.ObjectKey{Namespace: phDeployment.Namespace, Name: phDeployment.Name}, cache); err != nil {
+		if apierrors.IsNotFound(err) {
+			if err := r.Client.Create(ctx, seldonDeployment); err != nil {
+				log.Error(err, "Failed to create SeldonDeployment")
+				return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
+			} else {
+				log.Info("SeldonDeployment created")
+			}
+		}
 	} else {
-		log.Error(err, "Creating seldonDeployment failed")
+		cache = cache.DeepCopy()
+		cache.Spec = seldonDeployment.Spec
+		if err := r.Update(ctx, cache); err != nil {
+			log.Error(err, "Failed to update SeldonDeployment")
+			return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
+		} else {
+			log.Info("SeldonDeployment updated")
+		}
 	}
 
-	// Fetch service status
-	selDep := seldonv1.SeldonDeployment{}
-	// FIXME Get will die, after recreate CR
-	//primehub-controller/controllers.(*PhDeploymentReconciler).Reconcile(0xc0004a8b80, 0xc000725220, 0xd, 0xc0000a8e60, 0x14, 0x0, 0x0, 0x0, 0x0)
-	///Users/qrtt1/temp/primehub-controller/controllers/phdeployment_controller.go:212 +0xb1d
-	if err := r.Client.Get(ctx, client.ObjectKey{Namespace: seldonDeployment.Namespace, Name: seldonDeployment.Name}, &selDep); err != nil {
-		return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
-	}
-
-	if selDep.Status.ServiceStatus == nil {
+	if cache.Status.ServiceStatus == nil {
 		// Service Status might not be available for now
 		return ctrl.Result{RequeueAfter: 15 * time.Second}, err
 	}
 
 	serviceName := ""
-	for k, v := range selDep.Status.ServiceStatus {
-		if strings.Contains(v.HttpEndpoint, ":9000") {
+	httpEndpoint := ""
+	for k, v := range cache.Status.ServiceStatus {
+		if strings.Contains(v.HttpEndpoint, ":8000") {
 			serviceName = k
+			httpEndpoint = v.HttpEndpoint
 			break
 		}
 	}
 
 	servingHost := "unknown-domain"
 	primehubIngress := v1beta1.Ingress{}
-	if err := r.Client.Get(ctx, client.ObjectKey{Namespace: phDeployment.Namespace, Name: "primehub-graphql"}, &primehubIngress); err == nil {
+	if err := r.Client.Get(ctx, client.ObjectKey{Namespace: "hub", Name: "primehub-graphql"}, &primehubIngress); err == nil {
 		servingHost = primehubIngress.Spec.Rules[0].Host
 	}
 
-	ingress, err := r.createIngress(ctx, phDeployment, serviceName, servingHost, log)
-	if err == nil {
-		log.Info("Ingress Created", "ingress", ingress.Name)
-	} else {
-		log.Error(err, "Failed to create ingress")
+	// Create Ingress
+	ingress := r.createIngress(ctx, phDeployment, serviceName, servingHost, log)
+	cachedIngress := &v1beta1.Ingress{}
+	if err := r.Get(ctx, client.ObjectKey{Namespace: phDeployment.Namespace, Name: phDeployment.Name}, cachedIngress); err != nil {
+		if apierrors.IsNotFound(err) {
+			if err := r.Client.Create(ctx, ingress); err != nil {
+				log.Error(err, "Failed to create Ingress")
+				return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
+			} else {
+				log.Info("Ingress created")
+			}
+		}
 	}
 
 	// update status based on seldon deployment
+	deploymentStatus := cache.Status.DeploymentStatus[phDeployment.Name]
+	phDeployment.Status.AvailableReplicas = int(deploymentStatus.AvailableReplicas)
+	phDeployment.Status.Replicas = int(deploymentStatus.Replicas)
+	phDeployment.Status.Endpoint = httpEndpoint
+
+	// Mapping seldon deployment status to our phase
+	// TODO seldon's failed might not be showing, but it could go into trouble.
+	// We need to find another way to check something wrong
+	stateMapping := map[seldonv1.StatusState]primehubv1alpha1.PhDeploymentPhase{
+		seldonv1.StatusStateAvailable: primehubv1alpha1.DeploymentDeployed,
+		seldonv1.StatusStateCreating:  primehubv1alpha1.DeploymentDeploying,
+		seldonv1.StatusStateFailed:    primehubv1alpha1.DeploymentFailed,
+	}
+	phDeployment.Status.Phase = stateMapping[cache.Status.State]
+	// TODO update history content
+	phDeployment.Status.History = make([]primehubv1alpha1.PhDeploymentHistory, 0)
+	if err := r.updatePhDeploymentStatus(ctx, phDeployment); err != nil {
+		return ctrl.Result{}, err
+	}
 
 	return ctrl.Result{}, nil
 }
 
-func (r *PhDeploymentReconciler) createIngress(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, serviceName string, servingHost string, log logr.Logger) (*v1beta1.Ingress, error) {
+func (r *PhDeploymentReconciler) createIngress(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, serviceName string, servingHost string, log logr.Logger) *v1beta1.Ingress {
 	// create ingress
 	backend := v1beta1.IngressBackend{
-		// TODO get service name from seldonDeployment
 		ServiceName: serviceName,
 		ServicePort: intstr.IntOrString{
 			Type:   intstr.Int,
-			IntVal: 9000,
+			IntVal: 8000,
 		},
 	}
 	rules := []v1beta1.IngressRule{
@@ -294,11 +344,8 @@ func (r *PhDeploymentReconciler) createIngress(ctx context.Context, phDeployment
 			Rules: rules,
 		},
 	}
-	err := r.Client.Create(ctx, ingress)
-	if err == nil {
-		return ingress, nil
-	}
-	return nil, err
+
+	return ingress
 }
 
 func (r *PhDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
