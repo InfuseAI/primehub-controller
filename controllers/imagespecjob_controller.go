@@ -159,13 +159,6 @@ RUN apt-get update && \
     apt-get purge && apt-get clean
 {{ end }}
 
-{{ if .Packages.Pip }}
-RUN pip install --no-cache-dir
-      {{- range $index, $element := .Packages.Pip }}
-      {{- printf " %s" $element }}
-      {{- end }}
-{{ end }}
-
 {{ if .Packages.Conda }}
 RUN conda install --quiet --yes \
       {{- range $index, $element := .Packages.Conda }}
@@ -173,6 +166,13 @@ RUN conda install --quiet --yes \
       {{- end }}
       && \
     conda clean --all -f -y
+{{ end }}
+
+{{ if .Packages.Pip }}
+RUN pip install --no-cache-dir
+      {{- range $index, $element := .Packages.Pip }}
+      {{- printf " %s" $element }}
+      {{- end }}
 {{ end }}`
 
 	var res bytes.Buffer
