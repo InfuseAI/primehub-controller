@@ -3,12 +3,13 @@ package main
 import (
 	"flag"
 	"fmt"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"os"
 	primehubv1alpha1 "primehub-controller/api/v1alpha1"
 	eeprimehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
 	"primehub-controller/pkg/graphql"
 	"time"
+
+	"k8s.io/apimachinery/pkg/util/wait"
 
 	"primehub-controller/controllers"
 	eecontrollers "primehub-controller/ee/controllers"
@@ -24,6 +25,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 
+	seldonv1 "primehub-controller/seldon/apis/v1"
 	// +kubebuilder:scaffold:imports
 
 	"github.com/spf13/viper"
@@ -41,6 +43,7 @@ func init() {
 	_ = eeprimehubv1alpha1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
 	_ = batchv1.AddToScheme(scheme)
+	_ = seldonv1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -159,9 +162,11 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "PhSchedule")
 		os.Exit(1)
 	}
+
 	if err = (&controllers.PhDeploymentReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("PhDeployment"),
+		Client:        mgr.GetClient(),
+		Log:           ctrl.Log.WithName("controllers").WithName("PhDeployment"),
+		GraphqlClient: graphqlClient,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PhDeployment")
 		os.Exit(1)

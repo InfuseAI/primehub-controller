@@ -156,12 +156,7 @@ spec:
             replicas:
               type: integer
           required:
-          - availableReplicas
-          - endpoint
-          - history
-          - message
           - phase
-          - replicas
           type: object
       type: object
   version: v1alpha1

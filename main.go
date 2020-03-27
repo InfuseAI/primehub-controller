@@ -35,9 +35,10 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlzap "sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	seldonv1 "primehub-controller/seldon/apis/v1"
+
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	seldonv1 "primehub-controller/seldon/apis/v1"
 
 	// +kubebuilder:scaffold:imports
 
@@ -167,6 +168,7 @@ func main() {
 	if err = (&controllers.PhDeploymentReconciler{
 		Client:        mgr.GetClient(),
 		Log:           ctrl.Log.WithName("controllers").WithName("PhDeployment"),
+		Scheme:        mgr.GetScheme(),
 		GraphqlClient: graphqlClient,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PhDeployment")

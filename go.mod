@@ -5,6 +5,7 @@ go 1.13
 require (
 	github.com/Azure/go-autorest v11.1.2+incompatible // indirect
 	github.com/coreos/etcd v3.3.13+incompatible // indirect
+	github.com/fatih/structtag v1.2.0 // indirect
 	github.com/go-logr/logr v0.1.0
 	github.com/karlseguin/ccache v2.0.3+incompatible
 	github.com/magiconair/properties v1.8.1 // indirect
