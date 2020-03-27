@@ -47,6 +47,7 @@ type Spawner struct {
 	limitsMemory   resource.Quantity
 	requestsGpu    resource.Quantity
 	limitsGpu      resource.Quantity
+	containerName  string // main container: name
 }
 
 // Set spanwer by graphql response data
@@ -100,6 +101,41 @@ func NewSpawnerByData(data DtoData, groupName string, instanceTypeName string, i
 
 	// User and Group env variables
 	spawner.applyUserAndGroupEnv(data.User.Username, groupName)
+
+	spawner.containerName = "main"
+
+	return spawner, nil
+}
+
+func NewSpawnerForModelDeployment(data DtoData, groupName string, instanceTypeName string, imageUrl string, options SpawnerDataOptions) (*Spawner, error) {
+	var group DtoGroup
+	var groupGlobal DtoGroup
+	var instanceType DtoInstanceType
+
+	var err error
+	spawner := &Spawner{}
+
+	if groupName == "" {
+		groupName = "everyone"
+	}
+
+	// Find the group
+	if group, groupGlobal, err = findGroup(data.User.Groups, groupName); err != nil {
+		return nil, err
+	}
+
+	// Instance type
+	if instanceType, err = findInstanceType(group.InstanceTypes, groupGlobal.InstanceTypes, instanceTypeName); err != nil {
+		return nil, err
+	}
+
+	spawner.applyResourceForInstanceType(instanceType)
+	spawner.image = imageUrl
+
+	// User and Group env variables
+	spawner.applyUserAndGroupEnv(data.User.Username, groupName)
+
+	spawner.containerName = "model"
 
 	return spawner, nil
 }
@@ -527,7 +563,7 @@ func (spawner *Spawner) applyUserAndGroupEnv(userName string, groupName string) 
 func (spawner *Spawner) BuildPodSpec(podSpec *corev1.PodSpec) {
 	// container
 	container := corev1.Container{}
-	container.Name = "main"
+	container.Name = spawner.containerName
 	container.Image = spawner.image
 	container.Command = spawner.command
 	container.WorkingDir = spawner.workingDir

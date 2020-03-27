@@ -26,7 +26,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/go-logr/logr"
-	"github.com/prometheus/common/log"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -77,7 +76,7 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	log.Info("Start Reconcile PhDeployment")
 	startTime := time.Now()
 	defer func() {
-		log.Info("Finished Reconciling phDeployment ", "phDeployment", phDeployment, "ReconcileTime", time.Since(startTime))
+		log.Info("Finished Reconciling phDeployment ", "phDeployment", phDeployment.Name, "ReconcileTime", time.Since(startTime))
 	}()
 
 	oldStatus := phDeployment.Status.DeepCopy()
@@ -87,50 +86,31 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 		phDeployment.Status.History = make([]primehubv1alpha1.PhDeploymentHistory, 0)
 	}
 
-	// if phDeployment.Status.Phase == primehubv1alpha1.DeploymentFailed {
-	// 	// Delete seldonDeployment
-	// 	if err := r.deleteSeldonDeployment(ctx, seldonDeploymentKey); err != nil {
-	// 		log.Error(err, "failed to delete seldonDeployment and stop phDeployment")
-	// 		return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
-	// 	}
-
-	// 	// Delete ingress
-	// 	if err := r.deleteIngress(ctx, ingressKey); err != nil {
-	// 		log.Error(err, "failed to delete ingress and stop phDeployment")
-	// 		return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
-	// 	}
-
-	// 	// Update stauts
-	// 	phDeployment.Status.Phase = primehubv1alpha1.DeploymentStopped
-	// 	phDeployment.Status.Messsage = "deployment has been stoped"
-	// 	phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
-	// 	phDeployment.Status.AvailableReplicas = 0
-	// 	phDeployment.Status.Endpoint = ""
-
-	// }
+	// update history
+	r.updateHistory(ctx, phDeployment)
 
 	// phDeployment has been stoped
 	if phDeployment.Spec.Stop == true {
-		// Delete seldonDeployment
+		// delete seldonDeployment
 		if err := r.deleteSeldonDeployment(ctx, seldonDeploymentKey); err != nil {
 			log.Error(err, "failed to delete seldonDeployment and stop phDeployment")
 			return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
 		}
 
-		// Delete ingress
+		// delete ingress
 		if err := r.deleteIngress(ctx, ingressKey); err != nil {
 			log.Error(err, "failed to delete ingress and stop phDeployment")
 			return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
 		}
 
-		// Update stauts
+		// update stauts
 		phDeployment.Status.Phase = primehubv1alpha1.DeploymentStopped
 		phDeployment.Status.Messsage = "deployment has been stoped"
 		phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
 		phDeployment.Status.AvailableReplicas = 0
 		phDeployment.Status.Endpoint = ""
 
-		// Update history
+		// update history
 		r.updateHistory(ctx, phDeployment)
 
 		if !apiequality.Semantic.DeepEqual(*oldStatus, phDeployment.Status) {
@@ -142,24 +122,27 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 		return ctrl.Result{}, nil
 	}
 
-	// Reconcile seldonDeployment
+	// reconcile seldonDeployment
 	if err := r.reconcileSeldonDeployment(ctx, phDeployment, seldonDeploymentKey); err != nil {
 		log.Error(err, "reconcile Seldon Deployment error.")
 		return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
 	}
 
-	// Reconcile ingress only when phDeployment is deployed, sync from seldonDeployment
+	// reconcile ingress only when phDeployment is deployed, sync from seldonDeployment
 	if phDeployment.Status.Phase == primehubv1alpha1.DeploymentDeployed {
 		if err := r.reconcileIngress(ctx, phDeployment, ingressKey, seldonDeploymentKey); err != nil {
 			log.Error(err, "reconcile Ingress error.")
 			return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
 		}
+	} else {
+		// delete ingress if phDeployment is not deployed and available
+		if err := r.deleteIngress(ctx, ingressKey); err != nil {
+			log.Error(err, "failed to delete ingress and stop phDeployment")
+			return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
+		}
 	}
 
-	// Update history
-	r.updateHistory(ctx, phDeployment)
-
-	// If the status has changed, update the phDeployment status
+	// if the status has changed, update the phDeployment status
 	if !apiequality.Semantic.DeepEqual(*oldStatus, phDeployment.Status) {
 		if err := r.updatePhDeploymentStatus(ctx, phDeployment); err != nil {
 			return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
@@ -196,6 +179,7 @@ func (r *PhDeploymentReconciler) reconcileSeldonDeployment(ctx context.Context, 
 	// 2. update the seldonDeployment if spec has been changed
 	// 3. update the phDeployment status based on the sseldonDeployment status
 	// 4. currently, the phDeployment failed if seldonDeployment failed or it is not available for over 5 mins
+	log := r.Log.WithValues("phDeployment", phDeployment.Name)
 
 	seldonDeploymentAvailableTimeout := false
 	reconcilationFailed := false
@@ -225,19 +209,11 @@ func (r *PhDeploymentReconciler) reconcileSeldonDeployment(ctx context.Context, 
 		}
 	} else { // seldonDeployment exist
 		log.Info("SeldonDeployment exist, check the status of current seldonDeployment and update phDeployment")
-		if r.preparingStateTimeout(seldonDeployment) {
-			log.Info("SeldonDeployment is not available for over 5 min. Change the phDeployment to failed state.")
-			if err := r.deleteSeldonDeployment(ctx, seldonDeploymentKey); err != nil {
-				log.Error(err, "failed to delete seldonDeployment after preparing state timeout")
-				return err
-			}
-			seldonDeploymentAvailableTimeout = true
-		}
 
 		// update the seldonDeployment if spec has been changed
-		if len(phDeployment.Status.History) != 0 {
-			//TODO:  get the index 0
-			latestHistory := phDeployment.Status.History[len(phDeployment.Status.History)-1]
+		if len(phDeployment.Status.History) > 1 {
+			// we prepend the spec first then do the reconcilation, so we should compare to the second one
+			latestHistory := phDeployment.Status.History[1]
 			if !apiequality.Semantic.DeepEqual(phDeployment.Spec, latestHistory.Spec) {
 
 				log.Info("phDeployment has been updated, update the seldonDeployemt to reflect the update.")
@@ -255,7 +231,18 @@ func (r *PhDeploymentReconciler) reconcileSeldonDeployment(ctx context.Context, 
 					reconcilationFailed = true
 					reconcilationFailedReason = err.Error()
 				}
+
 			}
+		}
+
+		// check if seldonDeployment is unAvailable for over 5 min
+		if r.unAvailableTimeout(phDeployment, seldonDeployment) {
+			log.Info("SeldonDeployment is not available for over 5 min. Change the phDeployment to failed state.")
+			if err := r.deleteSeldonDeployment(ctx, seldonDeploymentKey); err != nil {
+				log.Error(err, "failed to delete seldonDeployment after preparing state timeout")
+				return err
+			}
+			seldonDeploymentAvailableTimeout = true
 		}
 	}
 
@@ -275,6 +262,7 @@ func (r *PhDeploymentReconciler) reconcileSeldonDeployment(ctx context.Context, 
 func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, seldonDeployment *seldonv1.SeldonDeployment, seldonDeploymentAvailableTimeout bool, reconcilationFailed bool, reconcilationFailedReason string) error {
 
 	// log.Info("=== in updateStatus ===", "seldonDeployment.Status", seldonDeployment.Status)
+	//log := r.Log.WithValues("phDeployment", phDeployment.Name)
 
 	if seldonDeploymentAvailableTimeout {
 		phDeployment.Status.Phase = primehubv1alpha1.DeploymentFailed
@@ -333,6 +321,7 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 }
 
 func (r *PhDeploymentReconciler) reconcileIngress(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, ingressKey client.ObjectKey, seldonDeploymentKey client.ObjectKey) error {
+	log := r.Log.WithValues("phDeployment", phDeployment.Name)
 
 	phDeploymentIngress, err := r.getIngress(ctx, ingressKey)
 	if err != nil && !apierrors.IsNotFound(err) {
@@ -396,7 +385,6 @@ func (r *PhDeploymentReconciler) buildSeldonDeployment(ctx context.Context, phDe
 	seldonDeploymentName := phDeployment.Name
 	seldonDeploymentNamespace := phDeployment.Namespace
 
-	//ownerReference := metav1.NewControllerRef(phDeployment, phDeployment.GroupVersionKind())
 	seldonDeployment := &seldonv1.SeldonDeployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        seldonDeploymentName,
@@ -407,8 +395,6 @@ func (r *PhDeploymentReconciler) buildSeldonDeployment(ctx context.Context, phDe
 				"primehub.io/group": escapism.EscapeToPrimehubLabel(phDeployment.Spec.GroupName),
 				//"primehub.io/user":  escapism.EscapeToPrimehubLabel(phDeployment.Spec.UserName),
 			},
-			// this won't work
-			//OwnerReferences: []metav1.OwnerReference{*ownerReference},
 		},
 		Spec: seldonv1.SeldonDeploymentSpec{
 			Name:        seldonDeploymentName,
@@ -435,14 +421,10 @@ func (r *PhDeploymentReconciler) buildSeldonDeployment(ctx context.Context, phDe
 	var spawner *graphql.Spawner
 	options := graphql.SpawnerDataOptions{}
 	podSpec := corev1.PodSpec{}
-	if spawner, err = graphql.NewSpawnerByData(result.Data, phDeployment.Spec.GroupName, predictorInstanceType, predictorImage, options); err != nil {
+	if spawner, err = graphql.NewSpawnerForModelDeployment(result.Data, phDeployment.Spec.GroupName, predictorInstanceType, predictorImage, options); err != nil {
 		return nil, err
 	}
 
-	// BuildPodSpec assign the container with name "main" in spawn.go
-	// overwrite it to "model"
-
-	// TODO: rewrite/copy the function to build pod, and validate instanceType, userId, groupId,
 	spawner.BuildPodSpec(&podSpec)
 	podSpec.Containers[0].Name = "model"
 
@@ -452,7 +434,8 @@ func (r *PhDeploymentReconciler) buildSeldonDeployment(ctx context.Context, phDe
 			Labels: map[string]string{
 				"app": "primehub-deployment-predictor",
 			},
-			Name: seldonDeploymentName,
+			Name:              seldonDeploymentName,
+			CreationTimestamp: metav1.Now(),
 		},
 		Spec: podSpec,
 	}
@@ -529,15 +512,24 @@ func (r *PhDeploymentReconciler) deleteSeldonDeployment(ctx context.Context, sel
 }
 
 // check whether the seldonDeployment is not available for over 5 min
-func (r *PhDeploymentReconciler) preparingStateTimeout(seldonDeployment *seldonv1.SeldonDeployment) bool {
+func (r *PhDeploymentReconciler) unAvailableTimeout(phDeployment *primehubv1alpha1.PhDeployment, seldonDeployment *seldonv1.SeldonDeployment) bool {
 
 	timeout := false
+	var start metav1.Time
 
-	// TODO: if we change the spec, seldonDeployment has already there
+	// if we change the spec, seldonDeployemt will turn into createing again
+	// we can't use seldonDeployment creation time
+	// because it might have been there for a long time so we use latestHistory time
+	if len(phDeployment.Status.History) == 0 {
+		start = metav1.NewTime(seldonDeployment.ObjectMeta.CreationTimestamp.Time)
+	} else {
+		latestHistory := phDeployment.Status.History[0]
+		start = latestHistory.Time
+	}
+
 	if seldonDeployment.Status.State != seldonv1.StatusStateAvailable {
 		now := metav1.Now()
-		start := seldonDeployment.ObjectMeta.CreationTimestamp.Time
-		duration := now.Time.Sub(start)
+		duration := now.Time.Sub(start.Time)
 		if duration >= time.Duration(180)*time.Second { // change to 5 min
 			timeout = true
 		}
@@ -572,7 +564,8 @@ func (r *PhDeploymentReconciler) buildIngress(ctx context.Context, phDeployment 
 				HTTP: &v1beta1.HTTPIngressRuleValue{
 					Paths: []v1beta1.HTTPIngressPath{
 						{
-							Path:    "/deployment/" + phDeployment.Name + "/(.+)",
+							Path: "/deployment/" + phDeployment.Name + "/(.+)",
+							//Path:    "/deployment/" + phDeployment.Name + "/",
 							Backend: backend,
 						},
 					},
@@ -581,7 +574,6 @@ func (r *PhDeploymentReconciler) buildIngress(ctx context.Context, phDeployment 
 		},
 	}
 
-	// ownerReference := metav1.NewControllerRef(phDeployment, phDeployment.GroupVersionKind())
 	ingress := &v1beta1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      phDeployment.Name,
@@ -591,13 +583,15 @@ func (r *PhDeploymentReconciler) buildIngress(ctx context.Context, phDeployment 
 				"kubernetes.io/tls-acme":      "true",
 				// TODO was it possible to rewrite with standard ingress feature ?
 				"nginx.ingress.kubernetes.io/rewrite-target": "/$1",
+				// "nginx.ingress.kubernetes.io/rewrite-target": "/",
 			},
-			// OwnerReferences: []metav1.OwnerReference{*ownerReference},
 		},
 		Spec: v1beta1.IngressSpec{
-			TLS: []v1beta1.IngressTLS{{
-				Hosts: []string{servingHost},
-			},
+			TLS: []v1beta1.IngressTLS{
+				{
+					Hosts:      []string{servingHost},
+					SecretName: "dns01-tls",
+				},
 			},
 			Rules: rules,
 		},
@@ -632,7 +626,7 @@ func (r *PhDeploymentReconciler) deleteIngress(ctx context.Context, ingressKey c
 	return nil
 }
 
-// Update the history of the status
+// update the history of the status
 func (r *PhDeploymentReconciler) updateHistory(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment) {
 
 	// Append the history
@@ -646,36 +640,21 @@ func (r *PhDeploymentReconciler) updateHistory(ctx context.Context, phDeployment
 		}
 		phDeployment.Status.History = append(phDeployment.Status.History, history)
 	} else {
-		// TODO: reverse the order
-		latestHistory := phDeployment.Status.History[len(phDeployment.Status.History)-1]
+		latestHistory := phDeployment.Status.History[0]
 		if !apiequality.Semantic.DeepEqual(phDeployment.Spec, latestHistory.Spec) { // current spec is not the same as latest history
 			now := metav1.Now()
 			history := primehubv1alpha1.PhDeploymentHistory{
 				Time: now,
 				Spec: phDeployment.Spec,
 			}
-			phDeployment.Status.History = append(phDeployment.Status.History, history)
+			// append to head
+			phDeployment.Status.History = append([]primehubv1alpha1.PhDeploymentHistory{history}, phDeployment.Status.History...)
 		}
+	}
+
+	if len(phDeployment.Status.History) > 32 {
+		phDeployment.Status.History = phDeployment.Status.History[:len(phDeployment.Status.History)-1]
 	}
 
 	return
 }
-
-//TODO:
-
-// for ticket
-// 1. resource constraint
-// 2. error handling (get pod error reason and show on message)
-//	- (get pod/deploy failed, ex: replicas 4, runnning 2 pending 2 (resoruce not available), seldonDeployemnt Creating, -> timeout )
-//  - group resource quota not enough (admission error)
-//	- cluster resource not enough (pod pending)
-//  - app error (exit non 0)
-//  - image not found (pod error)
-
-// fix now
-// 1. history order
-// 2. buildPod (copy spawner.go NewSpawnerForModelDeployment)
-// 3. nonAvailableTimeout (use history timestamp)
-// 4. rolling upgrade, need to test
-// 5. seldon CRD need to be installed beforehand
-//	- add schema, if model deployment enabled,

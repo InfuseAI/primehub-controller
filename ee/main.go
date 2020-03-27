@@ -163,14 +163,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controllers.PhDeploymentReconciler{
-		Client:        mgr.GetClient(),
-		Log:           ctrl.Log.WithName("controllers").WithName("PhDeployment"),
-		GraphqlClient: graphqlClient,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "PhDeployment")
-		os.Exit(1)
+	modelDeployment := viper.GetBool("modelDeployment.enabled")
+	if modelDeployment {
+		if err = (&controllers.PhDeploymentReconciler{
+			Client:        mgr.GetClient(),
+			Log:           ctrl.Log.WithName("controllers").WithName("PhDeployment"),
+			Scheme:        mgr.GetScheme(),
+			GraphqlClient: graphqlClient,
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "PhDeployment")
+			os.Exit(1)
+		}
 	}
+
 	// +kubebuilder:scaffold:builder
 
 	phJobScheduler := controllers.PHJobScheduler{
@@ -211,6 +216,7 @@ func loadConfig() {
 		"jobSubmission.workingDirSize",
 		"jobSubmission.defaultActiveDeadlineSeconds",
 		"jobSubmission.defaultTTLSecondsAfterFinished",
+		"modelDeployment.enabled",
 	}
 
 	for _, config := range configs {

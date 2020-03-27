@@ -17,8 +17,7 @@ spec:
   predictors:
     - name: predictor1
       replicas: 2
-      # modelImage: infuseai/demo-model:lastest
-      modelImage: model-test
+      modelImage: sandhya1594/spam-classifier:1.0.0.1
       instanceType: cpu-only
       metadata: # key-value objects (can update)
         foo: bar
@@ -37,8 +36,6 @@ status:
         groupName: "phusers"
         groupId: "8cdc1bb0-dc90-4fee-9316-936386ea24a3"
         stop: false # true to stop the seldon deployment;
-        metadata: # key-value objects (can update)
-          foo: bar
         description: |
           This is my first deployment.
           This is my first deployment.
@@ -48,3 +45,5 @@ status:
             replicas: 4
             modelImage: infuseai/demo-model:lastest
             instanceType: cpu-only
+            metadata: # key-value objects (can update)
+              foo: bar
