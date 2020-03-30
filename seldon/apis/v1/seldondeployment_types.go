@@ -19,10 +19,11 @@ package v1
 import (
 	"crypto/md5"
 	"encoding/hex"
+	"strconv"
+
 	autoscalingv2beta2 "k8s.io/api/autoscaling/v2beta1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"strconv"
 )
 
 const (
@@ -366,16 +367,8 @@ type SeldonDeploymentStatus struct {
 	ServiceStatus    map[string]ServiceStatus    `json:"serviceStatus,omitempty" protobuf:"bytes,4,opt,name=serviceStatus"`
 }
 
-// +genclient
-// +genclient:noStatus
-// +kubebuilder:object:root=true
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-// +kubebuilder:storageversion
-
 // SeldonDeployment is the Schema for the seldondeployments API
-// +k8s:openapi-gen=true
-// +kubebuilder:resource:shortName=sdep
-// +kubebuilder:subresource:status
+
 type SeldonDeployment struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -383,8 +376,6 @@ type SeldonDeployment struct {
 	Spec   SeldonDeploymentSpec   `json:"spec,omitempty"`
 	Status SeldonDeploymentStatus `json:"status,omitempty"`
 }
-
-// +kubebuilder:object:root=true
 
 // SeldonDeploymentList contains a list of SeldonDeployment
 type SeldonDeploymentList struct {

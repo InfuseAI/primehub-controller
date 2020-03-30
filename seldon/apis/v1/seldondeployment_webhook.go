@@ -20,7 +20,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/seldonio/seldon-core/operator/constants"
+	"os"
+	"strconv"
+
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,12 +30,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8types "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
-	"os"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
-	"strconv"
 )
 
 var (
@@ -68,7 +68,6 @@ func GetEnv(key, fallback string) string {
 
 func getPredictorServerConfigs() (map[string]PredictorServerConfig, error) {
 	configMap := &corev1.ConfigMap{}
-
 	err := C.Get(context.TODO(), k8types.NamespacedName{Name: ControllerConfigMapName, Namespace: ControllerNamespace}, configMap)
 
 	if err != nil {
@@ -181,8 +180,8 @@ func getUpdatePortNumMap(name string, nextPortNum *int32, portMap map[string]int
 }
 
 func (r *SeldonDeploymentSpec) DefaultSeldonDeployment(mldepName string, namespace string) {
-
-	var firstPuPortNum int32 = constants.FirstPortNumber
+	//var firstPuPortNum int32 = constants.FirstPortNumber
+	var firstPuPortNum int32 = int32(9000)
 	if env_preditive_unit_service_port, ok := os.LookupEnv("PREDICTIVE_UNIT_SERVICE_PORT"); ok {
 		portNum, err := strconv.Atoi(env_preditive_unit_service_port)
 		if err != nil {
