@@ -2,7 +2,7 @@ apiVersion: primehub.io/v1alpha1
 kind: PhDeployment
 metadata:
   name: user-defined-postfix
-  namespace: seldon-system
+  namespace: hub
 spec:
   displayName: USER_DEFINED
   userId: "4d203a08-896a-4aa8-86e2-882f4d4aadec"

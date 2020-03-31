@@ -105,7 +105,7 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 
 		// update stauts
 		phDeployment.Status.Phase = primehubv1alpha1.DeploymentStopped
-		phDeployment.Status.Messsage = "deployment has been stoped"
+		phDeployment.Status.Messsage = "deployment has been stopped"
 		phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
 		phDeployment.Status.AvailableReplicas = 0
 		phDeployment.Status.Endpoint = ""

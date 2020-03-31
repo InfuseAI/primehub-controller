@@ -32,11 +32,11 @@ var testEnv *envtest.Environment
 var letterRunes = []rune("abcdefghijklmnopqrstuvwxyz1234567890")
 
 func TestAPIs(t *testing.T) {
-	// RegisterFailHandler(Fail)
+	RegisterFailHandler(Fail)
 
-	// // RunSpecsWithDefaultAndCustomReporters(t,
-	// // 	"Controller Suite",
-	// // 	[]Reporter{envtest.NewlineReporter{}})
+	RunSpecsWithDefaultAndCustomReporters(t,
+		"Controller Suite",
+		[]Reporter{envtest.NewlineReporter{}})
 }
 
 var _ = BeforeSuite(func(done Done) {
