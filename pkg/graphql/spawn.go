@@ -132,9 +132,6 @@ func NewSpawnerForModelDeployment(data DtoData, groupName string, instanceTypeNa
 	spawner.applyResourceForInstanceType(instanceType)
 	spawner.image = imageUrl
 
-	// User and Group env variables
-	spawner.applyUserAndGroupEnv(data.User.Username, groupName)
-
 	spawner.containerName = "model"
 
 	return spawner, nil

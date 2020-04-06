@@ -190,15 +190,21 @@ func main() {
 	}
 
 	modelDeployment := viper.GetBool("modelDeployment.enabled")
+	ingress := controllers.PhIngress{}
 	if modelDeployment {
+		// get the ingress from the config which is from the helm value.
+
+		err = viper.UnmarshalKey("ingress", &ingress)
+		if err != nil {
+			panic(err.Error() + " cannot UnmarshalKey ingress")
+		}
+
 		if err = (&controllers.PhDeploymentReconciler{
-			Client:             mgr.GetClient(),
-			Log:                ctrl.Log.WithName("controllers").WithName("PhDeployment"),
-			Scheme:             mgr.GetScheme(),
-			GraphqlClient:      graphqlClient,
-			IngressAnnotations: ingressAnnotations,
-			Hosts:              hosts,
-			IngressTLS:         ingressTLS,
+			Client:        mgr.GetClient(),
+			Log:           ctrl.Log.WithName("controllers").WithName("PhDeployment"),
+			Scheme:        mgr.GetScheme(),
+			GraphqlClient: graphqlClient,
+			Ingress:       ingress,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "PhDeployment")
 			os.Exit(1)

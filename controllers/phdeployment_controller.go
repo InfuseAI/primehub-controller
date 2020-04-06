@@ -42,12 +42,10 @@ import (
 // PhDeploymentReconciler reconciles a PhDeployment object
 type PhDeploymentReconciler struct {
 	client.Client
-	Log                logr.Logger
-	Scheme             *runtime.Scheme
-	GraphqlClient      *graphql.GraphqlClient
-	IngressAnnotations map[string]string
-	Hosts              []string
-	IngressTLS         []v1beta1.IngressTLS
+	Log           logr.Logger
+	Scheme        *runtime.Scheme
+	GraphqlClient *graphql.GraphqlClient
+	Ingress       PhIngress
 }
 
 // +kubebuilder:rbac:groups=primehub.io,resources=phdeployments,verbs=get;list;watch;create;update;patch;delete
@@ -89,7 +87,7 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	}
 
 	// update history
-	r.updateHistory(ctx, phDeployment)
+	hasChanged := r.updateHistory(ctx, phDeployment)
 
 	// phDeployment has been stoped
 	if phDeployment.Spec.Stop == true {
@@ -115,7 +113,7 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 		// update history
 		r.updateHistory(ctx, phDeployment)
 
-		if !apiequality.Semantic.DeepEqual(*oldStatus, phDeployment.Status) {
+		if !apiequality.Semantic.DeepEqual(oldStatus, phDeployment.Status) {
 			if err := r.updatePhDeploymentStatus(ctx, phDeployment); err != nil {
 				return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
 			}
@@ -125,7 +123,7 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	}
 
 	// reconcile seldonDeployment
-	if err := r.reconcileSeldonDeployment(ctx, phDeployment, seldonDeploymentKey); err != nil {
+	if err := r.reconcileSeldonDeployment(ctx, phDeployment, seldonDeploymentKey, hasChanged); err != nil {
 		log.Error(err, "reconcile Seldon Deployment error.")
 		return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
 	}
@@ -136,7 +134,7 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	}
 
 	// if the status has changed, update the phDeployment status
-	if !apiequality.Semantic.DeepEqual(*oldStatus, phDeployment.Status) {
+	if !apiequality.Semantic.DeepEqual(oldStatus, phDeployment.Status) {
 		if err := r.updatePhDeploymentStatus(ctx, phDeployment); err != nil {
 			return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
 		}
@@ -167,7 +165,7 @@ func (r *PhDeploymentReconciler) updatePhDeploymentStatus(ctx context.Context, p
 	return nil
 }
 
-func (r *PhDeploymentReconciler) reconcileSeldonDeployment(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, seldonDeploymentKey client.ObjectKey) error {
+func (r *PhDeploymentReconciler) reconcileSeldonDeployment(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, seldonDeploymentKey client.ObjectKey, hasChanged bool) error {
 	// 1. check seldonDeployment exists, if no create one
 	// 2. update the seldonDeployment if spec has been changed
 	// 3. update the phDeployment status based on the sseldonDeployment status
@@ -203,29 +201,23 @@ func (r *PhDeploymentReconciler) reconcileSeldonDeployment(ctx context.Context, 
 	} else { // seldonDeployment exist
 		log.Info("SeldonDeployment exist, check the status of current seldonDeployment and update phDeployment")
 
-		// update the seldonDeployment if spec has been changed
-		if len(phDeployment.Status.History) > 1 {
-			// we prepend the spec first then do the reconcilation, so we should compare to the second one
-			latestHistory := phDeployment.Status.History[1]
-			if !apiequality.Semantic.DeepEqual(phDeployment.Spec, latestHistory.Spec) {
-
-				log.Info("phDeployment has been updated, update the seldonDeployemt to reflect the update.")
-				// build the new seldonDeployment
-				seldonDeploymentUpdated, err := r.buildSeldonDeployment(ctx, phDeployment)
-				seldonDeployment.Spec = seldonDeploymentUpdated.Spec
-				if err == nil {
-					err = r.Client.Update(ctx, seldonDeployment)
-				}
-
-				if err == nil { // create seldonDeployment successfully
-					log.Info("SeldonDeployment updated", "SeldonDeployment", seldonDeployment.Name)
-				} else {
-					log.Error(err, "Failed to update seldonDeployment")
-					reconcilationFailed = true
-					reconcilationFailedReason = err.Error()
-				}
-
+		if hasChanged {
+			log.Info("phDeployment has been updated, update the seldonDeployemt to reflect the update.")
+			// build the new seldonDeployment
+			seldonDeploymentUpdated, err := r.buildSeldonDeployment(ctx, phDeployment)
+			seldonDeployment.Spec = seldonDeploymentUpdated.Spec
+			if err == nil {
+				err = r.Client.Update(ctx, seldonDeployment)
 			}
+
+			if err == nil { // create seldonDeployment successfully
+				log.Info("SeldonDeployment updated", "SeldonDeployment", seldonDeployment.Name)
+			} else {
+				log.Error(err, "Failed to update seldonDeployment")
+				reconcilationFailed = true
+				reconcilationFailedReason = err.Error()
+			}
+
 		}
 
 		// check if seldonDeployment is unAvailable for over 5 min
@@ -258,7 +250,7 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 		phDeployment.Status.Messsage = "phDeployment has failed because the deployment is not available for over 5 min"
 		phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
 		phDeployment.Status.AvailableReplicas = 0
-		phDeployment.Status.Endpoint = "" // TODO: should be hard coded
+		//phDeployment.Status.Endpoint = "" // TODO: should be hard coded
 
 		return nil
 	}
@@ -268,7 +260,7 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 		phDeployment.Status.Messsage = reconcilationFailedReason
 		phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
 		phDeployment.Status.AvailableReplicas = 0
-		phDeployment.Status.Endpoint = "" // TODO: should be hard coded
+		//phDeployment.Status.Endpoint = "" // TODO: should be hard coded
 
 		return fmt.Errorf("reconcile seldonDeployment failed")
 	}
@@ -278,7 +270,7 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 		phDeployment.Status.Messsage = "phDeployment has failed because the seldon deployment on k8s is failed "
 		phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
 		phDeployment.Status.AvailableReplicas = 0
-		phDeployment.Status.Endpoint = "" // TODO: should be hard coded
+		//phDeployment.Status.Endpoint = "" // TODO: should be hard coded
 
 		return nil
 	}
@@ -301,7 +293,7 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 		phDeployment.Status.Messsage = "phDeployment is being deployed and not available now"
 		phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
 		phDeployment.Status.AvailableReplicas = int(seldonDeployment.Status.DeploymentStatus[phDeployment.Name].AvailableReplicas)
-		phDeployment.Status.Endpoint = "" // TODO: should be hard coded
+		//phDeployment.Status.Endpoint = "" // TODO: should be hard coded
 
 		return nil
 	}
@@ -323,7 +315,8 @@ func (r *PhDeploymentReconciler) reconcileIngress(ctx context.Context, phDeploym
 
 		// serviceName: pop-deploy2-spec1-predictor1
 		// <metadata.name>-<spec.name>-<spec.predictor.name>
-		serviceName := phDeployment.Name + "-model-" + "predictor1"
+		// TODO: Change spec name
+		serviceName := phDeployment.Name + "-" + phDeployment.Name + "-deploy"
 
 		// Create Ingress
 		phDeploymentIngress, err = r.buildIngress(ctx, phDeployment, serviceName)
@@ -339,7 +332,7 @@ func (r *PhDeploymentReconciler) reconcileIngress(ctx context.Context, phDeploym
 		}
 
 		// Sync the phDeployment.Status.Endpoint
-		phDeployment.Status.Endpoint = "https://" + r.Hosts[0] + "/deployment/" + phDeployment.Name + "/api/v0.1/predictions"
+		phDeployment.Status.Endpoint = "https://" + r.Ingress.Hosts[0] + "/deployment/" + phDeployment.Name + "/api/v0.1/predictions"
 	}
 
 	return nil
@@ -359,7 +352,7 @@ func (r *PhDeploymentReconciler) buildSeldonDeployment(ctx context.Context, phDe
 			},
 		},
 		Spec: seldonv1.SeldonDeploymentSpec{
-			Name:        "model", // spec.name = "model"
+			Name:        phDeployment.Name,
 			Predictors:  nil,
 			OauthKey:    "",
 			OauthSecret: "",
@@ -411,7 +404,7 @@ func (r *PhDeploymentReconciler) buildSeldonDeployment(ctx context.Context, phDe
 	}
 
 	predictor1 := seldonv1.PredictorSpec{
-		Name:           "predictor1",
+		Name:           "deploy",
 		ComponentSpecs: componentSpecs,
 		Graph:          graph,
 		Replicas:       int32(phDeployment.Spec.Predictors[0].Replicas),
@@ -423,10 +416,6 @@ func (r *PhDeploymentReconciler) buildSeldonDeployment(ctx context.Context, phDe
 	predictors = append(predictors, predictor1)
 
 	seldonDeployment.Spec.Predictors = predictors
-	// if seldonDeployment.Spec.Annotations is nil, seldon will fail
-	seldonDeployment.Spec.Annotations = map[string]string{
-		"managed-by": "primehub.io",
-	}
 
 	// Owner reference
 	if err := ctrl.SetControllerReference(phDeployment, seldonDeployment, r.Scheme); err != nil {
@@ -508,9 +497,9 @@ func (r *PhDeploymentReconciler) buildIngress(ctx context.Context, phDeployment 
 	//var hosts []string
 	//var ingressTLS []v1beta1.IngressTLS
 
-	annotations := r.IngressAnnotations
-	hosts := r.Hosts
-	ingressTLS := r.IngressTLS
+	annotations := r.Ingress.Annotations
+	hosts := r.Ingress.Hosts
+	ingressTLS := r.Ingress.TLS
 
 	annotations["nginx.ingress.kubernetes.io/rewrite-target"] = "/$1"
 
@@ -576,7 +565,9 @@ func (r *PhDeploymentReconciler) deleteIngress(ctx context.Context, ingressKey c
 }
 
 // update the history of the status
-func (r *PhDeploymentReconciler) updateHistory(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment) {
+func (r *PhDeploymentReconciler) updateHistory(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment) bool {
+
+	hasChanged := false
 
 	// Append the history
 	// if the spec of phDeployment has changed
@@ -588,9 +579,12 @@ func (r *PhDeploymentReconciler) updateHistory(ctx context.Context, phDeployment
 			Spec: phDeployment.Spec,
 		}
 		phDeployment.Status.History = append(phDeployment.Status.History, history)
+		hasChanged = false
 	} else {
 		latestHistory := phDeployment.Status.History[0]
 		if !apiequality.Semantic.DeepEqual(phDeployment.Spec, latestHistory.Spec) { // current spec is not the same as latest history
+			hasChanged = true
+
 			now := metav1.Now()
 			history := primehubv1alpha1.PhDeploymentHistory{
 				Time: now,
@@ -605,5 +599,5 @@ func (r *PhDeploymentReconciler) updateHistory(ctx context.Context, phDeployment
 		phDeployment.Status.History = phDeployment.Status.History[:len(phDeployment.Status.History)-1]
 	}
 
-	return
+	return hasChanged
 }
