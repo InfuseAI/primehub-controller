@@ -335,13 +335,28 @@ func (spawner *Spawner) applyVolumeForPvDataset(
 	pvcName := "dataset-" + dataset.Spec.VolumeName
 	writable := dataset.Writable
 
-	volume := corev1.Volume{
-		Name: logicName,
-		VolumeSource: corev1.VolumeSource{
-			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-				ClaimName: pvcName,
+	var volume corev1.Volume
+	matchedHostpath, err := regexp.MatchString(`^hostpath:`, dataset.Spec.VolumeName)
+	if err == nil && matchedHostpath {
+		re := regexp.MustCompile(`^hostpath:`)
+		path := re.ReplaceAllString(dataset.Spec.VolumeName, "")
+		volume = corev1.Volume{
+			Name: logicName,
+			VolumeSource: corev1.VolumeSource{
+				HostPath: &corev1.HostPathVolumeSource{
+					Path: path,
+				},
 			},
-		},
+		}
+	} else {
+		volume = corev1.Volume{
+			Name: logicName,
+			VolumeSource: corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: pvcName,
+				},
+			},
+		}
 	}
 
 	volumeMount := corev1.VolumeMount{
