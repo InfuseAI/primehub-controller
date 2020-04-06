@@ -193,6 +193,7 @@ func (r *PhDeploymentReconciler) reconcileSeldonDeployment(ctx context.Context, 
 
 		if err == nil { // create seldonDeployment successfully
 			log.Info("SeldonDeployment created", "SeldonDeployment", seldonDeployment.Name)
+			return nil
 		} else { // error occurs when creating or building seldonDeployment
 			log.Error(err, "CREATE seldonDeployment error")
 			reconcilationFailed = true
@@ -250,7 +251,6 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 		phDeployment.Status.Messsage = "phDeployment has failed because the deployment is not available for over 5 min"
 		phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
 		phDeployment.Status.AvailableReplicas = 0
-		//phDeployment.Status.Endpoint = "" // TODO: should be hard coded
 
 		return nil
 	}
@@ -260,7 +260,6 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 		phDeployment.Status.Messsage = reconcilationFailedReason
 		phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
 		phDeployment.Status.AvailableReplicas = 0
-		//phDeployment.Status.Endpoint = "" // TODO: should be hard coded
 
 		return fmt.Errorf("reconcile seldonDeployment failed")
 	}
@@ -270,7 +269,6 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 		phDeployment.Status.Messsage = "phDeployment has failed because the seldon deployment on k8s is failed "
 		phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
 		phDeployment.Status.AvailableReplicas = 0
-		//phDeployment.Status.Endpoint = "" // TODO: should be hard coded
 
 		return nil
 	}
@@ -280,10 +278,11 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 		phDeployment.Status.Phase = primehubv1alpha1.DeploymentDeployed
 		phDeployment.Status.Messsage = "phDeployment is deployed and available now"
 		phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
-		phDeployment.Status.AvailableReplicas = int(seldonDeployment.Status.DeploymentStatus[phDeployment.Name].AvailableReplicas)
-
-		// assign endpoint when reconcile ingress and sync from ingress
-		// phDeployment.Status.Endpoint = "" // TODO: should be hard coded
+		// TODO: there is only one deployment currently, need to change in the future when enable A/B test
+		phDeployment.Status.AvailableReplicas = int(0)
+		for _, v := range seldonDeployment.Status.DeploymentStatus {
+			phDeployment.Status.AvailableReplicas = int(v.AvailableReplicas)
+		}
 
 		return nil
 	}
@@ -292,8 +291,11 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 		phDeployment.Status.Phase = primehubv1alpha1.DeploymentDeploying
 		phDeployment.Status.Messsage = "phDeployment is being deployed and not available now"
 		phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
-		phDeployment.Status.AvailableReplicas = int(seldonDeployment.Status.DeploymentStatus[phDeployment.Name].AvailableReplicas)
-		//phDeployment.Status.Endpoint = "" // TODO: should be hard coded
+		// TODO: there is only one deployment currently, need to change in the future when enable A/B test
+		phDeployment.Status.AvailableReplicas = int(0)
+		for _, v := range seldonDeployment.Status.DeploymentStatus {
+			phDeployment.Status.AvailableReplicas = int(v.AvailableReplicas)
+		}
 
 		return nil
 	}
