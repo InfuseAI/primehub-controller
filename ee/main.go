@@ -24,6 +24,7 @@ import (
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/api/extensions/v1beta1"
 
 	seldonv1 "primehub-controller/seldon/apis/v1"
 	// +kubebuilder:scaffold:imports
@@ -163,13 +164,41 @@ func main() {
 		os.Exit(1)
 	}
 
+	// get the ingress from the config which is from the helm value.
+	var ingressAnnotations map[string]string
+	if viper.GetStringMapString("ingress.annotations") == nil {
+		panic("ingress.annotations is required in config.yaml")
+	}
+	err = viper.UnmarshalKey("ingress.annotations", &ingressAnnotations)
+	if err != nil {
+		panic(err.Error() + " cannot UnmarshalKey ingressAnnotations")
+	}
+
+	var hosts []string
+	if viper.GetStringSlice("ingress.hosts") == nil {
+		panic("ingress.hosts is required in config.yaml")
+	}
+	err = viper.UnmarshalKey("ingress.hosts", &hosts)
+	if err != nil {
+		panic(err.Error() + " cannot UnmarshalKey hosts")
+	}
+
+	var ingressTLS []v1beta1.IngressTLS
+	err = viper.UnmarshalKey("ingress.tls", &ingressTLS)
+	if err != nil {
+		panic(err.Error() + " cannot UnmarshalKey ingressTLS")
+	}
+
 	modelDeployment := viper.GetBool("modelDeployment.enabled")
 	if modelDeployment {
 		if err = (&controllers.PhDeploymentReconciler{
-			Client:        mgr.GetClient(),
-			Log:           ctrl.Log.WithName("controllers").WithName("PhDeployment"),
-			Scheme:        mgr.GetScheme(),
-			GraphqlClient: graphqlClient,
+			Client:             mgr.GetClient(),
+			Log:                ctrl.Log.WithName("controllers").WithName("PhDeployment"),
+			Scheme:             mgr.GetScheme(),
+			GraphqlClient:      graphqlClient,
+			IngressAnnotations: ingressAnnotations,
+			Hosts:              hosts,
+			IngressTLS:         ingressTLS,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "PhDeployment")
 			os.Exit(1)
@@ -216,9 +245,7 @@ func loadConfig() {
 		"jobSubmission.workingDirSize",
 		"jobSubmission.defaultActiveDeadlineSeconds",
 		"jobSubmission.defaultTTLSecondsAfterFinished",
-		"modelDeployment.enabled",
 	}
-
 	for _, config := range configs {
 		if viper.GetString(config) == "" {
 			panic(config + " is required in config.yaml")

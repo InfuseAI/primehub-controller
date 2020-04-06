@@ -1,7 +1,7 @@
 apiVersion: primehub.io/v1alpha1
 kind: PhDeployment
 metadata:
-  name: user-defined-postfix
+  name: spam-classifier
   namespace: hub
 spec:
   displayName: USER_DEFINED
@@ -16,8 +16,9 @@ spec:
     This is my first deployment.
   predictors:
     - name: predictor1
-      replicas: 2
+      replicas: 1
       modelImage: sandhya1594/spam-classifier:1.0.0.1
+      #modelImage: popcornylu/spam-classifier:1.0.0.1
       instanceType: cpu-only
       metadata: # key-value objects (can update)
         foo: bar

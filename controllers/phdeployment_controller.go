@@ -18,7 +18,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"k8s.io/api/extensions/v1beta1"
@@ -43,9 +42,12 @@ import (
 // PhDeploymentReconciler reconciles a PhDeployment object
 type PhDeploymentReconciler struct {
 	client.Client
-	Log           logr.Logger
-	Scheme        *runtime.Scheme
-	GraphqlClient *graphql.GraphqlClient
+	Log                logr.Logger
+	Scheme             *runtime.Scheme
+	GraphqlClient      *graphql.GraphqlClient
+	IngressAnnotations map[string]string
+	Hosts              []string
+	IngressTLS         []v1beta1.IngressTLS
 }
 
 // +kubebuilder:rbac:groups=primehub.io,resources=phdeployments,verbs=get;list;watch;create;update;patch;delete
@@ -60,7 +62,7 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	}
 	ingressKey := client.ObjectKey{
 		Namespace: req.Namespace,
-		Name:      req.Name,
+		Name:      "deploy-" + req.Name,
 	}
 
 	phDeployment := &primehubv1alpha1.PhDeployment{}
@@ -98,17 +100,17 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 		}
 
 		// delete ingress
-		if err := r.deleteIngress(ctx, ingressKey); err != nil {
-			log.Error(err, "failed to delete ingress and stop phDeployment")
-			return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
-		}
+		// if err := r.deleteIngress(ctx, ingressKey); err != nil {
+		// 	log.Error(err, "failed to delete ingress and stop phDeployment")
+		// 	return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
+		// }
 
 		// update stauts
 		phDeployment.Status.Phase = primehubv1alpha1.DeploymentStopped
 		phDeployment.Status.Messsage = "deployment has been stopped"
 		phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
 		phDeployment.Status.AvailableReplicas = 0
-		phDeployment.Status.Endpoint = ""
+		phDeployment.Status.Endpoint = "" // TODO: should be hard coded
 
 		// update history
 		r.updateHistory(ctx, phDeployment)
@@ -128,18 +130,9 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 		return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
 	}
 
-	// reconcile ingress only when phDeployment is deployed, sync from seldonDeployment
-	if phDeployment.Status.Phase == primehubv1alpha1.DeploymentDeployed {
-		if err := r.reconcileIngress(ctx, phDeployment, ingressKey, seldonDeploymentKey); err != nil {
-			log.Error(err, "reconcile Ingress error.")
-			return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
-		}
-	} else {
-		// delete ingress if phDeployment is not deployed and available
-		if err := r.deleteIngress(ctx, ingressKey); err != nil {
-			log.Error(err, "failed to delete ingress and stop phDeployment")
-			return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
-		}
+	if err := r.reconcileIngress(ctx, phDeployment, ingressKey, seldonDeploymentKey); err != nil {
+		log.Error(err, "reconcile Ingress error.")
+		return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
 	}
 
 	// if the status has changed, update the phDeployment status
@@ -238,10 +231,6 @@ func (r *PhDeploymentReconciler) reconcileSeldonDeployment(ctx context.Context, 
 		// check if seldonDeployment is unAvailable for over 5 min
 		if r.unAvailableTimeout(phDeployment, seldonDeployment) {
 			log.Info("SeldonDeployment is not available for over 5 min. Change the phDeployment to failed state.")
-			if err := r.deleteSeldonDeployment(ctx, seldonDeploymentKey); err != nil {
-				log.Error(err, "failed to delete seldonDeployment after preparing state timeout")
-				return err
-			}
 			seldonDeploymentAvailableTimeout = true
 		}
 	}
@@ -269,7 +258,7 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 		phDeployment.Status.Messsage = "phDeployment has failed because the deployment is not available for over 5 min"
 		phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
 		phDeployment.Status.AvailableReplicas = 0
-		phDeployment.Status.Endpoint = ""
+		phDeployment.Status.Endpoint = "" // TODO: should be hard coded
 
 		return nil
 	}
@@ -279,7 +268,7 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 		phDeployment.Status.Messsage = reconcilationFailedReason
 		phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
 		phDeployment.Status.AvailableReplicas = 0
-		phDeployment.Status.Endpoint = ""
+		phDeployment.Status.Endpoint = "" // TODO: should be hard coded
 
 		return fmt.Errorf("reconcile seldonDeployment failed")
 	}
@@ -289,7 +278,7 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 		phDeployment.Status.Messsage = "phDeployment has failed because the seldon deployment on k8s is failed "
 		phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
 		phDeployment.Status.AvailableReplicas = 0
-		phDeployment.Status.Endpoint = ""
+		phDeployment.Status.Endpoint = "" // TODO: should be hard coded
 
 		return nil
 	}
@@ -302,7 +291,7 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 		phDeployment.Status.AvailableReplicas = int(seldonDeployment.Status.DeploymentStatus[phDeployment.Name].AvailableReplicas)
 
 		// assign endpoint when reconcile ingress and sync from ingress
-		// phDeployment.Status.Endpoint = ""
+		// phDeployment.Status.Endpoint = "" // TODO: should be hard coded
 
 		return nil
 	}
@@ -312,7 +301,7 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 		phDeployment.Status.Messsage = "phDeployment is being deployed and not available now"
 		phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
 		phDeployment.Status.AvailableReplicas = int(seldonDeployment.Status.DeploymentStatus[phDeployment.Name].AvailableReplicas)
-		phDeployment.Status.Endpoint = ""
+		phDeployment.Status.Endpoint = "" // TODO: should be hard coded
 
 		return nil
 	}
@@ -332,36 +321,12 @@ func (r *PhDeploymentReconciler) reconcileIngress(ctx context.Context, phDeploym
 	if phDeploymentIngress == nil { // phDeploymentIngress is not found, create one
 		log.Info("Ingress doesn't exist, create one...")
 
-		// get seldonDeployment
-		seldonDeployment, err := r.getSeldonDeployment(ctx, seldonDeploymentKey)
-		if err != nil && !apierrors.IsNotFound(err) {
-			log.Info("return since GET seldonDeployment error ", "seldonDeployment", seldonDeploymentKey, "err", err)
-			return err
-		}
-
-		if seldonDeployment == nil {
-			log.Info("return since GET seldonDeployment error, seldonDeployment doesn't exists")
-			return fmt.Errorf("seldonDeployment doesn't exists when creating ingress")
-		}
-
-		serviceName := ""
-		// httpEndpoint := ""
-		for k, v := range seldonDeployment.Status.ServiceStatus {
-			if strings.Contains(v.HttpEndpoint, ":8000") {
-				serviceName = k
-				// httpEndpoint = v.HttpEndpoint
-				break
-			}
-		}
-
-		servingHost := "unknown-domain"
-		primehubIngress := v1beta1.Ingress{}
-		if err := r.Client.Get(ctx, client.ObjectKey{Namespace: "hub", Name: "primehub-graphql"}, &primehubIngress); err == nil {
-			servingHost = primehubIngress.Spec.Rules[0].Host
-		}
+		// serviceName: pop-deploy2-spec1-predictor1
+		// <metadata.name>-<spec.name>-<spec.predictor.name>
+		serviceName := phDeployment.Name + "-model-" + "predictor1"
 
 		// Create Ingress
-		phDeploymentIngress, err = r.buildIngress(ctx, phDeployment, serviceName, servingHost)
+		phDeploymentIngress, err = r.buildIngress(ctx, phDeployment, serviceName)
 		if err == nil {
 			err = r.Client.Create(ctx, phDeploymentIngress)
 		}
@@ -374,7 +339,7 @@ func (r *PhDeploymentReconciler) reconcileIngress(ctx context.Context, phDeploym
 		}
 
 		// Sync the phDeployment.Status.Endpoint
-		phDeployment.Status.Endpoint = "https://" + servingHost + "/deployment/" + phDeployment.Name + "/api/v0.1/predictions"
+		phDeployment.Status.Endpoint = "https://" + r.Hosts[0] + "/deployment/" + phDeployment.Name + "/api/v0.1/predictions"
 	}
 
 	return nil
@@ -387,21 +352,17 @@ func (r *PhDeploymentReconciler) buildSeldonDeployment(ctx context.Context, phDe
 
 	seldonDeployment := &seldonv1.SeldonDeployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        seldonDeploymentName,
-			Namespace:   seldonDeploymentNamespace,
-			Annotations: phDeployment.ObjectMeta.Annotations,
+			Name:      seldonDeploymentName,
+			Namespace: seldonDeploymentNamespace,
 			Labels: map[string]string{
-				"app":               "primehub-deployment",
-				"primehub.io/group": escapism.EscapeToPrimehubLabel(phDeployment.Spec.GroupName),
-				//"primehub.io/user":  escapism.EscapeToPrimehubLabel(phDeployment.Spec.UserName),
+				"app": "primehub-deployment",
 			},
 		},
 		Spec: seldonv1.SeldonDeploymentSpec{
-			Name:        seldonDeploymentName,
+			Name:        "model", // spec.name = "model"
 			Predictors:  nil,
 			OauthKey:    "",
 			OauthSecret: "",
-			Annotations: phDeployment.ObjectMeta.Annotations,
 			Protocol:    "",
 			Transport:   "",
 		},
@@ -429,14 +390,12 @@ func (r *PhDeploymentReconciler) buildSeldonDeployment(ctx context.Context, phDe
 	podSpec.Containers[0].Name = "model"
 
 	seldonPodSpec1 := &seldonv1.SeldonPodSpec{
-		Metadata: metav1.ObjectMeta{
-			Annotations: phDeployment.ObjectMeta.Annotations,
-			Labels: map[string]string{
-				"app": "primehub-deployment-predictor",
-			},
-			Name:              seldonDeploymentName,
-			CreationTimestamp: metav1.Now(),
-		},
+		// we have to remove components name so the image can be updated
+		// the deployment of the seldonDeployment name will be spec.predict.hash()
+		// Metadata: metav1.ObjectMeta{
+		// 	// components name will be used in deployment, use "seldon-"+seldonDeploymentName
+		// 	Name: "seldon-" + seldonDeploymentName,
+		// },
 		Spec: podSpec,
 	}
 	componentSpecs := make([]*seldonv1.SeldonPodSpec, 0)
@@ -456,13 +415,8 @@ func (r *PhDeploymentReconciler) buildSeldonDeployment(ctx context.Context, phDe
 		ComponentSpecs: componentSpecs,
 		Graph:          graph,
 		Replicas:       int32(phDeployment.Spec.Predictors[0].Replicas),
-		Annotations: map[string]string{
-			"predictor_version": "v1",
-		},
 		Labels: map[string]string{
-			"app":               "primehub-deployment-pod",
 			"primehub.io/group": escapism.EscapeToPrimehubLabel(phDeployment.Spec.GroupName),
-			//"primehub.io/user":  escapism.EscapeToPrimehubLabel(phDeployment.Spec.UserName),
 		},
 	}
 	predictors := make([]seldonv1.PredictorSpec, 0)
@@ -471,7 +425,7 @@ func (r *PhDeploymentReconciler) buildSeldonDeployment(ctx context.Context, phDe
 	seldonDeployment.Spec.Predictors = predictors
 	// if seldonDeployment.Spec.Annotations is nil, seldon will fail
 	seldonDeployment.Spec.Annotations = map[string]string{
-		"a": "b",
+		"managed-by": "primehub.io",
 	}
 
 	// Owner reference
@@ -549,51 +503,46 @@ func (r *PhDeploymentReconciler) getIngress(ctx context.Context, ingressKey clie
 }
 
 // build ingress of the phDeployment
-func (r *PhDeploymentReconciler) buildIngress(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, serviceName string, servingHost string) (*v1beta1.Ingress, error) {
-	backend := v1beta1.IngressBackend{
-		ServiceName: serviceName,
-		ServicePort: intstr.IntOrString{
-			Type:   intstr.Int,
-			IntVal: 8000,
+func (r *PhDeploymentReconciler) buildIngress(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, serviceName string) (*v1beta1.Ingress, error) {
+	//var ingressAnnotations map[string]string
+	//var hosts []string
+	//var ingressTLS []v1beta1.IngressTLS
+
+	annotations := r.IngressAnnotations
+	hosts := r.Hosts
+	ingressTLS := r.IngressTLS
+
+	annotations["nginx.ingress.kubernetes.io/rewrite-target"] = "/$1"
+
+	ingress := &v1beta1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "deploy-" + phDeployment.Name,
+			Namespace:   phDeployment.Namespace,
+			Annotations: annotations, // from config
 		},
-	}
-	rules := []v1beta1.IngressRule{
-		{
-			Host: servingHost,
-			IngressRuleValue: v1beta1.IngressRuleValue{
-				HTTP: &v1beta1.HTTPIngressRuleValue{
-					Paths: []v1beta1.HTTPIngressPath{
-						{
-							Path: "/deployment/" + phDeployment.Name + "/(.+)",
-							//Path:    "/deployment/" + phDeployment.Name + "/",
-							Backend: backend,
+		Spec: v1beta1.IngressSpec{
+			TLS: ingressTLS, // from config
+			Rules: []v1beta1.IngressRule{
+				{
+					Host: hosts[0], // from config
+					IngressRuleValue: v1beta1.IngressRuleValue{
+						HTTP: &v1beta1.HTTPIngressRuleValue{
+							Paths: []v1beta1.HTTPIngressPath{
+								{
+									Path: "/deployment/" + phDeployment.Name + "/(.+)",
+									Backend: v1beta1.IngressBackend{
+										ServiceName: serviceName,
+										ServicePort: intstr.IntOrString{
+											Type:   intstr.Int,
+											IntVal: 8000,
+										},
+									},
+								},
+							},
 						},
 					},
 				},
 			},
-		},
-	}
-
-	ingress := &v1beta1.Ingress{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      phDeployment.Name,
-			Namespace: phDeployment.Namespace,
-			Annotations: map[string]string{
-				"kubernetes.io/ingress.class": "nginx",
-				"kubernetes.io/tls-acme":      "true",
-				// TODO was it possible to rewrite with standard ingress feature ?
-				"nginx.ingress.kubernetes.io/rewrite-target": "/$1",
-				// "nginx.ingress.kubernetes.io/rewrite-target": "/",
-			},
-		},
-		Spec: v1beta1.IngressSpec{
-			TLS: []v1beta1.IngressTLS{
-				{
-					Hosts:      []string{servingHost},
-					SecretName: "dns01-tls",
-				},
-			},
-			Rules: rules,
 		},
 	}
 
