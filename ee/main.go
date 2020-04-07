@@ -3,12 +3,13 @@ package main
 import (
 	"flag"
 	"fmt"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"os"
 	primehubv1alpha1 "primehub-controller/api/v1alpha1"
 	eeprimehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
 	"primehub-controller/pkg/graphql"
 	"time"
+
+	"k8s.io/apimachinery/pkg/util/wait"
 
 	"primehub-controller/controllers"
 	eecontrollers "primehub-controller/ee/controllers"
@@ -23,7 +24,9 @@ import (
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/api/extensions/v1beta1"
 
+	seldonv1 "primehub-controller/seldon/apis/v1"
 	// +kubebuilder:scaffold:imports
 
 	"github.com/spf13/viper"
@@ -41,6 +44,7 @@ func init() {
 	_ = eeprimehubv1alpha1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
 	_ = batchv1.AddToScheme(scheme)
+	_ = seldonv1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -159,13 +163,54 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "PhSchedule")
 		os.Exit(1)
 	}
-	if err = (&controllers.PhDeploymentReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("PhDeployment"),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "PhDeployment")
-		os.Exit(1)
+
+	// get the ingress from the config which is from the helm value.
+	var ingressAnnotations map[string]string
+	if viper.GetStringMapString("ingress.annotations") == nil {
+		panic("ingress.annotations is required in config.yaml")
 	}
+	err = viper.UnmarshalKey("ingress.annotations", &ingressAnnotations)
+	if err != nil {
+		panic(err.Error() + " cannot UnmarshalKey ingressAnnotations")
+	}
+
+	var hosts []string
+	if viper.GetStringSlice("ingress.hosts") == nil {
+		panic("ingress.hosts is required in config.yaml")
+	}
+	err = viper.UnmarshalKey("ingress.hosts", &hosts)
+	if err != nil {
+		panic(err.Error() + " cannot UnmarshalKey hosts")
+	}
+
+	var ingressTLS []v1beta1.IngressTLS
+	err = viper.UnmarshalKey("ingress.tls", &ingressTLS)
+	if err != nil {
+		panic(err.Error() + " cannot UnmarshalKey ingressTLS")
+	}
+
+	modelDeployment := viper.GetBool("modelDeployment.enabled")
+	ingress := controllers.PhIngress{}
+	if modelDeployment {
+		// get the ingress from the config which is from the helm value.
+
+		err = viper.UnmarshalKey("ingress", &ingress)
+		if err != nil {
+			panic(err.Error() + " cannot UnmarshalKey ingress")
+		}
+
+		if err = (&controllers.PhDeploymentReconciler{
+			Client:        mgr.GetClient(),
+			Log:           ctrl.Log.WithName("controllers").WithName("PhDeployment"),
+			Scheme:        mgr.GetScheme(),
+			GraphqlClient: graphqlClient,
+			Ingress:       ingress,
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "PhDeployment")
+			os.Exit(1)
+		}
+	}
+
 	// +kubebuilder:scaffold:builder
 
 	phJobScheduler := controllers.PHJobScheduler{
@@ -207,7 +252,6 @@ func loadConfig() {
 		"jobSubmission.defaultActiveDeadlineSeconds",
 		"jobSubmission.defaultTTLSecondsAfterFinished",
 	}
-
 	for _, config := range configs {
 		if viper.GetString(config) == "" {
 			panic(config + " is required in config.yaml")

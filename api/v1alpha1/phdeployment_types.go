@@ -54,11 +54,11 @@ type PhDeploymentPredictor struct {
 // PhDeploymentStatus defines the observed state of PhDeployment
 type PhDeploymentStatus struct {
 	Phase             PhDeploymentPhase     `json:"phase"`
-	Messsage          PhDeploymentPhase     `json:"message"`
-	Replicas          int                   `json:"replicas"`
-	AvailableReplicas int                   `json:"availableReplicas"`
-	Endpoint          string                `json:"endpoint"`
-	History           []PhDeploymentHistory `json:"history"`
+	Messsage          string                `json:"message,omitempty"`
+	Replicas          int                   `json:"replicas,omitempty"`
+	AvailableReplicas int                   `json:"availableReplicas,omitempty"`
+	Endpoint          string                `json:"endpoint,omitempty"`
+	History           []PhDeploymentHistory `json:"history,omitempty"`
 }
 
 type PhDeploymentHistory struct {
@@ -66,6 +66,7 @@ type PhDeploymentHistory struct {
 	Spec PhDeploymentSpec `json:"spec"`
 }
 
+// +kubebuilder:subresource:status
 // +kubebuilder:object:root=true
 
 // PhDeployment is the Schema for the phdeployments API

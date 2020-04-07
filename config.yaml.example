@@ -20,3 +20,6 @@ jobSubmission:
   workingDirSize: 5Gi
   defaultActiveDeadlineSeconds: 86400
   defaultTTLSecondsAfterFinished: 604800
+
+modelDeployment:
+  enabled: false

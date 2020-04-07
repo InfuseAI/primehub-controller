@@ -35,6 +35,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlzap "sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	seldonv1 "primehub-controller/seldon/apis/v1"
+
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 
@@ -54,6 +56,7 @@ func init() {
 	_ = primehubv1alpha1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
 	_ = batchv1.AddToScheme(scheme)
+	_ = seldonv1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -162,13 +165,29 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "PhSchedule")
 		os.Exit(1)
 	}
-	if err = (&controllers.PhDeploymentReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("PhDeployment"),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "PhDeployment")
-		os.Exit(1)
+
+	modelDeployment := viper.GetBool("modelDeployment.enabled")
+	ingress := controllers.PhIngress{}
+	if modelDeployment {
+		// get the ingress from the config which is from the helm value.
+
+		err = viper.UnmarshalKey("ingress", &ingress)
+		if err != nil {
+			panic(err.Error() + " cannot UnmarshalKey ingress")
+		}
+
+		if err = (&controllers.PhDeploymentReconciler{
+			Client:        mgr.GetClient(),
+			Log:           ctrl.Log.WithName("controllers").WithName("PhDeployment"),
+			Scheme:        mgr.GetScheme(),
+			GraphqlClient: graphqlClient,
+			Ingress:       ingress,
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "PhDeployment")
+			os.Exit(1)
+		}
 	}
+
 	// +kubebuilder:scaffold:builder
 
 	phJobScheduler := controllers.PHJobScheduler{

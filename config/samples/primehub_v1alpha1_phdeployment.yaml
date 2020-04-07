@@ -1,14 +1,14 @@
 apiVersion: primehub.io/v1alpha1
 kind: PhDeployment
 metadata:
-  name: user-defined-postfix
+  name: spam-classifier
   namespace: hub
 spec:
   displayName: USER_DEFINED
-  userId: "710a5425-ed60-4374-9bda-08c8333cd14d"
+  userId: "4d203a08-896a-4aa8-86e2-882f4d4aadec"
   userName: "phadmin"
   groupName: "phusers"
-  groupId: "8cdc1bb0-dc90-4fee-9316-936386ea24a3"
+  groupId: "ca6b032e-b8be-44d2-9646-092622d6ba15"
   stop: false # true to stop the seldon deployment;
   description: |
     This is my first deployment.
@@ -16,8 +16,9 @@ spec:
     This is my first deployment.
   predictors:
     - name: predictor1
-      replicas: 4
-      modelImage: infuseai/demo-model:lastest
+      replicas: 1
+      modelImage: sandhya1594/spam-classifier:1.0.0.1
+      #modelImage: popcornylu/spam-classifier:1.0.0.1
       instanceType: cpu-only
       metadata: # key-value objects (can update)
         foo: bar
@@ -25,7 +26,7 @@ status:
   phase: deploying
   message: deploying
   replicas: 2
-  availableReplicas: 4
+  availableReplicas: 2
   endpoint: https://primehub.local/deployment/user-defined-postfix/predict
   history: #<sorted by time descent>
     - time: 2020-03-23T00:00:00Z
@@ -36,8 +37,6 @@ status:
         groupName: "phusers"
         groupId: "8cdc1bb0-dc90-4fee-9316-936386ea24a3"
         stop: false # true to stop the seldon deployment;
-        metadata: # key-value objects (can update)
-          foo: bar
         description: |
           This is my first deployment.
           This is my first deployment.
@@ -47,3 +46,5 @@ status:
             replicas: 4
             modelImage: infuseai/demo-model:lastest
             instanceType: cpu-only
+            metadata: # key-value objects (can update)
+              foo: bar
