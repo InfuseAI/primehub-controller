@@ -18,6 +18,8 @@ package controllers
 import (
 	"context"
 	"fmt"
+	v1 "k8s.io/api/apps/v1"
+	"strings"
 	"time"
 
 	"k8s.io/api/extensions/v1beta1"
@@ -46,6 +48,15 @@ type PhDeploymentReconciler struct {
 	Scheme        *runtime.Scheme
 	GraphqlClient *graphql.GraphqlClient
 	Ingress       PhIngress
+}
+
+type FailedPodStatus struct {
+	pod               string
+	conditions        []corev1.PodCondition
+	containerStatuses []corev1.ContainerStatus
+	isImageError      bool
+	isTerminated      bool
+	isUnschedulable   bool
 }
 
 // +kubebuilder:rbac:groups=primehub.io,resources=phdeployments,verbs=get;list;watch;create;update;patch;delete
@@ -223,6 +234,8 @@ func (r *PhDeploymentReconciler) reconcileSeldonDeployment(ctx context.Context, 
 
 		// check if seldonDeployment is unAvailable for over 5 min
 		if r.unAvailableTimeout(phDeployment, seldonDeployment) {
+			// we would like to keep the SeldonDeployment object rather than delete it
+			// because we need the status messages in its managed pods
 			log.Info("SeldonDeployment is not available for over 5 min. Change the phDeployment to failed state.")
 			seldonDeploymentAvailableTimeout = true
 		}
@@ -246,9 +259,35 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 	// log.Info("=== in updateStatus ===", "seldonDeployment.Status", seldonDeployment.Status)
 	//log := r.Log.WithValues("phDeployment", phDeployment.Name)
 
+	failedPods := r.listFailedPods(ctx, phDeployment)
+
+	// fast-fail cases:
+	// 1. wrong image settings (image configurations)
+	// 2. unschedulable pods (cluster resources not enough)
+	// 3. application terminated
+	for _, p := range failedPods {
+		if p.isImageError || p.isTerminated {
+			phDeployment.Status.Phase = primehubv1alpha1.DeploymentFailed
+			phDeployment.Status.Messsage = "phDeployment has failed because of wrong image settings." + r.explain(failedPods)
+			phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
+			phDeployment.Status.AvailableReplicas = 0
+			phDeployment.Status.Endpoint = ""
+			return nil
+		}
+
+		if p.isUnschedulable {
+			phDeployment.Status.Phase = primehubv1alpha1.DeploymentFailed
+			phDeployment.Status.Messsage = "phDeployment has failed because of certain pods unschedulable." + r.explain(failedPods)
+			phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
+			phDeployment.Status.AvailableReplicas = 0
+			phDeployment.Status.Endpoint = ""
+			return nil
+		}
+	}
+
 	if seldonDeploymentAvailableTimeout {
 		phDeployment.Status.Phase = primehubv1alpha1.DeploymentFailed
-		phDeployment.Status.Messsage = "phDeployment has failed because the deployment is not available for over 5 min"
+		phDeployment.Status.Messsage = "phDeployment has failed because the deployment is not available for over 5 min" + r.explain(failedPods)
 		phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
 		phDeployment.Status.AvailableReplicas = 0
 
@@ -257,7 +296,7 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 
 	if reconcilationFailed { // update / create failed need to reconcile in 1 min
 		phDeployment.Status.Phase = primehubv1alpha1.DeploymentFailed
-		phDeployment.Status.Messsage = reconcilationFailedReason
+		phDeployment.Status.Messsage = reconcilationFailedReason + r.explain(failedPods)
 		phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
 		phDeployment.Status.AvailableReplicas = 0
 
@@ -266,7 +305,7 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 
 	if seldonDeployment.Status.State == seldonv1.StatusStateFailed {
 		phDeployment.Status.Phase = primehubv1alpha1.DeploymentFailed
-		phDeployment.Status.Messsage = "phDeployment has failed because the seldon deployment on k8s is failed "
+		phDeployment.Status.Messsage = "phDeployment has failed because the seldon deployment on k8s is failed " + r.explain(failedPods)
 		phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
 		phDeployment.Status.AvailableReplicas = 0
 
@@ -301,6 +340,106 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 	}
 
 	return fmt.Errorf("seldonDeployment is in Unknown state.")
+}
+
+func (r *PhDeploymentReconciler) explain(failedPods []FailedPodStatus) string {
+	b := &strings.Builder{}
+	for _, p := range failedPods {
+		fmt.Fprintf(b, "\npod[%s] failed", p.pod)
+		for _, v := range p.conditions {
+			fmt.Fprintf(b, "\n  reason: %s, message %s", v.Reason, v.Message)
+		}
+
+		if len(p.containerStatuses) > 0 {
+			for _, v := range p.containerStatuses {
+				var s corev1.ContainerState
+				if v.LastTerminationState == (corev1.ContainerState{}) {
+					s = v.State
+				} else {
+					s = v.LastTerminationState
+				}
+
+				if s.Waiting != nil {
+					fmt.Fprintf(b, "\n  container state: %s, reason: %s, message %s", "Waiting", s.Waiting.Reason, s.Waiting.Message)
+				}
+				if s.Terminated != nil {
+					fmt.Fprintf(b, "\n  container state: %s, reason: %s, message %s, exit-code: %d", "Terminated", s.Terminated.Reason, s.Terminated.Message, s.Terminated.ExitCode)
+				}
+			}
+		}
+	}
+	return b.String()
+}
+
+func (r *PhDeploymentReconciler) listFailedPods(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment) []FailedPodStatus {
+	failedPods := make([]FailedPodStatus, 0)
+
+	seldonDeployment := &seldonv1.SeldonDeployment{}
+	if err := r.Get(ctx, client.ObjectKey{Namespace: phDeployment.Namespace, Name: phDeployment.Name}, seldonDeployment); err != nil {
+		// cannot find SeldonDeployment, skip this round
+		return failedPods
+	}
+
+	var deploymentName string
+	for k, _ := range seldonDeployment.Status.DeploymentStatus {
+		deploymentName = k
+		break
+	}
+
+	deployment := &v1.Deployment{}
+	if err := r.Get(ctx, client.ObjectKey{Namespace: phDeployment.Namespace, Name: deploymentName}, deployment); err != nil {
+		return failedPods
+	}
+
+	pods := &corev1.PodList{}
+	err := r.Client.List(ctx, pods, client.InNamespace(phDeployment.Namespace), client.MatchingLabels(deployment.Spec.Selector.MatchLabels))
+
+	if err != nil {
+		return failedPods
+	}
+
+	pods = pods.DeepCopy()
+	for _, pod := range pods.Items {
+		result := FailedPodStatus{
+			pod:               pod.Name,
+			conditions:        make([]corev1.PodCondition, 0),
+			containerStatuses: make([]corev1.ContainerStatus, 0),
+			isImageError:      false,
+			isTerminated:      false,
+			isUnschedulable:   false,
+		}
+		for _, c := range pod.Status.Conditions {
+			if c.Status == corev1.ConditionFalse && c.Reason != "ContainersNotReady" {
+				result.conditions = append(result.conditions, c)
+			}
+
+			if c.Reason == "Unschedulable" {
+				result.isUnschedulable = true
+			}
+		}
+		for _, c := range pod.Status.ContainerStatuses {
+			var s corev1.ContainerState
+			if c.LastTerminationState == (corev1.ContainerState{}) {
+				s = c.State
+			} else {
+				s = c.LastTerminationState
+			}
+
+			if s.Terminated != nil {
+				result.isTerminated = true
+				result.containerStatuses = append(result.containerStatuses, c)
+			}
+			if s.Waiting != nil && (s.Waiting.Reason == "ImagePullBackOff" || s.Waiting.Reason == "ErrImagePull") {
+				result.isImageError = true
+				result.containerStatuses = append(result.containerStatuses, c)
+			}
+		}
+
+		if len(result.conditions) > 0 || len(result.containerStatuses) > 0 {
+			failedPods = append(failedPods, result)
+		}
+	}
+	return failedPods
 }
 
 func (r *PhDeploymentReconciler) reconcileIngress(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, ingressKey client.ObjectKey, seldonDeploymentKey client.ObjectKey) error {
