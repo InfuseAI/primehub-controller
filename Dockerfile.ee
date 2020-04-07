@@ -8,6 +8,7 @@ COPY main.go main.go
 COPY api/ api/
 COPY controllers/ controllers/
 COPY pkg/ pkg/
+COPY seldon/ seldon/
 
 RUN mkdir /workspace/ee
 WORKDIR /workspace/ee
