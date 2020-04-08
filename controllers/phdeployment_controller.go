@@ -21,8 +21,6 @@ import (
 	"strings"
 	"time"
 
-	v1 "k8s.io/api/apps/v1"
-
 	"k8s.io/api/extensions/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -153,7 +151,7 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 		}
 	}
 
-	return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
+	return ctrl.Result{RequeueAfter: 3 * time.Minute}, nil
 }
 
 func (r *PhDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -393,25 +391,8 @@ func (r *PhDeploymentReconciler) explain(failedPods []FailedPodStatus) string {
 func (r *PhDeploymentReconciler) listFailedPods(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment) []FailedPodStatus {
 	failedPods := make([]FailedPodStatus, 0)
 
-	seldonDeployment := &seldonv1.SeldonDeployment{}
-	if err := r.Get(ctx, client.ObjectKey{Namespace: phDeployment.Namespace, Name: phDeployment.Name}, seldonDeployment); err != nil {
-		// cannot find SeldonDeployment, skip this round
-		return failedPods
-	}
-
-	var deploymentName string
-	for k, _ := range seldonDeployment.Status.DeploymentStatus {
-		deploymentName = k
-		break
-	}
-
-	deployment := &v1.Deployment{}
-	if err := r.Get(ctx, client.ObjectKey{Namespace: phDeployment.Namespace, Name: deploymentName}, deployment); err != nil {
-		return failedPods
-	}
-
 	pods := &corev1.PodList{}
-	err := r.Client.List(ctx, pods, client.InNamespace(phDeployment.Namespace), client.MatchingLabels(deployment.Spec.Selector.MatchLabels))
+	err := r.Client.List(ctx, pods, client.InNamespace(phDeployment.Namespace), client.MatchingLabels{"primehub.io/phdeployment": phDeployment.Name})
 
 	if err != nil {
 		return failedPods
@@ -569,7 +550,9 @@ func (r *PhDeploymentReconciler) buildSeldonDeployment(ctx context.Context, phDe
 		Graph:          graph,
 		Replicas:       int32(phDeployment.Spec.Predictors[0].Replicas),
 		Labels: map[string]string{
-			"primehub.io/group": escapism.EscapeToPrimehubLabel(phDeployment.Spec.GroupName),
+			"primehub.io/group":        escapism.EscapeToPrimehubLabel(phDeployment.Spec.GroupName),
+			"primehub.io/phdeployment": phDeployment.Name,
+			"app":                      "primehub-deployment",
 		},
 	}
 	predictors := make([]seldonv1.PredictorSpec, 0)
