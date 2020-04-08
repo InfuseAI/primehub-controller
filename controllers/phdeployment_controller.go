@@ -268,7 +268,7 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 	for _, p := range failedPods {
 		if p.isImageError || p.isTerminated {
 			phDeployment.Status.Phase = primehubv1alpha1.DeploymentFailed
-			phDeployment.Status.Messsage = "phDeployment has failed because of wrong image settings." + r.explain(failedPods)
+			phDeployment.Status.Messsage = "Failed because of wrong image settings." + r.explain(failedPods)
 			phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
 			phDeployment.Status.AvailableReplicas = 0
 			phDeployment.Status.Endpoint = ""
@@ -277,7 +277,7 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 
 		if p.isUnschedulable {
 			phDeployment.Status.Phase = primehubv1alpha1.DeploymentFailed
-			phDeployment.Status.Messsage = "phDeployment has failed because of certain pods unschedulable." + r.explain(failedPods)
+			phDeployment.Status.Messsage = "Failed because of certain pods unschedulable." + r.explain(failedPods)
 			phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
 			phDeployment.Status.AvailableReplicas = 0
 			phDeployment.Status.Endpoint = ""
@@ -287,7 +287,7 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 
 	if seldonDeploymentAvailableTimeout {
 		phDeployment.Status.Phase = primehubv1alpha1.DeploymentFailed
-		phDeployment.Status.Messsage = "phDeployment has failed because the deployment is not available for over 5 min" + r.explain(failedPods)
+		phDeployment.Status.Messsage = "Failed because the deployment is not available for over 5 min" + r.explain(failedPods)
 		phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
 		phDeployment.Status.AvailableReplicas = 0
 
@@ -305,7 +305,7 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 
 	if seldonDeployment.Status.State == seldonv1.StatusStateFailed {
 		phDeployment.Status.Phase = primehubv1alpha1.DeploymentFailed
-		phDeployment.Status.Messsage = "phDeployment has failed because the seldon deployment on k8s is failed " + r.explain(failedPods)
+		phDeployment.Status.Messsage = "Failed because the seldon deployment on k8s is failed " + r.explain(failedPods)
 		phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
 		phDeployment.Status.AvailableReplicas = 0
 
