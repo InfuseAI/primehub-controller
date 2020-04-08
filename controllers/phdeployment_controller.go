@@ -18,9 +18,10 @@ package controllers
 import (
 	"context"
 	"fmt"
-	v1 "k8s.io/api/apps/v1"
 	"strings"
 	"time"
+
+	v1 "k8s.io/api/apps/v1"
 
 	"k8s.io/api/extensions/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -28,6 +29,7 @@ import (
 
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -187,61 +189,73 @@ func (r *PhDeploymentReconciler) reconcileSeldonDeployment(ctx context.Context, 
 	reconcilationFailed := false
 	reconcilationFailedReason := ""
 
+	resourceInvalid := false
+	resourceInvalidReason := ""
+
 	seldonDeployment, err := r.getSeldonDeployment(ctx, seldonDeploymentKey)
 	if err != nil && !apierrors.IsNotFound(err) {
 		log.Error(err, "return since GET seldonDeployment error ")
 		return err
 	}
 
-	if seldonDeployment == nil { // seldonDeployment is not found
-		log.Info("SeldonDeployment doesn't exist, create one...")
+	// resource constraint verify
+	resourceInvalid, err = r.validate(phDeployment)
+	if err != nil {
+		log.Error(err, "failed to validate phDeployment")
+		resourceInvalidReason = err.Error()
+	}
+	if resourceInvalid == true && resourceInvalidReason == "" {
+		resourceInvalidReason = "because your instance type resource limit multiply replicas number is larger than your group quota."
+	}
 
-		seldonDeployment, err := r.buildSeldonDeployment(ctx, phDeployment)
+	if resourceInvalid == false { // if resource is valid then create/update seldonDeployment
+		if seldonDeployment == nil { // seldonDeployment is not found
+			log.Info("SeldonDeployment doesn't exist, create one...")
 
-		if err == nil {
-			err = r.Client.Create(ctx, seldonDeployment)
-		}
+			seldonDeployment, err := r.buildSeldonDeployment(ctx, phDeployment)
 
-		if err == nil { // create seldonDeployment successfully
-			log.Info("SeldonDeployment created", "SeldonDeployment", seldonDeployment.Name)
-			return nil
-		} else { // error occurs when creating or building seldonDeployment
-			log.Error(err, "CREATE seldonDeployment error")
-			reconcilationFailed = true
-			reconcilationFailedReason = err.Error()
-		}
-	} else { // seldonDeployment exist
-		log.Info("SeldonDeployment exist, check the status of current seldonDeployment and update phDeployment")
-
-		if hasChanged {
-			log.Info("phDeployment has been updated, update the seldonDeployemt to reflect the update.")
-			// build the new seldonDeployment
-			seldonDeploymentUpdated, err := r.buildSeldonDeployment(ctx, phDeployment)
-			seldonDeployment.Spec = seldonDeploymentUpdated.Spec
 			if err == nil {
-				err = r.Client.Update(ctx, seldonDeployment)
+				err = r.Client.Create(ctx, seldonDeployment)
 			}
 
 			if err == nil { // create seldonDeployment successfully
-				log.Info("SeldonDeployment updated", "SeldonDeployment", seldonDeployment.Name)
-			} else {
-				log.Error(err, "Failed to update seldonDeployment")
+				log.Info("SeldonDeployment created", "SeldonDeployment", seldonDeployment.Name)
+				return nil
+			} else { // error occurs when creating or building seldonDeployment
+				log.Error(err, "CREATE seldonDeployment error")
 				reconcilationFailed = true
 				reconcilationFailedReason = err.Error()
 			}
+		} else { // seldonDeployment exist
+			log.Info("SeldonDeployment exist, check the status of current seldonDeployment and update phDeployment")
 
-		}
+			if hasChanged {
+				log.Info("phDeployment has been updated, update the seldonDeployemt to reflect the update.")
+				// build the new seldonDeployment
+				seldonDeploymentUpdated, err := r.buildSeldonDeployment(ctx, phDeployment)
+				seldonDeployment.Spec = seldonDeploymentUpdated.Spec
+				if err == nil {
+					err = r.Client.Update(ctx, seldonDeployment)
+				}
 
-		// check if seldonDeployment is unAvailable for over 5 min
-		if r.unAvailableTimeout(phDeployment, seldonDeployment) {
-			// we would like to keep the SeldonDeployment object rather than delete it
-			// because we need the status messages in its managed pods
-			log.Info("SeldonDeployment is not available for over 5 min. Change the phDeployment to failed state.")
-			seldonDeploymentAvailableTimeout = true
+				if err == nil { // create seldonDeployment successfully
+					log.Info("SeldonDeployment updated", "SeldonDeployment", seldonDeployment.Name)
+				} else {
+					log.Error(err, "Failed to update seldonDeployment")
+					reconcilationFailed = true
+					reconcilationFailedReason = err.Error()
+				}
+			} else if r.unAvailableTimeout(phDeployment, seldonDeployment) {
+				// check if seldonDeployment is unAvailable for over 5 min
+				// we would like to keep the SeldonDeployment object rather than delete it
+				// because we need the status messages in its managed pods
+				log.Info("SeldonDeployment is not available for over 5 min. Change the phDeployment to failed state.")
+				seldonDeploymentAvailableTimeout = true
+			}
 		}
 	}
 
-	if reconcilationFailed == false { // if update/create seldonDeployment successfully
+	if resourceInvalid == false && reconcilationFailed == false { // if resource is valid and  update/create seldonDeployment successfully
 		// if the situation is creation, then seldonDeployment comes from buildSeldonDeployment
 		// and thus the status will be nil, so we get the seldonDeployment from cluster again.
 		seldonDeployment, err = r.getSeldonDeployment(ctx, seldonDeploymentKey)
@@ -250,14 +264,19 @@ func (r *PhDeploymentReconciler) reconcileSeldonDeployment(ctx context.Context, 
 			return err
 		}
 	}
-
-	return r.updateStatus(ctx, phDeployment, seldonDeployment, seldonDeploymentAvailableTimeout, reconcilationFailed, reconcilationFailedReason)
+	return r.updateStatus(ctx, phDeployment, seldonDeployment, seldonDeploymentAvailableTimeout, reconcilationFailed, reconcilationFailedReason, resourceInvalid, resourceInvalidReason)
 }
 
-func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, seldonDeployment *seldonv1.SeldonDeployment, seldonDeploymentAvailableTimeout bool, reconcilationFailed bool, reconcilationFailedReason string) error {
+func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, seldonDeployment *seldonv1.SeldonDeployment, seldonDeploymentAvailableTimeout bool, reconcilationFailed bool, reconcilationFailedReason string, resourceInvalid bool, resourceInvalidReason string) error {
 
-	// log.Info("=== in updateStatus ===", "seldonDeployment.Status", seldonDeployment.Status)
-	//log := r.Log.WithValues("phDeployment", phDeployment.Name)
+	if resourceInvalid {
+		phDeployment.Status.Phase = primehubv1alpha1.DeploymentFailed
+		phDeployment.Status.Messsage = "Deployment's resource is not valid, " + resourceInvalidReason
+		phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
+		phDeployment.Status.AvailableReplicas = 0
+
+		return nil
+	}
 
 	failedPods := r.listFailedPods(ctx, phDeployment)
 
@@ -315,7 +334,7 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 	if seldonDeployment.Status.State == seldonv1.StatusStateAvailable {
 
 		phDeployment.Status.Phase = primehubv1alpha1.DeploymentDeployed
-		phDeployment.Status.Messsage = "phDeployment is deployed and available now"
+		phDeployment.Status.Messsage = "Deployment is deployed and available now"
 		phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
 		// TODO: there is only one deployment currently, need to change in the future when enable A/B test
 		phDeployment.Status.AvailableReplicas = int(0)
@@ -328,7 +347,7 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 
 	if seldonDeployment.Status.State == seldonv1.StatusStateCreating {
 		phDeployment.Status.Phase = primehubv1alpha1.DeploymentDeploying
-		phDeployment.Status.Messsage = "phDeployment is being deployed and not available now"
+		phDeployment.Status.Messsage = "Deployment is being deployed and not available now"
 		phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
 		// TODO: there is only one deployment currently, need to change in the future when enable A/B test
 		phDeployment.Status.AvailableReplicas = int(0)
@@ -741,4 +760,114 @@ func (r *PhDeploymentReconciler) updateHistory(ctx context.Context, phDeployment
 	}
 
 	return hasChanged
+}
+
+func (r *PhDeploymentReconciler) validate(phDeployment *primehubv1alpha1.PhDeployment) (bool, error) {
+	log := r.Log.WithValues("phDeployment", phDeployment.Name)
+
+	groupInfo, err := r.getGroupInfo(phDeployment.Spec.GroupId)
+	if err != nil {
+		log.Error(err, "cannot get group info")
+		return false, err
+	}
+
+	instanceInfo, err := r.getInstanceTypeInfo(phDeployment.Spec.Predictors[0].InstanceType)
+	if err != nil {
+		log.Error(err, "cannot get instance type info")
+		return false, err
+	}
+
+	replicas := phDeployment.Spec.Predictors[0].Replicas
+
+	instanceRequestedQuota, err := ConvertToResourceQuotaWithReplicas(instanceInfo.Spec.LimitsCpu, (float32)(instanceInfo.Spec.LimitsGpu), instanceInfo.Spec.LimitsMemory, replicas)
+	if err != nil {
+		log.Error(err, "cannot get convert instance type resource quota")
+		return false, err
+	}
+
+	groupQuota, err := ConvertToResourceQuota(groupInfo.ProjectQuotaCpu, groupInfo.ProjectQuotaGpu, groupInfo.ProjectQuotaMemory)
+	if err != nil {
+		log.Error(err, "cannot get convert instance type resource quota")
+		return false, err
+	}
+	groupInvalid := r.validateResource(instanceRequestedQuota, groupQuota)
+
+	if groupInvalid == true {
+		return true, nil
+	}
+
+	return false, nil
+}
+
+func ConvertToResourceQuotaWithReplicas(cpu float32, gpu float32, memory string, replicas int) (*ResourceQuota, error) {
+	var resourceQuota ResourceQuota = *NewResourceQuota()
+
+	cpu = cpu * float32(replicas)
+	gpu = gpu * float32(replicas)
+
+	if cpu < 0 {
+		resourceQuota.cpu = nil
+	} else {
+		resourceQuota.cpu.SetMilli(int64(cpu*1000 + 0.5))
+	}
+
+	if gpu < 0 {
+		resourceQuota.gpu = nil
+	} else {
+		resourceQuota.gpu.Set(int64(gpu + 0.5))
+	}
+
+	if memory == "" {
+		resourceQuota.memory = nil
+	} else {
+		memoryLimit, err := resource.ParseQuantity(memory)
+		if err != nil {
+			return nil, err
+		}
+
+		memoryLimitTmp := memoryLimit
+		for i := 0; i < replicas; i++ { // multiply replicas
+			memoryLimit.Add(memoryLimitTmp)
+		}
+
+		resourceQuota.memory = &memoryLimit
+	}
+
+	return &resourceQuota, nil
+}
+
+func (r *PhDeploymentReconciler) getGroupInfo(groupId string) (*graphql.DtoGroup, error) {
+	cacheKey := "group:" + groupId
+	cacheItem := GroupCache.Get(cacheKey)
+	if cacheItem == nil || cacheItem.Expired() {
+		groupInfo, err := r.GraphqlClient.FetchGroupInfo(groupId)
+		if err != nil {
+			return nil, err
+		}
+		GroupCache.Set(cacheKey, groupInfo, cacheExpiredTime)
+	}
+	return GroupCache.Get(cacheKey).Value().(*graphql.DtoGroup), nil
+}
+
+func (r *PhDeploymentReconciler) getInstanceTypeInfo(instanceTypeId string) (*graphql.DtoInstanceType, error) {
+	cacheKey := "instanceType:" + instanceTypeId
+	cacheItem := InstanceTypeCache.Get(cacheKey)
+	if cacheItem == nil || cacheItem.Expired() {
+		instanceTypeInfo, err := r.GraphqlClient.FetchInstanceTypeInfo(instanceTypeId)
+		if err != nil {
+			return nil, err
+		}
+		InstanceTypeCache.Set(cacheKey, instanceTypeInfo, cacheExpiredTime)
+	}
+	return InstanceTypeCache.Get(cacheKey).Value().(*graphql.DtoInstanceType), nil
+}
+
+func (r *PhDeploymentReconciler) validateResource(requestedQuota *ResourceQuota, resourceQuota *ResourceQuota) bool {
+	if (resourceQuota.cpu != nil && requestedQuota.cpu != nil && resourceQuota.cpu.Cmp(*requestedQuota.cpu) == -1) ||
+		(resourceQuota.gpu != nil && requestedQuota.gpu != nil && resourceQuota.gpu.Cmp(*requestedQuota.gpu) == -1) ||
+		(resourceQuota.memory != nil && requestedQuota.memory != nil && resourceQuota.memory.Cmp(*requestedQuota.memory) == -1) {
+		return true
+	}
+
+	return false
 }
