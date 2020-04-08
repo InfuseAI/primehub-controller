@@ -523,6 +523,17 @@ func (r *PhDeploymentReconciler) buildSeldonDeployment(ctx context.Context, phDe
 	spawner.BuildPodSpec(&podSpec)
 	podSpec.Containers[0].Name = "model"
 
+	imageSecrets := []corev1.LocalObjectReference{}
+	if phDeployment.Spec.Predictors[0].ImagePullSecret != "" {
+		imageSecrets = append(
+			imageSecrets,
+			corev1.LocalObjectReference{
+				Name: phDeployment.Spec.Predictors[0].ImagePullSecret,
+			},
+		)
+	}
+	podSpec.ImagePullSecrets = imageSecrets
+
 	seldonPodSpec1 := &seldonv1.SeldonPodSpec{
 		// we have to remove components name so the image can be updated
 		// the deployment of the seldonDeployment name will be spec.predict.hash()

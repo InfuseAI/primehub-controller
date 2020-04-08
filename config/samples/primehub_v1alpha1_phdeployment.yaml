@@ -19,6 +19,7 @@ spec:
       replicas: 1
       modelImage: sandhya1594/spam-classifier:1.0.0.1
       #modelImage: popcornylu/spam-classifier:1.0.0.1
+      imagePullSecret: test
       instanceType: cpu-only
       metadata: # key-value objects (can update)
         foo: bar
