@@ -4,14 +4,14 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	primehubv1alpha1 "primehub-controller/api/v1alpha1"
+	//primehubv1alpha1 "primehub-controller/api/v1alpha1"
 	eeprimehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
 	"primehub-controller/pkg/graphql"
 	"time"
 
 	"k8s.io/apimachinery/pkg/util/wait"
 
-	"primehub-controller/controllers"
+	//"primehub-controller/controllers"
 	eecontrollers "primehub-controller/ee/controllers"
 
 	"go.uber.org/zap"
@@ -39,7 +39,7 @@ var (
 func init() {
 	_ = clientgoscheme.AddToScheme(scheme)
 
-	_ = primehubv1alpha1.AddToScheme(scheme)
+	//_ = primehubv1alpha1.AddToScheme(scheme)
 	_ = eeprimehubv1alpha1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
 	_ = batchv1.AddToScheme(scheme)
@@ -90,7 +90,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controllers.ImageSpecReconciler{
+	if err = (&eecontrollers.ImageSpecReconciler{
 		Client: mgr.GetClient(),
 		Log:    ctrl.Log.WithName("controllers").WithName("ImageSpec"),
 		Scheme: mgr.GetScheme(),
@@ -98,7 +98,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "ImageSpec")
 		os.Exit(1)
 	}
-	if err = (&controllers.ImageSpecJobReconciler{
+	if err = (&eecontrollers.ImageSpecJobReconciler{
 		Client:           mgr.GetClient(),
 		Log:              ctrl.Log.WithName("controllers").WithName("ImageSpecJob"),
 		Scheme:           mgr.GetScheme(),
@@ -127,7 +127,7 @@ func main() {
 		panic(err.Error() + " cannot UnmarshalKey affinity")
 	}
 
-	if err = (&controllers.PhJobReconciler{
+	if err = (&eecontrollers.PhJobReconciler{
 		Client:                         mgr.GetClient(),
 		Log:                            ctrl.Log.WithName("controllers").WithName("PhJob"),
 		Scheme:                         mgr.GetScheme(),
@@ -153,10 +153,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controllers.PhScheduleReconciler{
+	if err = (&eecontrollers.PhScheduleReconciler{
 		Client:            mgr.GetClient(),
 		Log:               ctrl.Log.WithName("controllers").WithName("PhSchedule"),
-		PhScheduleCronMap: make(map[string]*controllers.PhScheduleCron),
+		PhScheduleCronMap: make(map[string]*eecontrollers.PhScheduleCron),
 		GraphqlClient:     graphqlClient,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PhSchedule")
@@ -164,7 +164,7 @@ func main() {
 	}
 
 	modelDeployment := viper.GetBool("modelDeployment.enabled")
-	ingress := controllers.PhIngress{}
+	ingress := eecontrollers.PhIngress{}
 	if modelDeployment {
 		// get the ingress from the config which is from the helm value.
 
@@ -173,7 +173,7 @@ func main() {
 			panic(err.Error() + " cannot UnmarshalKey ingress")
 		}
 
-		if err = (&controllers.PhDeploymentReconciler{
+		if err = (&eecontrollers.PhDeploymentReconciler{
 			Client:        mgr.GetClient(),
 			Log:           ctrl.Log.WithName("controllers").WithName("PhDeployment"),
 			Scheme:        mgr.GetScheme(),
@@ -187,7 +187,7 @@ func main() {
 
 	// +kubebuilder:scaffold:builder
 
-	phJobScheduler := controllers.PHJobScheduler{
+	phJobScheduler := eecontrollers.PHJobScheduler{
 		Client:        mgr.GetClient(),
 		Log:           ctrl.Log.WithName("scheduler").WithName("PhJob"),
 		GraphqlClient: graphqlClient,

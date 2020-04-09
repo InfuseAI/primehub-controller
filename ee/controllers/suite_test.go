@@ -20,7 +20,7 @@ import (
 
 	// +kubebuilder:scaffold:imports
 
-	primehubv1alpha1 "primehub-controller/api/v1alpha1"
+	primehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
 )
 
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to

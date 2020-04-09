@@ -5,8 +5,10 @@ go 1.13
 require (
 	github.com/fatih/structtag v1.2.0
 	github.com/go-logr/logr v0.1.0
+	github.com/karlseguin/ccache v2.0.3+incompatible
 	github.com/onsi/ginkgo v1.8.0
 	github.com/onsi/gomega v1.5.0
+	github.com/robfig/cron/v3 v3.0.0
 	github.com/spf13/viper v1.4.0
 	github.com/stretchr/testify v1.3.0
 	go.uber.org/zap v1.10.0
