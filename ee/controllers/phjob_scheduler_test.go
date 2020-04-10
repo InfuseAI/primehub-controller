@@ -7,7 +7,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	primehubv1alpha1 "primehub-controller/api/v1alpha1"
+	primehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
 	"primehub-controller/pkg/graphql"
 )
 

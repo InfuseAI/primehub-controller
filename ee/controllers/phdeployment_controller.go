@@ -32,7 +32,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	primehubv1alpha1 "primehub-controller/api/v1alpha1"
+	primehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
 	"primehub-controller/pkg/escapism"
 	"primehub-controller/pkg/graphql"
 	seldonv1 "primehub-controller/seldon/apis/v1"

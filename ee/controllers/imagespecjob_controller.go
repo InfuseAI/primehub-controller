@@ -31,7 +31,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	primehubv1alpha1 "primehub-controller/api/v1alpha1"
+	primehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
 )
 
 // ImageSpecJobReconciler reconciles a ImageSpecJob object
