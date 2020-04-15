@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+
 	//primehubv1alpha1 "primehub-controller/api/v1alpha1"
 	eeprimehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
 	"primehub-controller/pkg/graphql"
@@ -25,7 +26,6 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 
-	seldonv1 "primehub-controller/seldon/apis/v1"
 	// +kubebuilder:scaffold:imports
 
 	"github.com/spf13/viper"
@@ -43,7 +43,6 @@ func init() {
 	_ = eeprimehubv1alpha1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
 	_ = batchv1.AddToScheme(scheme)
-	_ = seldonv1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
 }
 

@@ -25,6 +25,7 @@ const (
 	DeploymentDeploying PhDeploymentPhase = "Deploying"
 	DeploymentDeployed  PhDeploymentPhase = "Deployed"
 	DeploymentStopped   PhDeploymentPhase = "Stopped"
+	DeploymentStopping  PhDeploymentPhase = "Stopping"
 	DeploymentFailed    PhDeploymentPhase = "Failed"
 )
 
