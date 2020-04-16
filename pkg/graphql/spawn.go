@@ -62,7 +62,7 @@ func NewSpawnerByData(data DtoData, groupName string, instanceTypeName string, i
 
 	workingDir := options.WorkingDir
 	if workingDir == "" {
-		workingDir = "/workingdir"
+		workingDir = "/home/jovyan"
 	}
 
 	workingDirSize := options.WorkingDirSize
@@ -94,7 +94,7 @@ func NewSpawnerByData(data DtoData, groupName string, instanceTypeName string, i
 	spawner.applyImageForImageSpec(image.Spec, isGpu)
 
 	// Working Dir
-	spawner.applyVolumeForWorkingDir(workingDirSize)
+	spawner.applyVolumeForWorkingDir(workingDir, workingDirSize)
 
 	// Dataset
 	spawner.applyDatasets(data.User.Groups, groupName)
@@ -483,9 +483,9 @@ func (spawner *Spawner) applyVolumeForDatasetDir() {
 
 }
 
-func (spawner *Spawner) applyVolumeForWorkingDir(workingDirSize resource.Quantity) {
+func (spawner *Spawner) applyVolumeForWorkingDir(workingDirPath string, workingDirSize resource.Quantity) {
 	name := "workingdir"
-	path := "/workingdir"
+	path := workingDirPath
 
 	volume := corev1.Volume{
 		Name: name,
