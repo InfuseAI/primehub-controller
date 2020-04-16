@@ -21,6 +21,4 @@ require (
 	sigs.k8s.io/controller-runtime v0.3.0
 )
 
-exclude github.com/seldonio/seldon-core/operator v0.0.0-20200411090647-b4b3cb5f6db4
-
 replace primehub-controller v0.0.0 => ../
