@@ -27,8 +27,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlzap "sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	seldonv1 "primehub-controller/seldon/apis/v1"
-
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	// +kubebuilder:scaffold:imports
@@ -45,7 +43,6 @@ func init() {
 	_ = primehubv1alpha1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
 	_ = batchv1.AddToScheme(scheme)
-	_ = seldonv1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
 }
 

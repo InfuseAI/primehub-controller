@@ -25,6 +25,7 @@ const (
 	DeploymentDeploying PhDeploymentPhase = "Deploying"
 	DeploymentDeployed  PhDeploymentPhase = "Deployed"
 	DeploymentStopped   PhDeploymentPhase = "Stopped"
+	DeploymentStopping  PhDeploymentPhase = "Stopping"
 	DeploymentFailed    PhDeploymentPhase = "Failed"
 )
 
@@ -68,6 +69,9 @@ type PhDeploymentHistory struct {
 
 // +kubebuilder:subresource:status
 // +kubebuilder:object:root=true
+// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.phase"
+// +kubebuilder:printcolumn:name="Replicas",type="integer",JSONPath=".status.replicas"
+// +kubebuilder:printcolumn:name="Available",type="integer",JSONPath=".status.availableReplicas"
 
 // PhDeployment is the Schema for the phdeployments API
 type PhDeployment struct {
