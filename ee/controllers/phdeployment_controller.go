@@ -532,7 +532,7 @@ func (r *PhDeploymentReconciler) buildDeployment(ctx context.Context, phDeployme
 
 	deployment := &v1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      phDeployment.Name,
+			Name:      "deploy-" + phDeployment.Name,
 			Namespace: phDeployment.Namespace,
 		},
 		Spec: v1.DeploymentSpec{
