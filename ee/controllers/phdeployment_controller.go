@@ -72,7 +72,7 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 
 	deploymentKey := client.ObjectKey{
 		Namespace: req.Namespace,
-		Name:      req.Name,
+		Name:      "deploy-" + req.Name,
 	}
 
 	serviceKey := client.ObjectKey{
