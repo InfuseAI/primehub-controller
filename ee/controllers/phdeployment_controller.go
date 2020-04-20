@@ -203,94 +203,123 @@ func (r *PhDeploymentReconciler) reconcileDeployment(ctx context.Context, phDepl
 	// 2. update the deployment if spec has been changed
 	// 3. update the phDeployment status based on the deployment status
 	// 4. currently, the phDeployment failed if deployment failed or it is not available for over 5 mins
-	log := r.Log.WithValues("phDeployment", phDeployment.Name)
-
-	deploymentAvailableTimeout := false
-	reconcilationFailed := false
-	reconcilationFailedReason := ""
+	logger := r.Log.WithValues("phDeployment", phDeployment.Name)
 
 	deployment, err := r.getDeployment(ctx, deploymentKey)
 	if err != nil && !apierrors.IsNotFound(err) {
-		log.Error(err, "return since GET deployment error ")
+		logger.Error(err, "return since GET deployment error ")
 		return err
 	}
 
-	if deployment == nil { // deployment is not found
-		log.Info("deployment doesn't exist, create one...")
-		deployment, err := r.buildDeployment(ctx, phDeployment)
-
-		if err == nil {
-			err = r.Client.Create(ctx, deployment)
-		}
-
-		if err == nil { // create deployment successfully
-			log.Info("deployment created", "deployment", deployment.Name)
-			return nil
-		} else { // error occurs when creating or building deployment
-			log.Error(err, "CREATE deployment error")
-
-			// create failed, return directly
-			reconcilationFailedReason = err.Error()
-
-			phDeployment.Status.Phase = primehubv1alpha1.DeploymentFailed
-			phDeployment.Status.Messsage = reconcilationFailedReason
-			phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
-			phDeployment.Status.AvailableReplicas = 0
-
-			return nil
-		}
-	} else { // deployment exist
-		log.Info("deployment exist, check the status of current deployment and update phDeployment")
-
-		if hasChanged {
-			log.Info("phDeployment has been updated, update the deployment to reflect the update.")
-
-			// If model image changed, build new deployment.
-			// If only replica number changed, update replica numver
-			if phDeployment.Status.History[1].Spec.Predictors[0].ModelImage != phDeployment.Spec.Predictors[0].ModelImage {
-				deploymentUpdated, err := r.buildDeployment(ctx, phDeployment)
-				deployment.Spec = deploymentUpdated.Spec
-				if err == nil {
-					err = r.Client.Update(ctx, deployment)
-				}
-			} else if phDeployment.Status.History[1].Spec.Predictors[0].Replicas != phDeployment.Spec.Predictors[0].Replicas {
-				replicas := int32(phDeployment.Spec.Predictors[0].Replicas)
-				deployment.Spec.Replicas = &replicas
-				if err == nil {
-					err = r.Client.Update(ctx, deployment)
-				}
-			}
-
-			if err == nil { // create deployment successfully
-				log.Info("deployment updated", "deployment", deployment.Name)
-			} else {
-				log.Error(err, "Failed to update deployment")
-				reconcilationFailed = true
-				reconcilationFailedReason = err.Error()
-			}
-		}
-
+	if deployment == nil {
+		logger.Info("deployment doesn't exist, create one...")
+		return r.createDeployment(ctx, phDeployment)
 	}
 
-	if reconcilationFailed == false { // if update/create deployment successfully
-		// if the situation is creation, then deployment comes from buildDeployment
-		// and thus the status will be nil, so we get the deployment from cluster again.
-		deployment, err = r.getDeployment(ctx, deploymentKey)
-		if err != nil {
-			log.Error(err, "Failed to get created deployment or it doesn't exist after reconciling deployment")
-			return err
-		}
-	}
-
-	return r.updateStatus(ctx, phDeployment, deployment, deploymentAvailableTimeout, reconcilationFailed, reconcilationFailedReason)
+	logger.Info("deployment exist, check the status of current deployment and update phDeployment")
+	return r.updateDeployment(ctx, phDeployment, deploymentKey, hasChanged, deployment)
 }
 
-func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, deployment *v1.Deployment, deploymentAvailableTimeout bool, reconcilationFailed bool, reconcilationFailedReason string) error {
+func (r *PhDeploymentReconciler) createDeployment(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment) error {
+	logger := r.Log.WithValues("phDeployment", phDeployment.Name)
+
+	groupInfo, err := r.GraphqlClient.FetchGroupInfo(phDeployment.Spec.GroupId)
+	if err != nil {
+		return r.updateStatus(ctx, phDeployment, nil, false, false, err.Error())
+	} else if groupInfo.EnabledDeployment == false {
+		logger.Info("Group doesn't enable model deployment flag", "group", phDeployment.Spec.GroupName)
+		return r.updateStatus(ctx, phDeployment, nil, false, false, "The model deployment is not enabled for the selected group")
+	}
+
+	deployment, err := r.buildDeployment(ctx, phDeployment)
+	if err != nil {
+		return r.updateStatus(ctx, phDeployment, nil, false, false, err.Error())
+	}
+
+	err = r.Client.Create(ctx, deployment)
+	if err != nil {
+		return r.updateStatus(ctx, phDeployment, nil, false, false, err.Error())
+	}
+
+	logger.Info("deployment created", "deployment", deployment.Name)
+	return nil
+}
+
+func (r *PhDeploymentReconciler) updateDeployment(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, deploymentKey client.ObjectKey, hasChanged bool, originalDeployment *v1.Deployment) error {
+	logger := r.Log.WithValues("phDeployment", phDeployment.Name)
+
+	var err error
+	deploymentAvailableTimeout := false
+
+	// check if deployment is unAvailable which means there is no available pod for over 5 min
+	if r.unAvailableTimeout(phDeployment, originalDeployment) {
+		// we would like to keep the deployment object rather than delete it
+		// because we need the status messages in its managed pods
+		logger.Info("deployment is not available for over 5 min. Change the phDeployment to failed state.")
+		deploymentAvailableTimeout = true
+	}
+
+	if hasChanged {
+		logger.Info("phDeployment has been updated, update the deployment to reflect the update.")
+
+		// If model image changed, build new deployment.
+		// If only replica number changed, update replica number
+		if modelImageChanged(phDeployment) {
+			deploymentUpdated, err := r.buildDeployment(ctx, phDeployment)
+			if err == nil {
+				originalDeployment.Spec = deploymentUpdated.Spec
+				err = r.Client.Update(ctx, originalDeployment)
+			}
+		} else if modelReplicaChanged(phDeployment) {
+			replicas := int32(phDeployment.Spec.Predictors[0].Replicas)
+			originalDeployment.Spec.Replicas = &replicas
+			err = r.Client.Update(ctx, originalDeployment)
+		}
+
+		if err != nil {
+			logger.Error(err, "Failed to update deployment")
+			return r.updateStatus(ctx, phDeployment, originalDeployment, deploymentAvailableTimeout, true, err.Error())
+		}
+
+		logger.Info("deployment updated", "deployment", originalDeployment.Name)
+	}
+
+	// if update/create deployment successfully
+	// if the situation is creation, then deployment comes from buildDeployment
+	// and thus the status will be nil, so we get the deployment from cluster again.
+	originalDeployment, err = r.getDeployment(ctx, deploymentKey)
+	if err != nil {
+		logger.Error(err, "Failed to get created deployment or it doesn't exist after reconciling deployment")
+		return err
+	}
+
+	return r.updateStatus(ctx, phDeployment, originalDeployment, deploymentAvailableTimeout, false, "")
+}
+
+func modelReplicaChanged(phDeployment *primehubv1alpha1.PhDeployment) bool {
+	return phDeployment.Status.History[1].Spec.Predictors[0].Replicas != phDeployment.Spec.Predictors[0].Replicas
+}
+
+func modelImageChanged(phDeployment *primehubv1alpha1.PhDeployment) bool {
+	return phDeployment.Status.History[1].Spec.Predictors[0].ModelImage != phDeployment.Spec.Predictors[0].ModelImage
+}
+
+func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, deployment *v1.Deployment, deploymentAvailableTimeout bool, reconciliationFailed bool, reconciliationFailedReason string) error {
+
+	// create deployment failed
+	if deployment == nil {
+		phDeployment.Status.Phase = primehubv1alpha1.DeploymentFailed
+		phDeployment.Status.Messsage = reconciliationFailedReason
+		phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
+		phDeployment.Status.AvailableReplicas = 0
+
+		return nil
+	}
 
 	// update deployment failed
-	if reconcilationFailed {
+	if reconciliationFailed {
 		phDeployment.Status.Phase = primehubv1alpha1.DeploymentFailed
-		phDeployment.Status.Messsage = reconcilationFailedReason
+		phDeployment.Status.Messsage = reconciliationFailedReason
 		phDeployment.Status.Replicas = int(deployment.Status.Replicas)
 		phDeployment.Status.AvailableReplicas = int(deployment.Status.AvailableReplicas)
 

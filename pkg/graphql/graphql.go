@@ -46,6 +46,7 @@ type DtoGroup struct {
 	ProjectQuotaCpu      float32
 	ProjectQuotaGpu      float32
 	ProjectQuotaMemory   string
+	EnabledDeployment    bool
 
 	InstanceTypes []DtoInstanceType
 	Images        []DtoImage
@@ -227,7 +228,8 @@ func (c GraphqlClient) FetchGroupInfo(groupId string) (*DtoGroup, error) {
 					quotaMemory
 					projectQuotaCpu
 					projectQuotaGpu
-					projectQuotaMemory 
+					projectQuotaMemory
+					enabledDeployment
 	  }
 	}
 	`
@@ -268,6 +270,9 @@ func (c GraphqlClient) FetchGroupInfo(groupId string) (*DtoGroup, error) {
 	}
 	if _group["projectQuotaGpu"] == nil {
 		group.ProjectQuotaGpu = -1
+	}
+	if _group["enabledDeployment"] == nil {
+		group.EnabledDeployment = false
 	}
 
 	return &group, nil
