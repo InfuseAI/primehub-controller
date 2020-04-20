@@ -220,15 +220,25 @@ func (r *PhDeploymentReconciler) reconcileDeployment(ctx context.Context, phDepl
 	return r.updateDeployment(ctx, phDeployment, deploymentKey, hasChanged, deployment)
 }
 
+func (r *PhDeploymentReconciler) checkModelDeploymentByGroup(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment) error {
+	logger := r.Log.WithValues("phDeployment", phDeployment.Name)
+	enabledDeployment, err := r.GraphqlClient.FetchGroupEnableModelDeployment(phDeployment.Spec.GroupId)
+	if err != nil {
+		logger.Error(err, "failed to query group by id: " + phDeployment.Spec.GroupId)
+		return r.updateStatus(ctx, phDeployment, nil, false, false, err.Error())
+	} else if enabledDeployment == false {
+		logger.Info("Group doesn't enable model deployment flag", "group", phDeployment.Spec.GroupName)
+		return r.updateStatus(ctx, phDeployment, nil, false, false, "The model deployment is not enabled for the selected group")
+	}
+	return nil
+}
+
 func (r *PhDeploymentReconciler) createDeployment(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment) error {
 	logger := r.Log.WithValues("phDeployment", phDeployment.Name)
 
-	groupInfo, err := r.GraphqlClient.FetchGroupInfo(phDeployment.Spec.GroupId)
+	err := r.checkModelDeploymentByGroup(ctx, phDeployment)
 	if err != nil {
-		return r.updateStatus(ctx, phDeployment, nil, false, false, err.Error())
-	} else if groupInfo.EnabledDeployment == false {
-		logger.Info("Group doesn't enable model deployment flag", "group", phDeployment.Spec.GroupName)
-		return r.updateStatus(ctx, phDeployment, nil, false, false, "The model deployment is not enabled for the selected group")
+		return err
 	}
 
 	deployment, err := r.buildDeployment(ctx, phDeployment)

@@ -10,6 +10,24 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+type Location struct {
+	Line   int `json:"line"`
+	Column int `json:"column"`
+}
+
+type QueryError struct {
+	Message       string                 `json:"message"`
+	Locations     []Location             `json:"locations,omitempty"`
+	Path          []interface{}          `json:"path,omitempty"`
+	Rule          string                 `json:"-"`
+	ResolverError error                  `json:"-"`
+	Extensions    map[string]interface{} `json:"extensions,omitempty"`
+}
+
+type QueryErrors struct {
+	Errors []QueryError `json:"errors"`
+}
+
 // Type definitions of data transfer objects (DTO) from graphql
 type DtoResult struct {
 	Data DtoData
@@ -206,7 +224,8 @@ func (c GraphqlClient) QueryServer(requestData map[string]interface{}) ([]byte, 
 	}
 
 	if response.StatusCode != 200 {
-		return nil, errors.New("graphql query failed: " + response.Status)
+		body, _ := ioutil.ReadAll(response.Body)
+		return body, errors.New("graphql query failed: " + response.Status)
 	}
 
 	defer response.Body.Close()
@@ -215,6 +234,58 @@ func (c GraphqlClient) QueryServer(requestData map[string]interface{}) ([]byte, 
 		return nil, err
 	}
 	return body, nil
+}
+
+func processGraphQLErrorMessage(body []byte) string {
+	data := &QueryErrors{}
+	if body == nil {
+		return ""
+	}
+	json.Unmarshal(body, &data)
+	return data.Errors[0].Message
+}
+
+func (c GraphqlClient) FetchGroupEnableModelDeployment(groupId string) (bool, error) {
+	query := `
+	query ($id: ID!) {
+		group(where: {id: $id}) {
+					name
+					id
+					enabledDeployment
+	  }
+	}
+	`
+	requestData := map[string]interface{}{
+		"query": query,
+		"variables": map[string]interface{}{
+			"id": groupId,
+		},
+	}
+	body, err := c.QueryServer(requestData)
+	if err != nil {
+		return false, errors.New(processGraphQLErrorMessage(body))
+	}
+	data := map[string]interface{}{}
+	json.Unmarshal(body, &data)
+
+	data, ok := data["data"].(map[string]interface{})
+	if !ok {
+		return false, errors.New("can not find data in response")
+	}
+	_group, ok := data["group"].(map[string]interface{})
+	if !ok {
+		return false, errors.New("can not find group in response")
+	}
+
+	var group DtoGroup
+	jsonObj, _ := json.Marshal(_group)
+	json.Unmarshal(jsonObj, &group)
+
+	if _group["enabledDeployment"] == nil {
+		group.EnabledDeployment = false
+	}
+
+	return group.EnabledDeployment, nil
 }
 
 func (c GraphqlClient) FetchGroupInfo(groupId string) (*DtoGroup, error) {
@@ -229,7 +300,6 @@ func (c GraphqlClient) FetchGroupInfo(groupId string) (*DtoGroup, error) {
 					projectQuotaCpu
 					projectQuotaGpu
 					projectQuotaMemory
-					enabledDeployment
 	  }
 	}
 	`
@@ -270,9 +340,6 @@ func (c GraphqlClient) FetchGroupInfo(groupId string) (*DtoGroup, error) {
 	}
 	if _group["projectQuotaGpu"] == nil {
 		group.ProjectQuotaGpu = -1
-	}
-	if _group["enabledDeployment"] == nil {
-		group.EnabledDeployment = false
 	}
 
 	return &group, nil
