@@ -270,13 +270,6 @@ func (r *PhDeploymentReconciler) reconcileDeployment(ctx context.Context, phDepl
 			}
 		}
 
-		// check if deployment is unAvailable which means there is no available pod for over 5 min
-		if r.unAvailableTimeout(phDeployment, deployment) {
-			// we would like to keep the deployment object rather than delete it
-			// because we need the status messages in its managed pods
-			log.Info("deployment is not available for over 5 min. Change the phDeployment to failed state.")
-			deploymentAvailableTimeout = true
-		}
 	}
 
 	if reconcilationFailed == false { // if update/create deployment successfully
@@ -304,6 +297,18 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 		return nil
 	}
 
+	for _, c := range deployment.Status.Conditions {
+		if c.Type == v1.DeploymentReplicaFailure && c.Status == corev1.ConditionTrue && c.Reason == "FailedCreate" {
+			// create replicaset failed, because request exceeds quota and is denied by admission webhook
+			phDeployment.Status.Phase = primehubv1alpha1.DeploymentDeploying
+			phDeployment.Status.Messsage = c.Message
+			phDeployment.Status.Replicas = int(deployment.Status.Replicas)
+			phDeployment.Status.AvailableReplicas = int(deployment.Status.AvailableReplicas)
+
+			return nil
+		}
+	}
+
 	failedPods := r.listFailedPods(ctx, phDeployment, deployment)
 
 	// fast-fail cases:
@@ -322,22 +327,13 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 
 	for _, p := range failedPods {
 		if p.isUnschedulable {
-			// even pod is unschedulable, deployment is still deploying, wait for scale down or timeout
+			// even pod is unschedulable, deployment is still deploying, wait for scale down
 			phDeployment.Status.Phase = primehubv1alpha1.DeploymentDeploying
 			phDeployment.Status.Messsage = "Certain pods unschedulable." + r.explain(failedPods)
 			phDeployment.Status.Replicas = int(deployment.Status.Replicas)
 			phDeployment.Status.AvailableReplicas = int(deployment.Status.AvailableReplicas)
 			return nil
 		}
-	}
-
-	if deploymentAvailableTimeout {
-		phDeployment.Status.Phase = primehubv1alpha1.DeploymentFailed
-		phDeployment.Status.Messsage = "Failed because the deployment is not available for over 5 min" + r.explain(failedPods)
-		phDeployment.Status.Replicas = int(deployment.Status.Replicas)
-		phDeployment.Status.AvailableReplicas = 0
-
-		return nil
 	}
 
 	ready := true
@@ -880,10 +876,8 @@ func (r *PhDeploymentReconciler) scaleDownDeployment(ctx context.Context, deploy
 
 // [Service] get service of the phDeployment
 func (r *PhDeploymentReconciler) getService(ctx context.Context, serviceKey client.ObjectKey) (*corev1.Service, error) {
-	log.Info("**getService", "serviceKey", serviceKey)
 	service := &corev1.Service{}
 	if err := r.Client.Get(ctx, serviceKey, service); err != nil {
-		log.Info("**getService error", "err", err)
 		return nil, err
 	}
 	return service, nil
@@ -908,31 +902,6 @@ func (r *PhDeploymentReconciler) deleteService(ctx context.Context, serviceKey c
 	}
 
 	return nil
-}
-
-// check whether the deployment is not available which it has no any available pod for over 5 min
-func (r *PhDeploymentReconciler) unAvailableTimeout(phDeployment *primehubv1alpha1.PhDeployment, deployment *v1.Deployment) bool {
-
-	timeout := false
-	var start metav1.Time
-
-	if len(phDeployment.Status.History) == 0 {
-		start = metav1.NewTime(deployment.CreationTimestamp.Time)
-	} else {
-		latestHistory := phDeployment.Status.History[0]
-		start = latestHistory.Time
-	}
-
-	// if phDeployment in deploying phase for over 5 min
-	if phDeployment.Status.Phase == primehubv1alpha1.DeploymentDeploying {
-		now := metav1.Now()
-		duration := now.Time.Sub(start.Time)
-		if duration >= time.Duration(60)*time.Second { // change to 5 min
-			timeout = true
-		}
-	}
-
-	return timeout
 }
 
 func (r *PhDeploymentReconciler) getIngress(ctx context.Context, ingressKey client.ObjectKey) (*v1beta1.Ingress, error) {
