@@ -26,6 +26,7 @@ import (
 	"primehub-controller/pkg/escapism"
 
 	"github.com/go-logr/logr"
+	"github.com/karlseguin/ccache"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -41,6 +42,9 @@ import (
 var (
 	// DefaultJobPreparingTimeout is the phJob preparing state timeout value
 	DefaultJobPreparingTimeout = time.Duration(180) * time.Second
+
+	TimezoneCache            = ccache.New(ccache.Configure().MaxSize(1).ItemsToPrune(1))
+	TimezoneCacheExpiredTime = time.Minute
 )
 
 // PhJobReconciler reconciles a PhJob object
@@ -55,6 +59,20 @@ type PhJobReconciler struct {
 	NodeSelector                   map[string]string
 	Tolerations                    []corev1.Toleration
 	Affinity                       corev1.Affinity
+}
+
+func (r *PhJobReconciler) getTimeZone() (timezone string, err error) {
+	cacheKey := "timezone"
+	cacheItem := TimezoneCache.Get(cacheKey)
+	if cacheItem == nil || cacheItem.Expired() {
+		location, err := r.GraphqlClient.FetchTimeZone()
+		if err != nil {
+			return "", err
+		}
+		TimezoneCache.Set(cacheKey, location, TimezoneCacheExpiredTime)
+		r.Log.Info("fetch", "timezone", location)
+	}
+	return TimezoneCache.Get(cacheKey).Value().(string), nil
 }
 
 func (r *PhJobReconciler) buildPod(phJob *primehubv1alpha1.PhJob) (*corev1.Pod, error) {
@@ -103,6 +121,14 @@ func (r *PhJobReconciler) buildPod(phJob *primehubv1alpha1.PhJob) (*corev1.Pod, 
 		"app":               "primehub-job",
 		"primehub.io/group": escapism.EscapeToPrimehubLabel(phJob.Spec.GroupName),
 		"primehub.io/user":  escapism.EscapeToPrimehubLabel(phJob.Spec.UserName),
+	}
+	location, err := r.getTimeZone()
+	if err == nil {
+		for idx, _ := range pod.Spec.Containers {
+			pod.Spec.Containers[idx].Env = append(pod.Spec.Containers[idx].Env, corev1.EnvVar{Name: "TZ", Value: location})
+		}
+	} else {
+		r.Log.Error(err, "cannot get location")
 	}
 	pod.Spec.InitContainers = append(pod.Spec.InitContainers, corev1.Container{
 		Name:            "admission-is-not-found",
