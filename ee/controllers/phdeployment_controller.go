@@ -301,7 +301,7 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 		if c.Type == v1.DeploymentReplicaFailure && c.Status == corev1.ConditionTrue && c.Reason == "FailedCreate" {
 			// create replicaset failed, because request exceeds quota and is denied by admission webhook
 			phDeployment.Status.Phase = primehubv1alpha1.DeploymentDeploying
-			phDeployment.Status.Messsage = c.Message
+			phDeployment.Status.Messsage = strings.Split(c.Message, "denied the request:")[1]
 			phDeployment.Status.Replicas = int(deployment.Status.Replicas)
 			phDeployment.Status.AvailableReplicas = int(deployment.Status.AvailableReplicas)
 
@@ -368,7 +368,7 @@ func (r *PhDeploymentReconciler) explain(failedPods []FailedPodStatus) string {
 	for _, p := range failedPods {
 		fmt.Fprintf(b, "\npod[%s] failed", p.pod)
 		for _, v := range p.conditions {
-			fmt.Fprintf(b, "\n  reason: %s, message %s", v.Reason, v.Message)
+			fmt.Fprintf(b, "\n  reason: %s, message: %s", v.Reason, v.Message)
 		}
 
 		if len(p.containerStatuses) > 0 {
