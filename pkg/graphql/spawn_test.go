@@ -440,3 +440,25 @@ func checkSymlink(spawner *Spawner, symlink string) bool {
 	}
 	return false
 }
+
+func TestMemoryUnitConvert(t *testing.T) {
+
+	data := []struct {
+		input  string
+		output string
+	}{
+		{input: "", output: "",},
+		{input: "100", output: "100",},
+		{input: "1G", output: "1Gi",},
+		{input: "1Gi", output: "1Gi",},
+		{input: "2M", output: "2Mi",},
+		{input: "3K", output: "3Ki",},
+	}
+
+	for _, v := range data {
+		if output := ConvertMemoryUnit(v.input); output != v.output {
+			t.Errorf("expect output [%s] not matched the actual output [%s]", v.output, output)
+		}
+	}
+}
+
