@@ -13,7 +13,7 @@ const (
 const (
 	TIME_LAYOUT                = "2006-01-02T15:04:05Z"
 	RESOURCE_NAME              = "primehub-license"
-	DEFAULT_RESOURCE_NAMESPACE = "primehub"
+	DEFAULT_RESOURCE_NAMESPACE = "hub"
 	SECRET_NAME                = "authoritative-secret"
 	CHECK_EXPIRY_INTERVAL      = 1 * time.Hour
 
