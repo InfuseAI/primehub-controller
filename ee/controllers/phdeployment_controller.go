@@ -225,10 +225,10 @@ func (r *PhDeploymentReconciler) checkModelDeploymentByGroup(ctx context.Context
 	enabledDeployment, err := r.GraphqlClient.FetchGroupEnableModelDeployment(phDeployment.Spec.GroupId)
 	if err != nil {
 		logger.Error(err, "failed to query group by id: " + phDeployment.Spec.GroupId)
-		return r.updateStatus(ctx, phDeployment, nil, false, false, err.Error())
+		return r.updateStatus(ctx, phDeployment, nil, true, err.Error())
 	} else if enabledDeployment == false {
 		logger.Info("Group doesn't enable model deployment flag", "group", phDeployment.Spec.GroupName)
-		return r.updateStatus(ctx, phDeployment, nil, false, false, "The model deployment is not enabled for the selected group")
+		return r.updateStatus(ctx, phDeployment, nil, true, "The model deployment is not enabled for the selected group")
 	}
 	return nil
 }
@@ -243,12 +243,12 @@ func (r *PhDeploymentReconciler) createDeployment(ctx context.Context, phDeploym
 
 	deployment, err := r.buildDeployment(ctx, phDeployment)
 	if err != nil {
-		return r.updateStatus(ctx, phDeployment, nil, false, false, err.Error())
+		return r.updateStatus(ctx, phDeployment, nil, true, err.Error())
 	}
 
 	err = r.Client.Create(ctx, deployment)
 	if err != nil {
-		return r.updateStatus(ctx, phDeployment, nil, false, false, err.Error())
+		return r.updateStatus(ctx, phDeployment, nil, true, err.Error())
 	}
 
 	logger.Info("deployment created", "deployment", deployment.Name)
@@ -259,15 +259,6 @@ func (r *PhDeploymentReconciler) updateDeployment(ctx context.Context, phDeploym
 	logger := r.Log.WithValues("phDeployment", phDeployment.Name)
 
 	var err error
-	deploymentAvailableTimeout := false
-
-	// check if deployment is unAvailable which means there is no available pod for over 5 min
-	if r.unAvailableTimeout(phDeployment, originalDeployment) {
-		// we would like to keep the deployment object rather than delete it
-		// because we need the status messages in its managed pods
-		logger.Info("deployment is not available for over 5 min. Change the phDeployment to failed state.")
-		deploymentAvailableTimeout = true
-	}
 
 	if hasChanged {
 		logger.Info("phDeployment has been updated, update the deployment to reflect the update.")
@@ -288,7 +279,7 @@ func (r *PhDeploymentReconciler) updateDeployment(ctx context.Context, phDeploym
 
 		if err != nil {
 			logger.Error(err, "Failed to update deployment")
-			return r.updateStatus(ctx, phDeployment, originalDeployment, deploymentAvailableTimeout, true, err.Error())
+			return r.updateStatus(ctx, phDeployment, originalDeployment, true, err.Error())
 		}
 
 		logger.Info("deployment updated", "deployment", originalDeployment.Name)
@@ -303,7 +294,7 @@ func (r *PhDeploymentReconciler) updateDeployment(ctx context.Context, phDeploym
 		return err
 	}
 
-	return r.updateStatus(ctx, phDeployment, originalDeployment, deploymentAvailableTimeout, false, "")
+	return r.updateStatus(ctx, phDeployment, originalDeployment, false, "")
 }
 
 func modelReplicaChanged(phDeployment *primehubv1alpha1.PhDeployment) bool {
@@ -314,10 +305,10 @@ func modelImageChanged(phDeployment *primehubv1alpha1.PhDeployment) bool {
 	return phDeployment.Status.History[1].Spec.Predictors[0].ModelImage != phDeployment.Spec.Predictors[0].ModelImage
 }
 
-func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, deployment *v1.Deployment, deploymentAvailableTimeout bool, reconciliationFailed bool, reconciliationFailedReason string) error {
+func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, deployment *v1.Deployment, reconciliationFailed bool, reconciliationFailedReason string) error {
 
 	// create deployment failed
-	if deployment == nil {
+	if deployment == nil && reconciliationFailed {
 		phDeployment.Status.Phase = primehubv1alpha1.DeploymentFailed
 		phDeployment.Status.Messsage = reconciliationFailedReason
 		phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
