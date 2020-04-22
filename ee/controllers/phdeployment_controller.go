@@ -253,7 +253,10 @@ func (r *PhDeploymentReconciler) reconcileDeployment(ctx context.Context, phDepl
 				if err == nil {
 					err = r.Client.Update(ctx, deployment)
 				}
-			} else if phDeployment.Status.History[1].Spec.Predictors[0].Replicas != phDeployment.Spec.Predictors[0].Replicas {
+			} else if phDeployment.Status.History[1].Spec.Predictors[0].Replicas != phDeployment.Spec.Predictors[0].Replicas || phDeployment.Status.History[1].Spec.Stop == true {
+				// last history stop is true
+				// means current stop is false or it will return in the begining
+				// so scale up back to correct replicas
 				replicas := int32(phDeployment.Spec.Predictors[0].Replicas)
 				deployment.Spec.Replicas = &replicas
 				if err == nil {
