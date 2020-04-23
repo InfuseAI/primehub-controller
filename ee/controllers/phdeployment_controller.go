@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -149,13 +150,13 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 
 	// reconcile deployment
 	if err := r.reconcileDeployment(ctx, phDeployment, deploymentKey, hasChanged); err != nil {
-		log.Error(err, "reconcile Seldon Deployment error.")
+		log.Error(err, "reconcile Deployment error.")
 		return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
 	}
 
 	// reconcile service
 	if err := r.reconcileService(ctx, phDeployment, serviceKey); err != nil {
-		log.Error(err, "reconcile Seldon Deployment error.")
+		log.Error(err, "reconcile Service error.")
 		return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
 	}
 
@@ -314,7 +315,7 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 		phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
 		phDeployment.Status.AvailableReplicas = 0
 
-		return nil
+		return errors.New(reconciliationFailedReason)
 	}
 
 	// update deployment failed
