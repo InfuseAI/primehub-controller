@@ -112,6 +112,15 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	// update history
 	hasChanged := r.updateHistory(ctx, phDeployment)
 
+	// Check group EnabledModelDeployment flag when first time create deployment
+	_, err := r.getDeployment(ctx, deploymentKey)
+	if err != nil && apierrors.IsNotFound(err) {
+		err := r.checkModelDeploymentByGroup(ctx, phDeployment)
+		if err != nil {
+			return ctrl.Result{RequeueAfter: 5 * time.Minute}, err
+		}
+	}
+
 	// phDeployment has been stoped
 	if phDeployment.Spec.Stop == true {
 
@@ -236,11 +245,6 @@ func (r *PhDeploymentReconciler) checkModelDeploymentByGroup(ctx context.Context
 
 func (r *PhDeploymentReconciler) createDeployment(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment) error {
 	logger := r.Log.WithValues("phDeployment", phDeployment.Name)
-
-	err := r.checkModelDeploymentByGroup(ctx, phDeployment)
-	if err != nil {
-		return err
-	}
 
 	deployment, err := r.buildDeployment(ctx, phDeployment)
 	if err != nil {
