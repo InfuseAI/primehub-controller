@@ -129,12 +129,12 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 		if deployment.Status.AvailableReplicas != 0 || deployment.Status.UpdatedReplicas != 0 {
 			phDeployment.Status.Phase = primehubv1alpha1.DeploymentStopping
 			phDeployment.Status.Messsage = "deployment is stopping"
-			phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
+			phDeployment.Status.Replicas = int(phDeployment.Spec.Predictors[0].Replicas)
 			phDeployment.Status.AvailableReplicas = 0
 		} else {
 			phDeployment.Status.Phase = primehubv1alpha1.DeploymentStopped
 			phDeployment.Status.Messsage = "deployment has stopped"
-			phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
+			phDeployment.Status.Replicas = int(phDeployment.Spec.Predictors[0].Replicas)
 			phDeployment.Status.AvailableReplicas = 0
 		}
 
@@ -172,7 +172,7 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 		}
 	}
 
-	return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
+	return ctrl.Result{RequeueAfter: 3 * time.Minute}, nil
 }
 
 func (r *PhDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -206,6 +206,7 @@ func (r *PhDeploymentReconciler) reconcileDeployment(ctx context.Context, phDepl
 	log := r.Log.WithValues("phDeployment", phDeployment.Name)
 
 	deploymentAvailableTimeout := false
+	updateDeployment := false
 	reconcilationFailed := false
 	reconcilationFailedReason := ""
 
@@ -234,7 +235,7 @@ func (r *PhDeploymentReconciler) reconcileDeployment(ctx context.Context, phDepl
 
 			phDeployment.Status.Phase = primehubv1alpha1.DeploymentFailed
 			phDeployment.Status.Messsage = reconcilationFailedReason
-			phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
+			phDeployment.Status.Replicas = int(phDeployment.Spec.Predictors[0].Replicas)
 			phDeployment.Status.AvailableReplicas = 0
 
 			return nil
@@ -266,6 +267,7 @@ func (r *PhDeploymentReconciler) reconcileDeployment(ctx context.Context, phDepl
 
 			if err == nil { // create deployment successfully
 				log.Info("deployment updated", "deployment", deployment.Name)
+				updateDeployment = true
 			} else {
 				log.Error(err, "Failed to update deployment")
 				reconcilationFailed = true
@@ -285,16 +287,38 @@ func (r *PhDeploymentReconciler) reconcileDeployment(ctx context.Context, phDepl
 		}
 	}
 
-	return r.updateStatus(ctx, phDeployment, deployment, deploymentAvailableTimeout, reconcilationFailed, reconcilationFailedReason)
+	return r.updateStatus(ctx, phDeployment, deployment, deploymentAvailableTimeout, reconcilationFailed, reconcilationFailedReason, updateDeployment)
 }
 
-func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, deployment *v1.Deployment, deploymentAvailableTimeout bool, reconcilationFailed bool, reconcilationFailedReason string) error {
+func (r *PhDeploymentReconciler) updateStatus(
+	ctx context.Context,
+	phDeployment *primehubv1alpha1.PhDeployment,
+	deployment *v1.Deployment,
+	deploymentAvailableTimeout bool,
+	reconcilationFailed bool,
+	reconcilationFailedReason string,
+	updateDeployment bool) error {
+
+	// deployment.Status.Replicas
+	// means "Total number of non-terminated pods targeted by this deployment (their labels match the selector)."
+	// we should use spec.Replicas, it makes more sense
+	// UI also uses spec.Replicas directly.
 
 	// update deployment failed
 	if reconcilationFailed {
 		phDeployment.Status.Phase = primehubv1alpha1.DeploymentFailed
 		phDeployment.Status.Messsage = reconcilationFailedReason
-		phDeployment.Status.Replicas = int(deployment.Status.Replicas)
+		phDeployment.Status.Replicas = int(phDeployment.Spec.Predictors[0].Replicas)
+		phDeployment.Status.AvailableReplicas = int(deployment.Status.AvailableReplicas)
+
+		return nil
+	}
+
+	// this reconciling update the deployment
+	if updateDeployment {
+		phDeployment.Status.Phase = primehubv1alpha1.DeploymentDeploying
+		phDeployment.Status.Messsage = "phDeployment is being deployed and not available now"
+		phDeployment.Status.Replicas = int(phDeployment.Spec.Predictors[0].Replicas)
 		phDeployment.Status.AvailableReplicas = int(deployment.Status.AvailableReplicas)
 
 		return nil
@@ -305,7 +329,7 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 			// create replicaset failed, because request exceeds quota and is denied by admission webhook
 			phDeployment.Status.Phase = primehubv1alpha1.DeploymentDeploying
 			phDeployment.Status.Messsage = strings.Split(c.Message, "denied the request: ")[1]
-			phDeployment.Status.Replicas = int(deployment.Status.Replicas)
+			phDeployment.Status.Replicas = int(phDeployment.Spec.Predictors[0].Replicas)
 			phDeployment.Status.AvailableReplicas = int(deployment.Status.AvailableReplicas)
 
 			return nil
@@ -322,7 +346,7 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 		if p.isImageError || p.isTerminated {
 			phDeployment.Status.Phase = primehubv1alpha1.DeploymentFailed
 			phDeployment.Status.Messsage = "Failed because of wrong image settings." + r.explain(failedPods)
-			phDeployment.Status.Replicas = int(deployment.Status.Replicas)
+			phDeployment.Status.Replicas = int(phDeployment.Spec.Predictors[0].Replicas)
 			phDeployment.Status.AvailableReplicas = int(deployment.Status.AvailableReplicas)
 			return nil
 		}
@@ -333,7 +357,7 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 			// even pod is unschedulable, deployment is still deploying, wait for scale down
 			phDeployment.Status.Phase = primehubv1alpha1.DeploymentDeploying
 			phDeployment.Status.Messsage = "Certain pods unschedulable." + r.explain(failedPods)
-			phDeployment.Status.Replicas = int(deployment.Status.Replicas)
+			phDeployment.Status.Replicas = int(phDeployment.Spec.Predictors[0].Replicas)
 			phDeployment.Status.AvailableReplicas = int(deployment.Status.AvailableReplicas)
 			return nil
 		}
@@ -348,7 +372,7 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 	if ready == true {
 		phDeployment.Status.Phase = primehubv1alpha1.DeploymentDeployed
 		phDeployment.Status.Messsage = "phDeployment is deployed and available now"
-		phDeployment.Status.Replicas = int(deployment.Status.Replicas)
+		phDeployment.Status.Replicas = int(phDeployment.Spec.Predictors[0].Replicas)
 		phDeployment.Status.AvailableReplicas = int(deployment.Status.AvailableReplicas)
 
 		return nil
@@ -357,7 +381,7 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 	if ready == false {
 		phDeployment.Status.Phase = primehubv1alpha1.DeploymentDeploying
 		phDeployment.Status.Messsage = "phDeployment is being deployed and not available now"
-		phDeployment.Status.Replicas = int(deployment.Status.Replicas)
+		phDeployment.Status.Replicas = int(phDeployment.Spec.Predictors[0].Replicas)
 		phDeployment.Status.AvailableReplicas = int(deployment.Status.AvailableReplicas)
 
 		return nil
@@ -407,6 +431,12 @@ func (r *PhDeploymentReconciler) listFailedPods(ctx context.Context, phDeploymen
 
 	pods = pods.DeepCopy()
 	for _, pod := range pods.Items {
+
+		// if pod is being deleted, don't consider it.
+		if pod.DeletionTimestamp != nil {
+			continue
+		}
+
 		result := FailedPodStatus{
 			pod:               pod.Name,
 			conditions:        make([]corev1.PodCondition, 0),

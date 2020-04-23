@@ -4,6 +4,7 @@ go 1.13
 
 require (
 	github.com/karlseguin/ccache v2.0.3+incompatible // indirect
+	github.com/karlseguin/expect v1.0.7 // indirect
 	github.com/magiconair/properties v1.8.1 // indirect
 	github.com/pelletier/go-toml v1.6.0 // indirect
 	github.com/robfig/cron/v3 v3.0.0 // indirect
