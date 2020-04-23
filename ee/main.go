@@ -171,6 +171,12 @@ func main() {
 		if err != nil {
 			panic(err.Error() + " cannot UnmarshalKey ingress")
 		}
+		if ingress.Hosts == nil {
+			panic(fmt.Errorf("should provide ingress in config.yaml if enable model deployment"))
+		}
+		if ingress.Annotations == nil {
+			ingress.Annotations = make(map[string]string)
+		}
 
 		if err = (&eecontrollers.PhDeploymentReconciler{
 			Client:        mgr.GetClient(),
