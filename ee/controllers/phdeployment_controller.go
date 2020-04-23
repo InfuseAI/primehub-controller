@@ -19,7 +19,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -115,9 +114,8 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	// Check group EnabledModelDeployment flag when first time create deployment
 	_, err := r.getDeployment(ctx, deploymentKey)
 	if err != nil && apierrors.IsNotFound(err) {
-		err := r.checkModelDeploymentByGroup(ctx, phDeployment)
-		if err != nil {
-			return ctrl.Result{RequeueAfter: 5 * time.Minute}, err
+		if r.checkModelDeploymentByGroup(ctx, phDeployment) == false {
+			return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
 		}
 	}
 
@@ -182,7 +180,7 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 		}
 	}
 
-	return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
+	return ctrl.Result{RequeueAfter: 3 * time.Minute}, nil
 }
 
 func (r *PhDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -230,17 +228,19 @@ func (r *PhDeploymentReconciler) reconcileDeployment(ctx context.Context, phDepl
 	return r.updateDeployment(ctx, phDeployment, deploymentKey, hasChanged, deployment)
 }
 
-func (r *PhDeploymentReconciler) checkModelDeploymentByGroup(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment) error {
+func (r *PhDeploymentReconciler) checkModelDeploymentByGroup(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment) bool {
 	logger := r.Log.WithValues("phDeployment", phDeployment.Name)
 	enabledDeployment, err := r.GraphqlClient.FetchGroupEnableModelDeployment(phDeployment.Spec.GroupId)
 	if err != nil {
-		logger.Error(err, "failed to query group by id: " + phDeployment.Spec.GroupId)
-		return r.updateStatus(ctx, phDeployment, nil, true, err.Error())
+		logger.Info("failed to query group by id: "+phDeployment.Spec.GroupId)
+		r.updateStatus(ctx, phDeployment, nil, false, true, err.Error())
+		return false
 	} else if enabledDeployment == false {
 		logger.Info("Group doesn't enable model deployment flag", "group", phDeployment.Spec.GroupName)
-		return r.updateStatus(ctx, phDeployment, nil, true, "The model deployment is not enabled for the selected group")
+		r.updateStatus(ctx, phDeployment, nil, false, true, "The model deployment is not enabled for the selected group")
+		return  false
 	}
-	return nil
+	return true
 }
 
 func (r *PhDeploymentReconciler) createDeployment(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment) error {
@@ -248,12 +248,13 @@ func (r *PhDeploymentReconciler) createDeployment(ctx context.Context, phDeploym
 
 	deployment, err := r.buildDeployment(ctx, phDeployment)
 	if err != nil {
-		return r.updateStatus(ctx, phDeployment, nil, true, err.Error())
+		r.updateStatus(ctx, phDeployment, nil, false, true, err.Error())
+		return nil
 	}
 
 	err = r.Client.Create(ctx, deployment)
 	if err != nil {
-		return r.updateStatus(ctx, phDeployment, nil, true, err.Error())
+		return r.updateStatus(ctx, phDeployment, nil, false, true, err.Error())
 	}
 
 	logger.Info("deployment created", "deployment", deployment.Name)
@@ -264,6 +265,7 @@ func (r *PhDeploymentReconciler) updateDeployment(ctx context.Context, phDeploym
 	logger := r.Log.WithValues("phDeployment", phDeployment.Name)
 
 	var err error
+	isDeploymentUpdated := false
 
 	if hasChanged {
 		logger.Info("phDeployment has been updated, update the deployment to reflect the update.")
@@ -276,7 +278,7 @@ func (r *PhDeploymentReconciler) updateDeployment(ctx context.Context, phDeploym
 				originalDeployment.Spec = deploymentUpdated.Spec
 				err = r.Client.Update(ctx, originalDeployment)
 			}
-		} else if modelReplicaChanged(phDeployment) {
+		} else if modelReplicaChanged(phDeployment) || redeployFromStop(phDeployment) {
 			replicas := int32(phDeployment.Spec.Predictors[0].Replicas)
 			originalDeployment.Spec.Replicas = &replicas
 			err = r.Client.Update(ctx, originalDeployment)
@@ -284,9 +286,10 @@ func (r *PhDeploymentReconciler) updateDeployment(ctx context.Context, phDeploym
 
 		if err != nil {
 			logger.Error(err, "Failed to update deployment")
-			return r.updateStatus(ctx, phDeployment, originalDeployment, true, err.Error())
+			return r.updateStatus(ctx, phDeployment, originalDeployment, false, true, err.Error())
 		}
 
+		isDeploymentUpdated = true
 		logger.Info("deployment updated", "deployment", originalDeployment.Name)
 	}
 
@@ -299,7 +302,11 @@ func (r *PhDeploymentReconciler) updateDeployment(ctx context.Context, phDeploym
 		return err
 	}
 
-	return r.updateStatus(ctx, phDeployment, originalDeployment, false, "")
+	return r.updateStatus(ctx, phDeployment, originalDeployment, isDeploymentUpdated, false, "")
+}
+
+func redeployFromStop(phDeployment *primehubv1alpha1.PhDeployment) bool {
+	return phDeployment.Status.History[1].Spec.Stop == true
 }
 
 func modelReplicaChanged(phDeployment *primehubv1alpha1.PhDeployment) bool {
@@ -310,7 +317,7 @@ func modelImageChanged(phDeployment *primehubv1alpha1.PhDeployment) bool {
 	return phDeployment.Status.History[1].Spec.Predictors[0].ModelImage != phDeployment.Spec.Predictors[0].ModelImage
 }
 
-func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, deployment *v1.Deployment, reconciliationFailed bool, reconciliationFailedReason string) error {
+func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, deployment *v1.Deployment, isDeploymentUpdated bool, reconciliationFailed bool, reconciliationFailedReason string) error {
 
 	// create deployment failed
 	if deployment == nil && reconciliationFailed {
@@ -319,14 +326,23 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 		phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
 		phDeployment.Status.AvailableReplicas = 0
 
-		return errors.New(reconciliationFailedReason)
+		return nil
+	}
+
+	if isDeploymentUpdated {
+		phDeployment.Status.Phase = primehubv1alpha1.DeploymentDeploying
+		phDeployment.Status.Messsage = "phDeployment is being deployed and not available now"
+		phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
+		phDeployment.Status.AvailableReplicas = int(deployment.Status.AvailableReplicas)
+
+		return nil
 	}
 
 	// update deployment failed
 	if reconciliationFailed {
 		phDeployment.Status.Phase = primehubv1alpha1.DeploymentFailed
 		phDeployment.Status.Messsage = reconciliationFailedReason
-		phDeployment.Status.Replicas = int(deployment.Status.Replicas)
+		phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
 		phDeployment.Status.AvailableReplicas = int(deployment.Status.AvailableReplicas)
 
 		return nil
@@ -337,7 +353,7 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 			// create replicaset failed, because request exceeds quota and is denied by admission webhook
 			phDeployment.Status.Phase = primehubv1alpha1.DeploymentDeploying
 			phDeployment.Status.Messsage = strings.Split(c.Message, "denied the request: ")[1]
-			phDeployment.Status.Replicas = int(deployment.Status.Replicas)
+			phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
 			phDeployment.Status.AvailableReplicas = int(deployment.Status.AvailableReplicas)
 
 			return nil
@@ -354,7 +370,7 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 		if p.isImageError || p.isTerminated {
 			phDeployment.Status.Phase = primehubv1alpha1.DeploymentFailed
 			phDeployment.Status.Messsage = "Failed because of wrong image settings." + r.explain(failedPods)
-			phDeployment.Status.Replicas = int(deployment.Status.Replicas)
+			phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
 			phDeployment.Status.AvailableReplicas = int(deployment.Status.AvailableReplicas)
 			return nil
 		}
@@ -365,7 +381,7 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 			// even pod is unschedulable, deployment is still deploying, wait for scale down
 			phDeployment.Status.Phase = primehubv1alpha1.DeploymentDeploying
 			phDeployment.Status.Messsage = "Certain pods unschedulable." + r.explain(failedPods)
-			phDeployment.Status.Replicas = int(deployment.Status.Replicas)
+			phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
 			phDeployment.Status.AvailableReplicas = int(deployment.Status.AvailableReplicas)
 			return nil
 		}
@@ -380,7 +396,7 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 	if ready == true {
 		phDeployment.Status.Phase = primehubv1alpha1.DeploymentDeployed
 		phDeployment.Status.Messsage = "phDeployment is deployed and available now"
-		phDeployment.Status.Replicas = int(deployment.Status.Replicas)
+		phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
 		phDeployment.Status.AvailableReplicas = int(deployment.Status.AvailableReplicas)
 
 		return nil
@@ -389,7 +405,7 @@ func (r *PhDeploymentReconciler) updateStatus(ctx context.Context, phDeployment 
 	if ready == false {
 		phDeployment.Status.Phase = primehubv1alpha1.DeploymentDeploying
 		phDeployment.Status.Messsage = "phDeployment is being deployed and not available now"
-		phDeployment.Status.Replicas = int(deployment.Status.Replicas)
+		phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
 		phDeployment.Status.AvailableReplicas = int(deployment.Status.AvailableReplicas)
 
 		return nil
@@ -439,6 +455,9 @@ func (r *PhDeploymentReconciler) listFailedPods(ctx context.Context, phDeploymen
 
 	pods = pods.DeepCopy()
 	for _, pod := range pods.Items {
+		if pod.DeletionTimestamp != nil {
+			continue
+		}
 		result := FailedPodStatus{
 			pod:               pod.Name,
 			conditions:        make([]corev1.PodCondition, 0),
@@ -448,6 +467,7 @@ func (r *PhDeploymentReconciler) listFailedPods(ctx context.Context, phDeploymen
 			isUnschedulable:   false,
 		}
 		for _, c := range pod.Status.Conditions {
+
 			if c.Status == corev1.ConditionFalse && c.Reason != "ContainersNotReady" {
 				result.conditions = append(result.conditions, c)
 			}
