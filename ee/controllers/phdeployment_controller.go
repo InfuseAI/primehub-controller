@@ -257,7 +257,7 @@ func (r *PhDeploymentReconciler) createDeployment(ctx context.Context, phDeploym
 		return r.updateStatus(ctx, phDeployment, nil, false, true, err.Error())
 	}
 
-  logger.Info("deployment created", "deployment", deployment.Name)
+  	logger.Info("deployment created", "deployment", deployment.Name)
 	return nil
 }
 
