@@ -524,14 +524,14 @@ func (spawner *Spawner) applyResourceForInstanceType(instanceType DtoInstanceTyp
 	}
 
 	if instanceType.Spec.RequestsMemory != "" {
-		quantity, e := resource.ParseQuantity(instanceType.Spec.RequestsMemory)
+		quantity, e := resource.ParseQuantity(ConvertMemoryUnit(instanceType.Spec.RequestsMemory))
 		if e == nil {
 			spawner.requestsMemory = quantity
 		}
 	}
 
 	if instanceType.Spec.LimitsMemory != "" {
-		quantity, e := resource.ParseQuantity(instanceType.Spec.LimitsMemory)
+		quantity, e := resource.ParseQuantity(ConvertMemoryUnit(instanceType.Spec.LimitsMemory))
 		if e == nil {
 			spawner.limitsMemory = quantity
 		}
@@ -642,4 +642,20 @@ func (spawner *Spawner) BuildPodSpec(podSpec *corev1.PodSpec) {
 	}
 	podSpec.Tolerations = append(podSpec.Tolerations, spawner.Tolerations...)
 	podSpec.Affinity = &spawner.Affinity
+}
+
+func ConvertMemoryUnit(value string) string {
+	if value == "" {
+		return ""
+	}
+
+	if matched, err := regexp.MatchString("i$", value); err == nil && matched {
+		return value
+	}
+
+	if matched, err := regexp.MatchString("[GMK]$", value); err == nil && matched {
+		return value + "i"
+	}
+
+	return value
 }

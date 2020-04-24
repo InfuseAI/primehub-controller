@@ -20,6 +20,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -578,6 +579,8 @@ func (r *PhDeploymentReconciler) buildDeployment(ctx context.Context, phDeployme
 		return nil, err
 	}
 
+	r.adjustResourcesToFitConstraint(engineContainer, modelContainer)
+
 	replicas := int32(phDeployment.Spec.Predictors[0].Replicas)
 	defaultMode := corev1.DownwardAPIVolumeSourceDefaultMode
 
@@ -656,6 +659,37 @@ func (r *PhDeploymentReconciler) buildDeployment(ctx context.Context, phDeployme
 	}
 
 	return deployment, nil
+}
+
+func (r *PhDeploymentReconciler) adjustResourcesToFitConstraint(engineContainer *corev1.Container, modelContainer *corev1.Container) {
+
+	// adjust containers' resources to fit our resources constraint
+	//
+	// model container resources share to engine container, according to the following rules:
+	// max(100m, instance-cpu * 10%)
+	// max(250M, instance-memory * 10%)
+
+	engineCpu := int64(math.Max(float64(modelContainer.Resources.Limits.Cpu().MilliValue())*0.1, 300))
+	engineMemory := int64(math.Max(float64(modelContainer.Resources.Limits.Memory().Value())*0.1, 250*1024*1024))
+	modelCpu := modelContainer.Resources.Limits.Cpu().MilliValue() - engineCpu
+	modelMemory := modelContainer.Resources.Limits.Memory().Value() - engineMemory
+
+	engineResources := corev1.ResourceList{
+		corev1.ResourceName(corev1.ResourceCPU):    *resource.NewMilliQuantity(engineCpu, resource.DecimalSI),
+		corev1.ResourceName(corev1.ResourceMemory): *resource.NewQuantity(engineMemory, resource.DecimalSI),
+	}
+	modelResources := corev1.ResourceList{
+		corev1.ResourceName(corev1.ResourceCPU):    *resource.NewMilliQuantity(modelCpu, resource.DecimalSI),
+		corev1.ResourceName(corev1.ResourceMemory): *resource.NewQuantity(modelMemory, resource.DecimalSI),
+	}
+	engineContainer.Resources = corev1.ResourceRequirements{
+		Limits:   engineResources,
+		Requests: engineResources,
+	}
+	modelContainer.Resources = corev1.ResourceRequirements{
+		Limits:   modelResources,
+		Requests: modelResources,
+	}
 }
 
 // build predictor for seldon engine
