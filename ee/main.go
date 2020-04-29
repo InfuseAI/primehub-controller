@@ -164,7 +164,7 @@ func main() {
 
 	modelDeployment := viper.GetBool("modelDeployment.enabled")
 	ingress := eecontrollers.PhIngress{}
-	primehubUrl := viper.GetString("primehubUrl")
+	primehubUrl := viper.GetString("modelDeployment.primehubUrl")
 	if modelDeployment {
 		// get the ingress from the config which is from the helm value.
 
