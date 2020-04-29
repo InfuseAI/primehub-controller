@@ -38,6 +38,7 @@ type PhDeploymentReconciler struct {
 	Scheme        *runtime.Scheme
 	GraphqlClient *graphql.GraphqlClient
 	Ingress       PhIngress
+	PrimehubUrl   string
 }
 
 type FailedPodStatus struct {
@@ -218,13 +219,13 @@ func (r *PhDeploymentReconciler) checkModelDeploymentByGroup(ctx context.Context
 	logger := r.Log.WithValues("phDeployment", phDeployment.Name)
 	enabledDeployment, err := r.GraphqlClient.FetchGroupEnableModelDeployment(phDeployment.Spec.GroupId)
 	if err != nil {
-		logger.Info("failed to query group by id: "+phDeployment.Spec.GroupId)
+		logger.Info("failed to query group by id: " + phDeployment.Spec.GroupId)
 		r.updateStatus(ctx, phDeployment, nil, false, true, err.Error())
 		return false
 	} else if enabledDeployment == false {
 		logger.Info("Group doesn't enable model deployment flag", "group", phDeployment.Spec.GroupName)
 		r.updateStatus(ctx, phDeployment, nil, false, true, "The model deployment is not enabled for the selected group")
-		return  false
+		return false
 	}
 	return true
 }
@@ -243,7 +244,7 @@ func (r *PhDeploymentReconciler) createDeployment(ctx context.Context, phDeploym
 		return r.updateStatus(ctx, phDeployment, nil, false, true, err.Error())
 	}
 
-  	logger.Info("deployment created", "deployment", deployment.Name)
+	logger.Info("deployment created", "deployment", deployment.Name)
 	return nil
 }
 
@@ -542,7 +543,7 @@ func (r *PhDeploymentReconciler) reconcileIngress(ctx context.Context, phDeploym
 		}
 	}
 	// Sync the phDeployment.Status.Endpoint
-	phDeployment.Status.Endpoint = "https://" + r.Ingress.Hosts[0] + "/deployment/" + phDeployment.Name + "/api/v1.0/predictions"
+	phDeployment.Status.Endpoint = r.PrimehubUrl + "/deployment/" + phDeployment.Name + "/api/v1.0/predictions"
 
 	return nil
 }
