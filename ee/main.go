@@ -164,6 +164,7 @@ func main() {
 
 	modelDeployment := viper.GetBool("modelDeployment.enabled")
 	ingress := eecontrollers.PhIngress{}
+	primehubUrl := viper.GetString("modelDeployment.primehubUrl")
 	if modelDeployment {
 		// get the ingress from the config which is from the helm value.
 
@@ -177,6 +178,9 @@ func main() {
 		if ingress.Annotations == nil {
 			ingress.Annotations = make(map[string]string)
 		}
+		if primehubUrl == "" {
+			panic(fmt.Errorf("should provide primehubUrl in config.yaml if enable model deployment"))
+		}
 
 		if err = (&eecontrollers.PhDeploymentReconciler{
 			Client:        mgr.GetClient(),
@@ -184,6 +188,7 @@ func main() {
 			Scheme:        mgr.GetScheme(),
 			GraphqlClient: graphqlClient,
 			Ingress:       ingress,
+			PrimehubUrl:   primehubUrl,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "PhDeployment")
 			os.Exit(1)
