@@ -224,7 +224,6 @@ func loadConfig() {
 
 	configs := []string{
 		"customImage.pushSecretName",
-		"customImage.pushRepoPrefix",
 		"jobSubmission.graphqlEndpoint",
 		"jobSubmission.graphqlSecret",
 		"jobSubmission.workingDirSize",
