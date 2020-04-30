@@ -5,6 +5,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
+	corev1 "k8s.io/api/core/v1"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -42,6 +43,10 @@ func ignoreNotFound(err error) error {
 func (r *ImageSpecReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
 	log := r.Log.WithValues("imagespec", req.NamespacedName)
+
+	if err := checkPushSecret(r, ctx, req, log); err != nil {
+		return ctrl.Result{}, err
+	}
 
 	var imageSpec primehubv1alpha1.ImageSpec
 	if err := r.Get(ctx, req.NamespacedName, &imageSpec); err != nil {
@@ -126,6 +131,18 @@ func (r *ImageSpecReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	log.Info("resource status synced")
 
 	return ctrl.Result{}, nil
+}
+
+func checkPushSecret(r *ImageSpecReconciler, ctx context.Context, req ctrl.Request, log logr.Logger) error {
+	var secret corev1.Secret
+	pushSecretName := viper.GetString("customImage.pushSecretName")
+	if err := r.Get(ctx, client.ObjectKey{Namespace: req.Namespace, Name: pushSecretName}, &secret); err != nil {
+		if apierrors.IsNotFound(err) {
+			log.Error(err, "image builder is not configured. push secret '"+pushSecretName+"' not found")
+		}
+		return err
+	}
+	return nil
 }
 
 func (r *ImageSpecReconciler) SetupWithManager(mgr ctrl.Manager) error {
