@@ -17,7 +17,7 @@ spec:
   predictors:
     - name: predictor1
       replicas: 1
-      modelImage: sandhya1594/spam-classifier:1.0.0.1
+      modelImage: infuseai/model-tensorflow2-mnist:v0.1.0
       #modelImage: popcornylu/spam-classifier:1.0.0.1
       instanceType: cpu-only
       metadata: # key-value objects (can update)
