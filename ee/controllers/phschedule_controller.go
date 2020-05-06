@@ -31,7 +31,7 @@ type PhScheduleReconciler struct {
 	client.Client
 	Log               logr.Logger
 	PhScheduleCronMap map[string]*PhScheduleCron
-	GraphqlClient     *graphql.GraphqlClient
+	GraphqlClient     graphql.AbstractGraphqlClient
 }
 
 func (r *PhScheduleReconciler) buildPhJob(phSchedule *primehubv1alpha1.PhSchedule) (*primehubv1alpha1.PhJob, error) {

@@ -37,7 +37,7 @@ type PhJobReconciler struct {
 	client.Client
 	Log                            logr.Logger
 	Scheme                         *runtime.Scheme
-	GraphqlClient                  *graphql.GraphqlClient
+	GraphqlClient                  graphql.AbstractGraphqlClient
 	WorkingDirSize                 resource.Quantity
 	DefaultActiveDeadlineSeconds   int64
 	DefaultTTLSecondsAfterFinished int32
