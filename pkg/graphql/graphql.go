@@ -146,12 +146,21 @@ type DtoDatasetSpecPv struct {
 	Provisioning string
 }
 
+type AbstractGraphqlClient interface {
+	FetchByUserId(string) (*DtoResult, error)
+	QueryServer(map[string]interface{}) ([]byte, error)
+	FetchGroupEnableModelDeployment(string) (bool, error)
+	FetchGroupInfo(string) (*DtoGroup, error)
+	FetchInstanceTypeInfo(string) (*DtoInstanceType, error)
+	FetchTimeZone() (string, error)
+}
+
 type GraphqlClient struct {
 	graphqlEndpoint string
 	graphqlSecret   string
 }
 
-func NewGraphqlClient(graphqlEndpoint string, graphqlSecret string) *GraphqlClient {
+func NewGraphqlClient(graphqlEndpoint string, graphqlSecret string) AbstractGraphqlClient {
 	return &GraphqlClient{graphqlEndpoint: graphqlEndpoint, graphqlSecret: graphqlSecret}
 }
 

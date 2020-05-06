@@ -1,8 +1,6 @@
 package graphql
 
 import (
-	"encoding/json"
-	"fmt"
 	v1 "k8s.io/api/core/v1"
 	serial "k8s.io/apimachinery/pkg/runtime/serializer/json"
 	"os"
@@ -10,19 +8,33 @@ import (
 )
 
 func TestFetchContext(t *testing.T) {
-	t.Skip()
+	userId := "unittest-user-id"
 
-	userId := ""
-	graphqlEndpoint := ""
-	graphqlSecret := ""
+	mockClient := new(MockAbstractGraphqlClient)
 
-	client := NewGraphqlClient(graphqlEndpoint, graphqlSecret)
-	result, err := client.FetchByUserId(userId)
+	mockResult := &DtoResult{
+		Data: DtoData{
+			System: DtoSystem{},
+			User: DtoUser{
+				Id: userId,
+				Username: "Test User",
+				IsAdmin: true,
+				Groups:  []DtoGroup{
+					{
+						Name: "phusers",
+						InstanceTypes: []DtoInstanceType{{Name: "cpu-only"}},
+						Images: []DtoImage{{Name: "base-notebook"}},
+					},
+				},
+			},
+		},
+	}
+	mockClient.On("FetchByUserId", userId).Return(mockResult, nil)
+
+	result, err := mockClient.FetchByUserId(userId)
 	if err != nil {
 		panic(err)
 	}
-	bytes, _ := json.Marshal(result)
-	fmt.Printf("result: %s\n", string(bytes))
 
 	var spawner *Spawner
 	pod := v1.Pod{}
