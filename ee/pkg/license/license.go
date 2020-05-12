@@ -34,11 +34,10 @@ func NewLicense(signedLicense string) (lic *License) {
 }
 
 func expiryStatus(decoded map[string]string) string {
-	tStartedAt, _ := time.Parse(TIME_LAYOUT, decoded["started_at"])
 	tExpiredAt, _ := time.Parse(TIME_LAYOUT, decoded["expired_at"])
 	now := time.Now().UTC()
 	status := STATUS_EXPIRED
-	if now.After(tStartedAt) && now.Before(tExpiredAt) {
+	if now.Before(tExpiredAt) {
 		status = STATUS_UNEXPIRED
 	}
 	return status
