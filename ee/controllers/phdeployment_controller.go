@@ -570,6 +570,11 @@ func (r *PhDeploymentReconciler) buildDeployment(ctx context.Context, phDeployme
 	replicas := int32(phDeployment.Spec.Predictors[0].Replicas)
 	defaultMode := corev1.DownwardAPIVolumeSourceDefaultMode
 
+	imagepullsecrets := []corev1.LocalObjectReference{}
+	if phDeployment.Spec.Predictors[0].ImagePullSecret != "" {
+		imagepullsecrets = append(imagepullsecrets, corev1.LocalObjectReference{Name: phDeployment.Spec.Predictors[0].ImagePullSecret})
+	}
+
 	deployment := &v1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "deploy-" + phDeployment.Name,
@@ -611,9 +616,10 @@ func (r *PhDeploymentReconciler) buildDeployment(ctx context.Context, phDeployme
 					},
 				},
 				Spec: corev1.PodSpec{
-					RestartPolicy: corev1.RestartPolicyAlways,
-					DNSPolicy:     corev1.DNSClusterFirst,
-					SchedulerName: "default-scheduler",
+					RestartPolicy:    corev1.RestartPolicyAlways,
+					DNSPolicy:        corev1.DNSClusterFirst,
+					SchedulerName:    "default-scheduler",
+					ImagePullSecrets: imagepullsecrets,
 					Containers: []corev1.Container{
 						*modelContainer,
 						*engineContainer,
