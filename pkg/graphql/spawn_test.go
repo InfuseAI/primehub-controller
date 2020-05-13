@@ -374,6 +374,124 @@ func TestDatasetGit(t *testing.T) {
 	}
 }
 
+func TestDatasetHostPath(t *testing.T) {
+	newDataset := func(name string, volumeName string, writable bool) DtoDataset {
+		return DtoDataset{
+			Name:     name,
+			Writable: writable,
+			Spec: DtoDatasetSpec{
+				Type:       "hostPath",
+				VolumeName: volumeName,
+				HostPath: map[string]string{
+					"path": "/tmp",
+				},
+			},
+		}
+	}
+
+	tests := []struct {
+		name     string
+		dataset  DtoDataset
+		readOnly bool
+		symlink  string
+	}{
+		{
+			"ds1",
+			newDataset("ds1", "ds1", false),
+			true,
+			"ln -sf /mnt/dataset-ds1 /datasets/ds1",
+		},
+		{
+			"ds2",
+			newDataset("ds2", "ds2-xxx", true),
+			false,
+			"ln -sf /mnt/dataset-ds2 /datasets/ds2",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			spawner := &Spawner{}
+			spawner.applyVolumeForHostPathDataset(test.dataset, "dataset-"+test.name, "/mnt/dataset-"+test.name, "/datasets/"+test.name)
+
+			volume, volumeMount := findVolume(spawner, "dataset-"+test.name)
+			if volume == nil || volumeMount == nil {
+				assert.Fail(t, "volume not found")
+				return
+			}
+
+			if volume.HostPath == nil {
+				assert.Fail(t, "not hostpath")
+				return
+			}
+
+			assert.Equal(t, test.dataset.Spec.HostPath["path"], volume.HostPath.Path)
+			assert.True(t, test.readOnly == volumeMount.ReadOnly)
+			assert.True(t, checkSymlink(spawner, test.symlink))
+		})
+	}
+}
+
+func TestDatasetNfs(t *testing.T) {
+	newDataset := func(name string, volumeName string, writable bool) DtoDataset {
+		return DtoDataset{
+			Name:     name,
+			Writable: writable,
+			Spec: DtoDatasetSpec{
+				Type:       "nfs",
+				VolumeName: volumeName,
+				Nfs: map[string]string{
+					"path":   "/",
+					"server": "10.0.0.1",
+				},
+			},
+		}
+	}
+
+	tests := []struct {
+		name     string
+		dataset  DtoDataset
+		readOnly bool
+		symlink  string
+	}{
+		{
+			"ds1",
+			newDataset("ds1", "ds1", false),
+			true,
+			"ln -sf /mnt/dataset-ds1 /datasets/ds1",
+		},
+		{
+			"ds2",
+			newDataset("ds2", "ds2-xxx", true),
+			false,
+			"ln -sf /mnt/dataset-ds2 /datasets/ds2",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			spawner := &Spawner{}
+			spawner.applyVolumeForNfsDataset(test.dataset, "dataset-"+test.name, "/mnt/dataset-"+test.name, "/datasets/"+test.name)
+
+			volume, volumeMount := findVolume(spawner, "dataset-"+test.name)
+			if volume == nil || volumeMount == nil {
+				assert.Fail(t, "volume not found")
+				return
+			}
+
+			if volume.NFS == nil {
+				assert.Fail(t, "not nfs")
+				return
+			}
+
+			assert.Equal(t, test.dataset.Spec.Nfs["path"], volume.NFS.Path)
+			assert.Equal(t, test.dataset.Spec.Nfs["server"], volume.NFS.Server)
+			assert.True(t, test.readOnly == volumeMount.ReadOnly)
+			assert.True(t, checkSymlink(spawner, test.symlink))
+		})
+	}
+}
+
 func TestDatasetEnv(t *testing.T) {
 
 	dataset := DtoDataset{
@@ -447,12 +565,12 @@ func TestMemoryUnitConvert(t *testing.T) {
 		input  string
 		output string
 	}{
-		{input: "", output: "",},
-		{input: "100", output: "100",},
-		{input: "1G", output: "1Gi",},
-		{input: "1Gi", output: "1Gi",},
-		{input: "2M", output: "2Mi",},
-		{input: "3K", output: "3Ki",},
+		{input: "", output: ""},
+		{input: "100", output: "100"},
+		{input: "1G", output: "1Gi"},
+		{input: "1Gi", output: "1Gi"},
+		{input: "2M", output: "2Mi"},
+		{input: "3K", output: "3Ki"},
 	}
 
 	for _, v := range data {
@@ -461,4 +579,3 @@ func TestMemoryUnitConvert(t *testing.T) {
 		}
 	}
 }
-

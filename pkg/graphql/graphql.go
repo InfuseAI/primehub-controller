@@ -128,6 +128,9 @@ type DtoDatasetSpec struct {
 	Variables          map[string]string
 	GitSyncHostRoot    string
 	GitSyncRoot        string
+	HostPath           map[string]string
+	Nfs                map[string]string
+	Pv                 map[string]string
 }
 
 type GraphqlClient struct {
