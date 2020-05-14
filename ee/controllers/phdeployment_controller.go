@@ -34,11 +34,13 @@ import (
 // PhDeploymentReconciler reconciles a PhDeployment object
 type PhDeploymentReconciler struct {
 	client.Client
-	Log           logr.Logger
-	Scheme        *runtime.Scheme
-	GraphqlClient *graphql.GraphqlClient
-	Ingress       PhIngress
-	PrimehubUrl   string
+	Log                   logr.Logger
+	Scheme                *runtime.Scheme
+	GraphqlClient         *graphql.GraphqlClient
+	Ingress               PhIngress
+	PrimehubUrl           string
+	EngineImage           string
+	EngineImagePullPolicy corev1.PullPolicy
 }
 
 type FailedPodStatus struct {
