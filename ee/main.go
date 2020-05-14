@@ -182,13 +182,28 @@ func main() {
 			panic(fmt.Errorf("should provide primehubUrl in config.yaml if enable model deployment"))
 		}
 
+		var engineContainerImage string
+		engineContainerRepository := viper.GetString("modelDeployment.engineContainer.image.repository")
+		engineContainerTag := viper.GetString("modelDeployment.engineContainer.image.tag")
+		engineContainerPullPolicy := corev1.PullPolicy(viper.GetString("modelDeployment.engineContainer.image.pullPolicy"))
+		if engineContainerRepository != "" && engineContainerTag != "" {
+			engineContainerImage = fmt.Sprintf("%s:%s", engineContainerRepository, engineContainerTag)
+		} else {
+			engineContainerImage = "seldonio/seldon-core-executor:1.1.0"
+		}
+		if engineContainerPullPolicy == "" {
+			engineContainerPullPolicy = corev1.PullIfNotPresent
+		}
+
 		if err = (&eecontrollers.PhDeploymentReconciler{
-			Client:        mgr.GetClient(),
-			Log:           ctrl.Log.WithName("controllers").WithName("PhDeployment"),
-			Scheme:        mgr.GetScheme(),
-			GraphqlClient: graphqlClient,
-			Ingress:       ingress,
-			PrimehubUrl:   primehubUrl,
+			Client:                mgr.GetClient(),
+			Log:                   ctrl.Log.WithName("controllers").WithName("PhDeployment"),
+			Scheme:                mgr.GetScheme(),
+			GraphqlClient:         graphqlClient,
+			Ingress:               ingress,
+			PrimehubUrl:           primehubUrl,
+			EngineImage:           engineContainerImage,
+			EngineImagePullPolicy: engineContainerPullPolicy,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "PhDeployment")
 			os.Exit(1)
