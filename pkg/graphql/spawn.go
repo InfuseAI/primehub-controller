@@ -449,12 +449,12 @@ func (spawner *Spawner) applyVolumeForHostPathDataset(
 	datasetPath string) {
 	writable := dataset.Writable
 
-	if path, ok := dataset.Spec.HostPath["path"]; ok {
+	if len(dataset.Spec.HostPath.Path) > 0 {
 		volume := corev1.Volume{
 			Name: logicName,
 			VolumeSource: corev1.VolumeSource{
 				HostPath: &corev1.HostPathVolumeSource{
-					Path: path,
+					Path: dataset.Spec.HostPath.Path,
 				},
 			},
 		}
@@ -477,27 +477,25 @@ func (spawner *Spawner) applyVolumeForNfsDataset(
 	datasetPath string) {
 	writable := dataset.Writable
 
-	if path, ok := dataset.Spec.Nfs["path"]; ok {
-		if server, ok := dataset.Spec.Nfs["server"]; ok {
-			volume := corev1.Volume{
-				Name: logicName,
-				VolumeSource: corev1.VolumeSource{
-					NFS: &corev1.NFSVolumeSource{
-						Path:   path,
-						Server: server,
-					},
+	if len(dataset.Spec.Nfs.Server) > 0 && len(dataset.Spec.Nfs.Path) > 0 {
+		volume := corev1.Volume{
+			Name: logicName,
+			VolumeSource: corev1.VolumeSource{
+				NFS: &corev1.NFSVolumeSource{
+					Path:   dataset.Spec.Nfs.Path,
+					Server: dataset.Spec.Nfs.Server,
 				},
-			}
-			volumeMount := corev1.VolumeMount{
-				MountPath: mountPath,
-				Name:      logicName,
-				ReadOnly:  !writable,
-			}
-
-			spawner.volumes = append(spawner.volumes, volume)
-			spawner.volumeMounts = append(spawner.volumeMounts, volumeMount)
-			spawner.symlinks = append(spawner.symlinks, fmt.Sprintf("ln -sf %s %s", mountPath, datasetPath))
+			},
 		}
+		volumeMount := corev1.VolumeMount{
+			MountPath: mountPath,
+			Name:      logicName,
+			ReadOnly:  !writable,
+		}
+
+		spawner.volumes = append(spawner.volumes, volume)
+		spawner.volumeMounts = append(spawner.volumeMounts, volumeMount)
+		spawner.symlinks = append(spawner.symlinks, fmt.Sprintf("ln -sf %s %s", mountPath, datasetPath))
 	}
 }
 

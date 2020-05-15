@@ -382,8 +382,8 @@ func TestDatasetHostPath(t *testing.T) {
 			Spec: DtoDatasetSpec{
 				Type:       "hostPath",
 				VolumeName: volumeName,
-				HostPath: map[string]string{
-					"path": "/tmp",
+				HostPath: DtoDatasetSpecHostPath{
+					Path: "/tmp",
 				},
 			},
 		}
@@ -425,7 +425,7 @@ func TestDatasetHostPath(t *testing.T) {
 				return
 			}
 
-			assert.Equal(t, test.dataset.Spec.HostPath["path"], volume.HostPath.Path)
+			assert.Equal(t, test.dataset.Spec.HostPath.Path, volume.HostPath.Path)
 			assert.True(t, test.readOnly == volumeMount.ReadOnly)
 			assert.True(t, checkSymlink(spawner, test.symlink))
 		})
@@ -440,9 +440,9 @@ func TestDatasetNfs(t *testing.T) {
 			Spec: DtoDatasetSpec{
 				Type:       "nfs",
 				VolumeName: volumeName,
-				Nfs: map[string]string{
-					"path":   "/",
-					"server": "10.0.0.1",
+				Nfs: DtoDatasetSpecNfs{
+					Server: "10.0.0.1",
+					Path:   "/",
 				},
 			},
 		}
@@ -484,8 +484,8 @@ func TestDatasetNfs(t *testing.T) {
 				return
 			}
 
-			assert.Equal(t, test.dataset.Spec.Nfs["path"], volume.NFS.Path)
-			assert.Equal(t, test.dataset.Spec.Nfs["server"], volume.NFS.Server)
+			assert.Equal(t, test.dataset.Spec.Nfs.Path, volume.NFS.Path)
+			assert.Equal(t, test.dataset.Spec.Nfs.Server, volume.NFS.Server)
 			assert.True(t, test.readOnly == volumeMount.ReadOnly)
 			assert.True(t, checkSymlink(spawner, test.symlink))
 		})
