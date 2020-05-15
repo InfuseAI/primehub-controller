@@ -349,6 +349,12 @@ func (spawner *Spawner) applyDataset(dataset DtoDataset) {
 	case "git":
 		spawner.applyVolumeForGitDataset(dataset, logicName, mountPath, datasetPath)
 		isVolume = true
+	case "hostPath":
+		spawner.applyVolumeForHostPathDataset(dataset, logicName, mountPath, datasetPath)
+		isVolume = true
+	case "nfs":
+		spawner.applyVolumeForNfsDataset(dataset, logicName, mountPath, datasetPath)
+		isVolume = true
 	case "env":
 		spawner.applyVolumeForEnvDataset(dataset)
 	default:
@@ -369,6 +375,8 @@ func (spawner *Spawner) applyVolumeForPvDataset(
 	writable := dataset.Writable
 
 	var volume corev1.Volume
+
+	// Deprecated
 	matchedHostpath, err := regexp.MatchString(`^hostpath:`, dataset.Spec.VolumeName)
 	if err == nil && matchedHostpath {
 		re := regexp.MustCompile(`^hostpath:`)
@@ -432,6 +440,63 @@ func (spawner *Spawner) applyVolumeForGitDataset(
 	spawner.volumes = append(spawner.volumes, volume)
 	spawner.volumeMounts = append(spawner.volumeMounts, volumeMount)
 	spawner.symlinks = append(spawner.symlinks, fmt.Sprintf("ln -sf %s %s", filepath.Join(mountPath, dataset.Name), datasetPath))
+}
+
+func (spawner *Spawner) applyVolumeForHostPathDataset(
+	dataset DtoDataset,
+	logicName string,
+	mountPath string,
+	datasetPath string) {
+	writable := dataset.Writable
+
+	if len(dataset.Spec.HostPath.Path) > 0 {
+		volume := corev1.Volume{
+			Name: logicName,
+			VolumeSource: corev1.VolumeSource{
+				HostPath: &corev1.HostPathVolumeSource{
+					Path: dataset.Spec.HostPath.Path,
+				},
+			},
+		}
+		volumeMount := corev1.VolumeMount{
+			MountPath: mountPath,
+			Name:      logicName,
+			ReadOnly:  !writable,
+		}
+
+		spawner.volumes = append(spawner.volumes, volume)
+		spawner.volumeMounts = append(spawner.volumeMounts, volumeMount)
+		spawner.symlinks = append(spawner.symlinks, fmt.Sprintf("ln -sf %s %s", mountPath, datasetPath))
+	}
+}
+
+func (spawner *Spawner) applyVolumeForNfsDataset(
+	dataset DtoDataset,
+	logicName string,
+	mountPath string,
+	datasetPath string) {
+	writable := dataset.Writable
+
+	if len(dataset.Spec.Nfs.Server) > 0 && len(dataset.Spec.Nfs.Path) > 0 {
+		volume := corev1.Volume{
+			Name: logicName,
+			VolumeSource: corev1.VolumeSource{
+				NFS: &corev1.NFSVolumeSource{
+					Path:   dataset.Spec.Nfs.Path,
+					Server: dataset.Spec.Nfs.Server,
+				},
+			},
+		}
+		volumeMount := corev1.VolumeMount{
+			MountPath: mountPath,
+			Name:      logicName,
+			ReadOnly:  !writable,
+		}
+
+		spawner.volumes = append(spawner.volumes, volume)
+		spawner.volumeMounts = append(spawner.volumeMounts, volumeMount)
+		spawner.symlinks = append(spawner.symlinks, fmt.Sprintf("ln -sf %s %s", mountPath, datasetPath))
+	}
 }
 
 func (spawner *Spawner) applyVolumeForEnvDataset(dataset DtoDataset) {
