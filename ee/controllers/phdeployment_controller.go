@@ -764,8 +764,8 @@ func (r *PhDeploymentReconciler) buildEngineContainer(phDeployment *primehubv1al
 	user := int64(8888)
 	engineContainer := &corev1.Container{
 		Name:            "seldon-container-engine",
-		Image:           "seldonio/seldon-core-executor:1.1.0",
-		ImagePullPolicy: corev1.PullPolicy("IfNotPresent"),
+		Image:           r.EngineImage,
+		ImagePullPolicy: r.EngineImagePullPolicy,
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      "podinfo",
