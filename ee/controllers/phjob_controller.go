@@ -62,7 +62,6 @@ func (r *PhJobReconciler) getTimeZone() (timezone string, err error) {
 
 func (r *PhJobReconciler) buildPod(phJob *primehubv1alpha1.PhJob) (*corev1.Pod, error) {
 	var err error
-
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        phJob.ObjectMeta.Name,
@@ -115,6 +114,22 @@ func (r *PhJobReconciler) buildPod(phJob *primehubv1alpha1.PhJob) (*corev1.Pod, 
 	} else {
 		r.Log.Error(err, "cannot get location")
 	}
+
+	// mount shared memory volume
+	pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts, corev1.VolumeMount{
+		Name:      "dshm",
+		MountPath: "/dev/shm",
+	})
+
+	pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
+		Name: "dshm",
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{
+				Medium: corev1.StorageMediumMemory,
+			},
+		},
+	})
+
 	pod.Spec.InitContainers = append(pod.Spec.InitContainers, corev1.Container{
 		Name:            "admission-is-not-found",
 		Image:           "admission-is-not-found",
@@ -143,6 +158,9 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		Name:      req.Name,
 	}
 
+	errorCheckAfter := 1 * time.Minute
+	nextCheck := 1 * time.Minute
+
 	log.Info("start Reconcile")
 	startTime := time.Now()
 	defer func() {
@@ -161,21 +179,29 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		}
 	}
 
-	oldStatus := phJob.Status.DeepCopy()
-	phJob = phJob.DeepCopy()
-
 	// if user didn't set ActiveDeadlineSeconds, use default value which is 1 day (86400)
 	if phJob.Spec.ActiveDeadlineSeconds == nil {
 		phJob.Spec.ActiveDeadlineSeconds = &r.DefaultActiveDeadlineSeconds
+		err := r.Client.Update(ctx, phJob)
+		if err != nil {
+			log.Error(err, "Failed to update phJob")
+			return ctrl.Result{RequeueAfter: errorCheckAfter}, err
+		}
 	}
 
 	// if user didn't set TTLSecondsAfterFinished, use default value which is 7 day (604800)
 	if phJob.Spec.TTLSecondsAfterFinished == nil {
 		phJob.Spec.TTLSecondsAfterFinished = &r.DefaultTTLSecondsAfterFinished
+		err := r.Client.Update(ctx, phJob)
+		if err != nil {
+			log.Error(err, "Failed to update phJob")
+			return ctrl.Result{RequeueAfter: errorCheckAfter}, err
+		}
 	}
 
-	errorCheckAfter := 1 * time.Minute
-	nextCheck := 1 * time.Minute
+	oldStatus := phJob.Status.DeepCopy()
+	phJob = phJob.DeepCopy()
+
 	phJobExceedsRequeueLimit := false
 	phJobExceedsLimit := false
 	var failureReason primehubv1alpha1.PhJobReason
