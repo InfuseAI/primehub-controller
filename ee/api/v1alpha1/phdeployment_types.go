@@ -14,6 +14,11 @@ const (
 	DeploymentFailed    PhDeploymentPhase = "Failed"
 )
 
+const (
+	DeploymentPrivateEndpoint string = "private"
+	DeploymentPublicEndpoint  string = "public"
+)
+
 // PhDeploymentSpec defines the desired state of PhDeployment
 type PhDeploymentSpec struct {
 	DisplayName string                  `json:"displayName"`
@@ -24,6 +29,7 @@ type PhDeploymentSpec struct {
 	Stop        bool                    `json:"stop,omitempty"`
 	Description string                  `json:"description,omitempty"`
 	Predictors  []PhDeploymentPredictor `json:"predictors"`
+	Endpoint    PhDeploymentEndpoint    `json:"endpoint,omitempty"`
 }
 
 type PhDeploymentMetadata map[string]string
@@ -35,6 +41,16 @@ type PhDeploymentPredictor struct {
 	InstanceType    string               `json:"instanceType"`
 	ImagePullSecret string               `json:"imagePullSecret,omitempty"`
 	Metadata        PhDeploymentMetadata `json:"metadata,omitempty"`
+}
+
+type PhDeploymentEndpoint struct {
+	AccessType string                       `json:"accessType"`
+	Clients    []PhDeploymentEndpointClient `json:"clients,omitempty"`
+}
+
+type PhDeploymentEndpointClient struct {
+	Name  string `json:"name"`
+	Token string `json:"token"`
 }
 
 // PhDeploymentStatus defines the observed state of PhDeployment

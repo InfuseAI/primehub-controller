@@ -59,6 +59,11 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	ctx := context.Background()
 	log := r.Log.WithValues("phdeployment", req.NamespacedName)
 
+	secretKey := client.ObjectKey{
+		Namespace: req.Namespace,
+		Name:      "deploy-" + req.Name,
+	}
+
 	deploymentKey := client.ObjectKey{
 		Namespace: req.Namespace,
 		Name:      "deploy-" + req.Name,
@@ -144,6 +149,12 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 		return ctrl.Result{}, nil
 	}
 
+	// reconcile secret
+	if err := r.reconcileSecret(ctx, phDeployment, secretKey); err != nil {
+		log.Error(err, "reconcile Secret error.")
+		return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
+	}
+
 	// reconcile deployment
 	if err := r.reconcileDeployment(ctx, phDeployment, deploymentKey, hasChanged); err != nil {
 		log.Error(err, "reconcile Deployment error.")
@@ -157,7 +168,7 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	}
 
 	// reconcile ingress
-	if err := r.reconcileIngress(ctx, phDeployment, ingressKey); err != nil {
+	if err := r.reconcileIngress(ctx, phDeployment, ingressKey, secretKey); err != nil {
 		log.Error(err, "reconcile Ingress error.")
 		return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
 	}
@@ -192,6 +203,39 @@ func (r *PhDeploymentReconciler) updatePhDeploymentStatus(ctx context.Context, p
 		log.Error(err, "failed to update PhDeployment status")
 		return err
 	}
+	return nil
+}
+
+func (r *PhDeploymentReconciler) reconcileSecret(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, secretKey client.ObjectKey) error {
+	var err error
+	logger := r.Log.WithValues("phDeployment", phDeployment.Name)
+
+	if !isPrivateAccess(phDeployment) {
+		return nil
+	}
+
+	phDeploymentSecret, err := r.getSecret(ctx, secretKey)
+	if err != nil && !apierrors.IsNotFound(err) {
+		logger.Info("return since GET secret error", "secret", secretKey, "err", err)
+		return err
+	}
+
+	if phDeploymentSecret == nil {
+		logger.Info("Create secret: " + secretKey.Namespace + "/" + secretKey.Name)
+		err = r.createSecret(ctx, phDeployment, secretKey)
+		if err != nil {
+			return err
+		}
+		logger.Info("Secret " + secretKey.Namespace + "/" + secretKey.Name + " created")
+	} else {
+		logger.Info("Update secret: " + secretKey.Namespace + "/" + secretKey.Name)
+		err = r.updateSecret(ctx, phDeployment, phDeploymentSecret)
+		if err != nil {
+			return err
+		}
+		logger.Info("Secret " + secretKey.Namespace + "/" + secretKey.Name + " updated")
+	}
+
 	return nil
 }
 
@@ -292,6 +336,10 @@ func (r *PhDeploymentReconciler) updateDeployment(ctx context.Context, phDeploym
 	}
 
 	return r.updateStatus(ctx, phDeployment, originalDeployment, isDeploymentUpdated, false, "")
+}
+
+func isPrivateAccess(phDeployment *primehubv1alpha1.PhDeployment) bool {
+	return phDeployment.Spec.Endpoint.AccessType == primehubv1alpha1.DeploymentPrivateEndpoint
 }
 
 func redeployFromStop(phDeployment *primehubv1alpha1.PhDeployment) bool {
@@ -517,32 +565,31 @@ func (r *PhDeploymentReconciler) reconcileService(ctx context.Context, phDeploym
 	return nil
 }
 
-func (r *PhDeploymentReconciler) reconcileIngress(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, ingressKey client.ObjectKey) error {
-	log := r.Log.WithValues("phDeployment", phDeployment.Name)
+func (r *PhDeploymentReconciler) reconcileIngress(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, ingressKey client.ObjectKey, secretKey client.ObjectKey) error {
+	logger := r.Log.WithValues("phDeployment", phDeployment.Name)
 
 	phDeploymentIngress, err := r.getIngress(ctx, ingressKey)
 	if err != nil && !apierrors.IsNotFound(err) {
-		log.Info("return since GET Ingress error ", "ingress", ingressKey, "err", err)
+		logger.Info("return since GET Ingress error ", "ingress", ingressKey, "err", err)
 		return err
 	}
 
 	if phDeploymentIngress == nil { // phDeploymentIngress is not found, create one
-		log.Info("Ingress doesn't exist, create one...")
-
-		serviceName := "deploy-" + phDeployment.Name
-
+		logger.Info("Ingress doesn't exist, create one...")
 		// Create Ingress
-		phDeploymentIngress, err = r.buildIngress(ctx, phDeployment, serviceName)
-		if err == nil {
-			err = r.Client.Create(ctx, phDeploymentIngress)
-		}
-
-		if err == nil { // create seldonDeployment successfully
-			log.Info("phDeploymentIngress created", "phDeploymentIngress", phDeploymentIngress.Name)
-		} else {
-			log.Info("return since CREATE phDeploymentIngress error ", "phDeploymentIngress", phDeploymentIngress.Name, "err", err)
+		phDeploymentIngress, err = r.createIngress(ctx, phDeployment, ingressKey, secretKey)
+		if err != nil { // create seldonDeployment successfully
+			logger.Info("return since CREATE phDeploymentIngress error ", "phDeploymentIngress", phDeploymentIngress.Name, "err", err)
 			return err
 		}
+		logger.Info("phDeploymentIngress created", "phDeploymentIngress", phDeploymentIngress.Name)
+	} else {
+		logger.Info("Ingress already exist, update it...")
+		err = r.updateIngress(ctx, phDeployment, phDeploymentIngress, secretKey)
+		if err != nil {
+			return err
+		}
+		logger.Info("Ingress updated", "ingress", phDeploymentIngress.Name)
 	}
 	// Sync the phDeployment.Status.Endpoint
 	phDeployment.Status.Endpoint = r.PrimehubUrl + "/deployment/" + phDeployment.Name + "/api/v1.0/predictions"
@@ -926,6 +973,62 @@ func (r *PhDeploymentReconciler) buildService(ctx context.Context, phDeployment 
 	return service
 }
 
+func (r *PhDeploymentReconciler) createSecret(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, secretKey client.ObjectKey) error {
+	cipherText := ""
+	for _, c := range phDeployment.Spec.Endpoint.Clients {
+		cipherText = fmt.Sprintf("%s%s:%s\n", cipherText, c.Name, c.Token)
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      secretKey.Name,
+			Namespace: secretKey.Namespace,
+		},
+		Data: map[string][]byte{
+			"auth": []byte(cipherText),
+		},
+		Type: corev1.SecretTypeOpaque,
+	}
+
+	if err := ctrl.SetControllerReference(phDeployment, secret, r.Scheme); err != nil {
+		r.Log.WithValues("phDeployment", phDeployment.Name).Error(err, "failed to set secret's controller reference to phDeployment")
+		return err
+	}
+
+	err := r.Client.Create(ctx, secret)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (r *PhDeploymentReconciler) updateSecret(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, oldSecret *corev1.Secret) error {
+	cipherText := ""
+	for _, c := range phDeployment.Spec.Endpoint.Clients {
+		cipherText = fmt.Sprintf("%s%s:%s\n", cipherText, c.Name, c.Token)
+	}
+
+	secret := oldSecret.DeepCopy()
+	secret.Data["auth"] = []byte(cipherText)
+
+	err := r.Client.Update(ctx, secret)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// get secret of the phDeployment
+func (r *PhDeploymentReconciler) getSecret(ctx context.Context, secretKey client.ObjectKey) (*corev1.Secret, error) {
+	secret := &corev1.Secret{}
+	if err := r.Client.Get(ctx, secretKey, secret); err != nil {
+		return nil, err
+	}
+	return secret, nil
+}
+
 // get deployment of the phDeployment
 func (r *PhDeploymentReconciler) getDeployment(ctx context.Context, deploymentKey client.ObjectKey) (*v1.Deployment, error) {
 	deployment := &v1.Deployment{}
@@ -1016,18 +1119,24 @@ func (r *PhDeploymentReconciler) getIngress(ctx context.Context, ingressKey clie
 }
 
 // build ingress of the phDeployment
-func (r *PhDeploymentReconciler) buildIngress(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, serviceName string) (*v1beta1.Ingress, error) {
+func (r *PhDeploymentReconciler) createIngress(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, ingressKey client.ObjectKey, secretKey client.ObjectKey) (*v1beta1.Ingress, error) {
 
 	annotations := r.Ingress.Annotations
 	hosts := r.Ingress.Hosts
 	ingressTLS := r.Ingress.TLS
 
 	annotations["nginx.ingress.kubernetes.io/rewrite-target"] = "/$1"
+	if isPrivateAccess(phDeployment) {
+		annotations["nginx.ingress.kubernetes.io/auth-type"] = "basic"
+		annotations["nginx.ingress.kubernetes.io/auth-secret"] = secretKey.Name
+		annotations["nginx.ingress.kubernetes.io/auth-secret-type"] = "auth-file"
+		annotations["nginx.ingress.kubernetes.io/auth-realm"] = "Authentication Required - "
+	}
 
 	ingress := &v1beta1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        "deploy-" + phDeployment.Name,
-			Namespace:   phDeployment.Namespace,
+			Name:        ingressKey.Name,
+			Namespace:   ingressKey.Namespace,
 			Annotations: annotations, // from config
 		},
 		Spec: v1beta1.IngressSpec{
@@ -1041,7 +1150,7 @@ func (r *PhDeploymentReconciler) buildIngress(ctx context.Context, phDeployment 
 								{
 									Path: "/deployment/" + phDeployment.Name + "/(.+)",
 									Backend: v1beta1.IngressBackend{
-										ServiceName: serviceName,
+										ServiceName: ingressKey.Name,
 										ServicePort: intstr.IntOrString{
 											Type:   intstr.Int,
 											IntVal: 8000,
@@ -1062,7 +1171,35 @@ func (r *PhDeploymentReconciler) buildIngress(ctx context.Context, phDeployment 
 		return nil, err
 	}
 
-	return ingress, nil
+	err := r.Client.Create(ctx, ingress)
+	return ingress, err
+}
+
+func (r *PhDeploymentReconciler) updateIngress(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, oldIngress *v1beta1.Ingress, secretKey client.ObjectKey) error {
+	shouldUpdate := false
+	ingress := oldIngress.DeepCopy()
+
+	if !isPrivateAccess(phDeployment) && ingress.Annotations["nginx.ingress.kubernetes.io/auth-type"] == "basic" {
+		// Update ingress from private to public
+		delete(ingress.Annotations, "nginx.ingress.kubernetes.io/auth-type")
+		delete(ingress.Annotations, "nginx.ingress.kubernetes.io/auth-secret")
+		delete(ingress.Annotations, "nginx.ingress.kubernetes.io/auth-secret-type")
+		delete(ingress.Annotations, "nginx.ingress.kubernetes.io/auth-realm")
+		shouldUpdate = true
+	} else if isPrivateAccess(phDeployment) && ingress.Annotations["nginx.ingress.kubernetes.io/auth-type"] != "basic" {
+		// Update ingress from public to private
+		ingress.Annotations["nginx.ingress.kubernetes.io/auth-type"] = "basic"
+		ingress.Annotations["nginx.ingress.kubernetes.io/auth-secret"] = secretKey.Name
+		ingress.Annotations["nginx.ingress.kubernetes.io/auth-secret-type"] = "auth-file"
+		ingress.Annotations["nginx.ingress.kubernetes.io/auth-realm"] = "Authentication Required"
+		shouldUpdate = true
+	}
+
+	if shouldUpdate {
+		return r.Client.Update(ctx, ingress)
+	}
+
+	return nil
 }
 
 // delete the seldonDeployment of the phDeployment
