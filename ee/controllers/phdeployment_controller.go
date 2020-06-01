@@ -57,42 +57,22 @@ type FailedPodStatus struct {
 
 func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
-	log := r.Log.WithValues("phdeployment", req.NamespacedName)
-
-	secretKey := client.ObjectKey{
-		Namespace: req.Namespace,
-		Name:      "deploy-" + req.Name,
-	}
-
-	deploymentKey := client.ObjectKey{
-		Namespace: req.Namespace,
-		Name:      "deploy-" + req.Name,
-	}
-
-	serviceKey := client.ObjectKey{
-		Namespace: req.Namespace,
-		Name:      "deploy-" + req.Name,
-	}
-
-	ingressKey := client.ObjectKey{
-		Namespace: req.Namespace,
-		Name:      "deploy-" + req.Name,
-	}
+	logger := r.Log.WithValues("phdeployment", req.NamespacedName)
 
 	phDeployment := &primehubv1alpha1.PhDeployment{}
 	if err := r.Get(ctx, req.NamespacedName, phDeployment); err != nil {
 		if apierrors.IsNotFound(err) {
-			log.Info("PhDeployment deleted")
+			logger.Info("PhDeployment deleted")
 		} else {
-			log.Error(err, "Unable to fetch PhShceduleJob")
+			logger.Error(err, "Unable to fetch PhDeployment")
 		}
 		return ctrl.Result{}, nil
 	}
 
-	log.Info("Start Reconcile PhDeployment")
+	logger.Info("Start Reconcile PhDeployment")
 	startTime := time.Now()
 	defer func() {
-		log.Info("Finished Reconciling phDeployment ", "phDeployment", phDeployment.Name, "ReconcileTime", time.Since(startTime))
+		logger.Info("Finished Reconciling phDeployment ", "phDeployment", phDeployment.Name, "ReconcileTime", time.Since(startTime))
 	}()
 
 	oldStatus := phDeployment.Status.DeepCopy()
@@ -106,7 +86,7 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	hasChanged := r.updateHistory(ctx, phDeployment)
 
 	// Check group EnabledModelDeployment flag when first time create deployment
-	_, err := r.getDeployment(ctx, deploymentKey)
+	_, err := r.getDeployment(ctx, getDeploymentKey(phDeployment))
 	if err != nil && apierrors.IsNotFound(err) {
 		if r.checkModelDeploymentByGroup(ctx, phDeployment) == false {
 			return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
@@ -116,15 +96,15 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	// phDeployment has been stoped
 	if phDeployment.Spec.Stop == true {
 
-		deployment, err := r.getDeployment(ctx, deploymentKey)
+		deployment, err := r.getDeployment(ctx, getDeploymentKey(phDeployment))
 		if err != nil && !apierrors.IsNotFound(err) {
-			log.Error(err, "return since GET deployment error ")
+			logger.Error(err, "return since GET deployment error ")
 			return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
 		}
 
 		// scale down deployment
 		if err := r.scaleDownDeployment(ctx, deployment); err != nil {
-			log.Error(err, "failed to delete deployment and stop phDeployment")
+			logger.Error(err, "failed to delete deployment and stop phDeployment")
 			return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
 		}
 
@@ -150,26 +130,26 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	}
 
 	// reconcile secret
-	if err := r.reconcileSecret(ctx, phDeployment, secretKey); err != nil {
-		log.Error(err, "reconcile Secret error.")
+	if err := r.reconcileSecret(ctx, phDeployment); err != nil {
+		logger.Error(err, "reconcile Secret error.")
 		return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
 	}
 
 	// reconcile deployment
-	if err := r.reconcileDeployment(ctx, phDeployment, deploymentKey, hasChanged); err != nil {
-		log.Error(err, "reconcile Deployment error.")
+	if err := r.reconcileDeployment(ctx, phDeployment, hasChanged); err != nil {
+		logger.Error(err, "reconcile Deployment error.")
 		return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
 	}
 
 	// reconcile service
-	if err := r.reconcileService(ctx, phDeployment, serviceKey); err != nil {
-		log.Error(err, "reconcile Service error.")
+	if err := r.reconcileService(ctx, phDeployment); err != nil {
+		logger.Error(err, "reconcile Service error.")
 		return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
 	}
 
 	// reconcile ingress
-	if err := r.reconcileIngress(ctx, phDeployment, ingressKey, secretKey); err != nil {
-		log.Error(err, "reconcile Ingress error.")
+	if err := r.reconcileIngress(ctx, phDeployment); err != nil {
+		logger.Error(err, "reconcile Ingress error.")
 		return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
 	}
 
@@ -206,9 +186,10 @@ func (r *PhDeploymentReconciler) updatePhDeploymentStatus(ctx context.Context, p
 	return nil
 }
 
-func (r *PhDeploymentReconciler) reconcileSecret(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, secretKey client.ObjectKey) error {
+func (r *PhDeploymentReconciler) reconcileSecret(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment) error {
 	var err error
 	logger := r.Log.WithValues("phDeployment", phDeployment.Name)
+	secretKey := getSecretKey(phDeployment)
 
 	if !isPrivateAccess(phDeployment) {
 		return nil
@@ -239,12 +220,13 @@ func (r *PhDeploymentReconciler) reconcileSecret(ctx context.Context, phDeployme
 	return nil
 }
 
-func (r *PhDeploymentReconciler) reconcileDeployment(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, deploymentKey client.ObjectKey, hasChanged bool) error {
+func (r *PhDeploymentReconciler) reconcileDeployment(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, hasChanged bool) error {
 	// 1. check deployment exists, if no create one
 	// 2. update the deployment if spec has been changed
 	// 3. update the phDeployment status based on the deployment status
 	// 4. currently, the phDeployment failed if deployment failed or it is not available for over 5 mins
 	logger := r.Log.WithValues("phDeployment", phDeployment.Name)
+	deploymentKey := getDeploymentKey(phDeployment)
 
 	deployment, err := r.getDeployment(ctx, deploymentKey)
 	if err != nil && !apierrors.IsNotFound(err) {
@@ -336,6 +318,34 @@ func (r *PhDeploymentReconciler) updateDeployment(ctx context.Context, phDeploym
 	}
 
 	return r.updateStatus(ctx, phDeployment, originalDeployment, isDeploymentUpdated, false, "")
+}
+
+func getSecretKey(p *primehubv1alpha1.PhDeployment) client.ObjectKey {
+	return client.ObjectKey{
+		Namespace: p.Namespace,
+		Name:      "deploy-" + p.Name,
+	}
+}
+
+func getDeploymentKey(p *primehubv1alpha1.PhDeployment) client.ObjectKey {
+	return client.ObjectKey{
+		Namespace: p.Namespace,
+		Name:      "deploy-" + p.Name,
+	}
+}
+
+func getServiceKey(p *primehubv1alpha1.PhDeployment) client.ObjectKey {
+	return client.ObjectKey{
+		Namespace: p.Namespace,
+		Name:      "deploy-" + p.Name,
+	}
+}
+
+func getIngressKey(p *primehubv1alpha1.PhDeployment) client.ObjectKey {
+	return client.ObjectKey{
+		Namespace: p.Namespace,
+		Name:      "deploy-" + p.Name,
+	}
 }
 
 func isPrivateAccess(phDeployment *primehubv1alpha1.PhDeployment) bool {
@@ -539,8 +549,9 @@ func (r *PhDeploymentReconciler) listFailedPods(ctx context.Context, phDeploymen
 	return failedPods
 }
 
-func (r *PhDeploymentReconciler) reconcileService(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, serviceKey client.ObjectKey) error {
+func (r *PhDeploymentReconciler) reconcileService(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment) error {
 	log := r.Log.WithValues("phDeployment", phDeployment.Name)
+	serviceKey := getServiceKey(phDeployment)
 
 	service, err := r.getService(ctx, serviceKey)
 	if err != nil && !apierrors.IsNotFound(err) {
@@ -565,8 +576,10 @@ func (r *PhDeploymentReconciler) reconcileService(ctx context.Context, phDeploym
 	return nil
 }
 
-func (r *PhDeploymentReconciler) reconcileIngress(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, ingressKey client.ObjectKey, secretKey client.ObjectKey) error {
+func (r *PhDeploymentReconciler) reconcileIngress(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment) error {
 	logger := r.Log.WithValues("phDeployment", phDeployment.Name)
+	ingressKey := getIngressKey(phDeployment)
+	secretKey := getSecretKey(phDeployment)
 
 	phDeploymentIngress, err := r.getIngress(ctx, ingressKey)
 	if err != nil && !apierrors.IsNotFound(err) {
