@@ -50,6 +50,25 @@ spec:
               type: string
             displayName:
               type: string
+            endpoint:
+              properties:
+                accessType:
+                  type: string
+                clients:
+                  items:
+                    properties:
+                      name:
+                        type: string
+                      token:
+                        type: string
+                    required:
+                    - name
+                    - token
+                    type: object
+                  type: array
+              required:
+              - accessType
+              type: object
             groupId:
               type: string
             groupName:
@@ -109,6 +128,25 @@ spec:
                         type: string
                       displayName:
                         type: string
+                      endpoint:
+                        properties:
+                          accessType:
+                            type: string
+                          clients:
+                            items:
+                              properties:
+                                name:
+                                  type: string
+                                token:
+                                  type: string
+                              required:
+                              - name
+                              - token
+                              type: object
+                            type: array
+                        required:
+                        - accessType
+                        type: object
                       groupId:
                         type: string
                       groupName:

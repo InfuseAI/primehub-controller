@@ -22,6 +22,13 @@ spec:
       instanceType: cpu-only
       metadata: # key-value objects (can update)
         foo: bar
+  endpoint:
+    accessType: private
+    clients:
+      - name: test
+        token: "$2y$10$ZzEZE/7TenQssFZxpk4YF.Smvn/5LwlawHn1cYhfbYR.mz.BmT5tS" # qwert
+      - name: root
+        token: "$2y$10$TsgIwGQWRT6a78XtG2PvH./lxSOo6fy1rhu4T2DT4B3bHLHs5vMJy" # qwert
 status:
   phase: deploying
   message: deploying
