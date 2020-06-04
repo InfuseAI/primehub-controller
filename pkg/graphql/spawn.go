@@ -50,6 +50,15 @@ type Spawner struct {
 	containerName  string // main container: name
 }
 
+type ContainerResource struct {
+	RequestsCpu    resource.Quantity
+	LimitsCpu      resource.Quantity
+	RequestsMemory resource.Quantity
+	LimitsMemory   resource.Quantity
+	RequestsGpu    resource.Quantity
+	LimitsGpu      resource.Quantity
+}
+
 // Set spanwer by graphql response data
 func NewSpawnerByData(data DtoData, groupName string, instanceTypeName string, imageName string, options SpawnerDataOptions) (*Spawner, error) {
 	var group DtoGroup
@@ -723,4 +732,15 @@ func ConvertMemoryUnit(value string) string {
 	}
 
 	return value
+}
+
+func (spawner *Spawner) GetContainerResource() ContainerResource {
+	return ContainerResource{
+		RequestsCpu:    spawner.requestsCpu,
+		LimitsCpu:      spawner.limitsCpu,
+		RequestsMemory: spawner.requestsMemory,
+		LimitsMemory:   spawner.limitsMemory,
+		RequestsGpu:    spawner.requestsGpu,
+		LimitsGpu:      spawner.limitsGpu,
+	}
 }
