@@ -121,14 +121,25 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 		return ctrl.Result{}, nil
 	}
 
-	var enableModelDeploymet bool = false
-	enableModelDeploymet, err := r.checkModelDeploymentByGroup(ctx, phDeployment)
+	var enableModelDeployment bool = false
+	enableModelDeployment, err := r.checkModelDeploymentByGroup(ctx, phDeployment)
 	if err != nil {
 		logger.Error(err, "check Model Deployment By Group failed")
-		return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
-	}
+		if err.Error() == "can not find group in response" {
+			r.updateStatus(phDeployment, nil, true, "Group Not Found", nil)
+		} else {
+			r.updateStatus(phDeployment, nil, true, err.Error(), nil)
+		}
+	} else if enableModelDeployment == false {
+		// release the resources
+		r.deleteDeployment(ctx, getDeploymentKey(phDeployment))
+		r.deleteService(ctx, getServiceKey(phDeployment))
+		r.deleteIngress(ctx, getIngressKey(phDeployment))
+		r.deleteSecret(ctx, getSecretKey(phDeployment))
 
-	if enableModelDeploymet == true {
+		// update the status to failed
+		r.updateStatus(phDeployment, nil, true, "The model deployment is not enabled for the selected group", nil)
+	} else {
 		// reconcile secret
 		if err := r.reconcileSecret(ctx, phDeployment); err != nil {
 			logger.Error(err, "reconcile Secret error.")
@@ -251,20 +262,11 @@ func (r *PhDeploymentReconciler) checkModelDeploymentByGroup(ctx context.Context
 	if err != nil {
 		// configuration failed since fetching group from graphql failed
 		logger.Info("failed to query group by id: " + phDeployment.Spec.GroupId)
-		r.updateStatus(phDeployment, nil, true, err.Error(), nil)
 		return false, err
 	} else if enabledDeployment == false {
 		// configuration failed since modelDeployment is disabled for the group
 		logger.Info("Group doesn't enable model deployment flag", "group", phDeployment.Spec.GroupName)
 
-		// release the resources
-		r.deleteDeployment(ctx, getDeploymentKey(phDeployment))
-		r.deleteService(ctx, getServiceKey(phDeployment))
-		r.deleteIngress(ctx, getIngressKey(phDeployment))
-		r.deleteSecret(ctx, getSecretKey(phDeployment))
-
-		// update the status to failed
-		r.updateStatus(phDeployment, nil, true, "The model deployment is not enabled for the selected group", nil)
 		return false, nil
 	}
 	return true, nil
@@ -478,12 +480,7 @@ func (r *PhDeploymentReconciler) updateStatus(phDeployment *primehubv1alpha1.PhD
 		phDeployment.Status.Messsage = "Deployment is being deployed and not available now"
 
 		return nil
-	}
-
-	// phDdeployment is ready only when AvailableReplicas = Replicas and UpdatedReplicas = Replicas
-	if deployment.Status.AvailableReplicas == *deployment.Spec.Replicas &&
-		deployment.Status.UpdatedReplicas == *deployment.Spec.Replicas {
-
+	} else {
 		phDeployment.Status.Phase = primehubv1alpha1.DeploymentDeployed
 		phDeployment.Status.Messsage = "Deployment is deployed and available now"
 		phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
@@ -492,7 +489,6 @@ func (r *PhDeploymentReconciler) updateStatus(phDeployment *primehubv1alpha1.PhD
 		return nil
 	}
 
-	return nil
 }
 
 func (r *PhDeploymentReconciler) explain(failedPods []FailedPodStatus) string {
