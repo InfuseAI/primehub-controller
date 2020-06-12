@@ -36,7 +36,7 @@ type PhDeploymentReconciler struct {
 	client.Client
 	Log                   logr.Logger
 	Scheme                *runtime.Scheme
-	GraphqlClient         *graphql.AbstractGraphqlClient
+	GraphqlClient         graphql.AbstractGraphqlClient
 	Ingress               PhIngress
 	PrimehubUrl           string
 	EngineImage           string
