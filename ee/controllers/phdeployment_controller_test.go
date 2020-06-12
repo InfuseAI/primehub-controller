@@ -31,7 +31,7 @@ func TestConfigurationError(t *testing.T) {
 		Client                client.Client
 		Log                   logr.Logger
 		Scheme                *runtime.Scheme
-		GraphqlClient         *graphql.GraphqlClient
+		GraphqlClient         graphql.AbstractGraphqlClient
 		Ingress               PhIngress
 		PrimehubUrl           string
 		EngineImage           string
@@ -181,7 +181,7 @@ func TestRuntimeError(t *testing.T) {
 		Client                client.Client
 		Log                   logr.Logger
 		Scheme                *runtime.Scheme
-		GraphqlClient         *graphql.GraphqlClient
+		GraphqlClient         graphql.AbstractGraphqlClient
 		Ingress               PhIngress
 		PrimehubUrl           string
 		EngineImage           string
@@ -329,7 +329,7 @@ func TestQuotaNotEnough(t *testing.T) {
 		Client                client.Client
 		Log                   logr.Logger
 		Scheme                *runtime.Scheme
-		GraphqlClient         *graphql.GraphqlClient
+		GraphqlClient         graphql.AbstractGraphqlClient
 		Ingress               PhIngress
 		PrimehubUrl           string
 		EngineImage           string
@@ -473,7 +473,7 @@ func TestPhDeploymentReconciler_reconcileSecret(t *testing.T) {
 		Client                client.Client
 		Log                   logr.Logger
 		Scheme                *runtime.Scheme
-		GraphqlClient         *graphql.GraphqlClient
+		GraphqlClient         graphql.AbstractGraphqlClient
 		Ingress               PhIngress
 		PrimehubUrl           string
 		EngineImage           string

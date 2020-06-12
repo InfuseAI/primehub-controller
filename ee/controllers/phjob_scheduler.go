@@ -79,7 +79,7 @@ func compareByCreationTimestamp(job1 *primehubv1alpha1.PhJob, job2 *primehubv1al
 type PHJobScheduler struct {
 	client.Client
 	Log           logr.Logger
-	GraphqlClient *graphql.GraphqlClient
+	GraphqlClient graphql.AbstractGraphqlClient
 }
 
 func (r *PHJobScheduler) getGroupInfo(groupId string) (*graphql.DtoGroup, error) {
