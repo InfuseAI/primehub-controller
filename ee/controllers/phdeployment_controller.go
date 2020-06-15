@@ -52,6 +52,10 @@ type FailedPodStatus struct {
 	isUnschedulable   bool
 }
 
+const (
+	lastAppliedAnnotation = "primehub.io/last-applied-configuration"
+)
+
 // +kubebuilder:rbac:groups=primehub.io,resources=phdeployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=primehub.io,resources=phdeployments/status,verbs=get;update;patch
 
@@ -116,6 +120,16 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 			if err := r.updatePhDeploymentStatus(ctx, phDeployment); err != nil {
 				return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
 			}
+		}
+
+		// apply new spec to the deployment
+		// we also have to update the deployment in the k8s
+		appliedSpec := phDeployment.Spec
+		SetLastApplied(deployment, &appliedSpec)
+		err = r.Client.Update(ctx, deployment)
+		if err != nil {
+			logger.Error(err, "return since k8s UPDATE deployment error")
+			return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
 		}
 
 		return ctrl.Result{}, nil
@@ -294,35 +308,40 @@ func (r *PhDeploymentReconciler) createDeployment(ctx context.Context, phDeploym
 	return nil
 }
 
+func needUpdateDeployment(phDeployment *primehubv1alpha1.PhDeployment, lastAppliedSpec *primehubv1alpha1.PhDeploymentSpec) bool {
+	lastAppliedPredictor := lastAppliedSpec.Predictors[0]
+	lastAppliedImage := lastAppliedPredictor.ModelImage
+	lastAppliedPullSecret := lastAppliedPredictor.ImagePullSecret
+	lastAppliedInstanceType := lastAppliedPredictor.InstanceType
+
+	if phDeployment.Spec.Predictors[0].ModelImage != lastAppliedImage ||
+		phDeployment.Spec.Predictors[0].ImagePullSecret != lastAppliedPullSecret ||
+		phDeployment.Spec.Predictors[0].InstanceType != lastAppliedInstanceType {
+		return true
+	}
+	return false
+}
+
+func needScaleDeployment(phDeployment *primehubv1alpha1.PhDeployment, lastAppliedSpec *primehubv1alpha1.PhDeploymentSpec) bool {
+	lastAppliedPredictor := lastAppliedSpec.Predictors[0]
+	lastAppliedReplicas := lastAppliedPredictor.Replicas
+	if (phDeployment.Spec.Stop == false && lastAppliedSpec.Stop == true) || int(lastAppliedReplicas) != phDeployment.Spec.Predictors[0].Replicas {
+		return true
+	}
+	return false
+}
+
 func (r *PhDeploymentReconciler) updateDeployment(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, deploymentKey client.ObjectKey, currentDeployment *v1.Deployment) error {
 	logger := r.Log.WithValues("phDeployment", phDeployment.Name)
 
 	var err error
-	var modelContainer corev1.Container
-	isDeploymentUpdated := false
-	for _, c := range currentDeployment.Spec.Template.Spec.Containers {
-		if c.Name == "model" {
-			modelContainer = c
-		}
-	}
 
-	// get the instancetype, image from graphql
-	var result *graphql.DtoResult
-	if result, err = r.GraphqlClient.FetchByUserId(phDeployment.Spec.UserId); err != nil {
-		logger.Error(err, "qurey graphql FetchByUserId error")
-		return r.updateStatus(phDeployment, nil, true, err.Error(), nil)
-	}
-	var spawner *graphql.Spawner
-	options := graphql.SpawnerDataOptions{}
-	if spawner, err = graphql.NewSpawnerForModelDeployment(result.Data, phDeployment.Spec.GroupName, phDeployment.Spec.Predictors[0].InstanceType, phDeployment.Spec.Predictors[0].ModelImage, options); err != nil {
-		logger.Error(err, "NewSpawnerForModelDeployment error")
-		return r.updateStatus(phDeployment, nil, true, err.Error(), nil)
-	}
+	lastAppliedSpec, err := GetLastApplied(currentDeployment)
+	needUpdateDeployment := needUpdateDeployment(phDeployment, lastAppliedSpec)
+	needScaleDeployment := needScaleDeployment(phDeployment, lastAppliedSpec)
+	var isDeploymentUpdated bool = false
 
-	// convert the insancetype to actual resources for comparison
-	cResource := spawner.GetContainerResource()
-
-	if modelImageIsDiff(phDeployment, modelContainer) || pullSecretsIsDiff(phDeployment, currentDeployment) || instanceTypeIsDiff(phDeployment, modelContainer, cResource) {
+	if needUpdateDeployment {
 		// update deployment
 		logger.Info("phDeployment has been updated, update the deployment to reflect the update.")
 
@@ -334,14 +353,25 @@ func (r *PhDeploymentReconciler) updateDeployment(ctx context.Context, phDeploym
 			r.updateStatus(phDeployment, nil, true, err.Error(), nil)
 			return nil
 		}
-		currentDeployment.Spec = deploymentUpdated.Spec
-		isDeploymentUpdated = true
 
-	} else if nonStopAndModelReplicaIsDiff(phDeployment, currentDeployment) {
+		// update spec to update the whole deployment
+		currentDeployment.Spec = deploymentUpdated.Spec
+
+		//update Annotation
+		appliedSpec := phDeployment.Spec
+		SetLastApplied(currentDeployment, &appliedSpec)
+		isDeploymentUpdated = true
+	} else if needScaleDeployment {
 		// only update replicas
 		logger.Info("phDeployment has been updated, update the deployment to reflect the update.")
 		replicas := int32(phDeployment.Spec.Predictors[0].Replicas)
+
+		// only update replicas to update the deployment replicas
 		currentDeployment.Spec.Replicas = &replicas
+
+		// applied new spec to deployment
+		appliedSpec := phDeployment.Spec
+		SetLastApplied(currentDeployment, &appliedSpec)
 		isDeploymentUpdated = true
 	}
 
@@ -740,6 +770,9 @@ func (r *PhDeploymentReconciler) buildDeployment(ctx context.Context, phDeployme
 			},
 		},
 	}
+
+	spec := phDeployment.Spec
+	SetLastApplied(deployment, &spec)
 
 	if err := ctrl.SetControllerReference(phDeployment, deployment, r.Scheme); err != nil {
 		r.Log.WithValues("phDeployment", phDeployment.Name).Error(err, "failed to set deployment's controller reference to phDeployment")
@@ -1320,69 +1353,30 @@ func getEngineVarJson(predictor PredictorSpec) (string, error) {
 	return base64.StdEncoding.EncodeToString(str), nil
 }
 
-func modelImageIsDiff(phDeployment *primehubv1alpha1.PhDeployment, modelContainer corev1.Container) bool {
-	// current model container image is different from phDeployment spec
-	// return true to update deployment
-	if modelContainer.Image != phDeployment.Spec.Predictors[0].ModelImage {
-		return true
+func SetLastApplied(obj metav1.Object, lastAppliedSpec *primehubv1alpha1.PhDeploymentSpec) error {
+	lastAppliedJSON, err := json.Marshal(lastAppliedSpec)
+	if err != nil {
+		return fmt.Errorf("can't marshal last applied config: %v", err)
 	}
-	return false
+
+	ann := obj.GetAnnotations()
+	if ann == nil {
+		ann = make(map[string]string, 1)
+	}
+	ann[lastAppliedAnnotation] = string(lastAppliedJSON)
+	obj.SetAnnotations(ann)
+	return nil
 }
 
-func pullSecretsIsDiff(phDeployment *primehubv1alpha1.PhDeployment, currentDeployment *v1.Deployment) bool {
-	// current deployment pull secret is different from phDeployment spec
-	// return true to update deployment
-	if (phDeployment.Spec.Predictors[0].ImagePullSecret == "") != (currentDeployment.Spec.Template.Spec.ImagePullSecrets == nil) {
-		// one of them is nil, the other is not nil
-		return true
+func GetLastApplied(obj metav1.Object) (*primehubv1alpha1.PhDeploymentSpec, error) {
+	lastAppliedJSON := obj.GetAnnotations()[lastAppliedAnnotation]
+	if lastAppliedJSON == "" {
+		return nil, nil
 	}
-	if (phDeployment.Spec.Predictors[0].ImagePullSecret == "") && (currentDeployment.Spec.Template.Spec.ImagePullSecrets == nil) {
-		// both of them are nil
-		return false
+	lastApplied := &primehubv1alpha1.PhDeploymentSpec{}
+	err := json.Unmarshal([]byte(lastAppliedJSON), lastApplied)
+	if err != nil {
+		return nil, fmt.Errorf("can't unmarshal %q annotation: %v", lastAppliedAnnotation, err)
 	}
-	if currentDeployment.Spec.Template.Spec.ImagePullSecrets[0].Name != phDeployment.Spec.Predictors[0].ImagePullSecret {
-		// both of them are not nil, and they are different
-		return true
-	}
-
-	return false
-}
-
-func instanceTypeIsDiff(phDeployment *primehubv1alpha1.PhDeployment, modelContainer corev1.Container, cResource graphql.ContainerResource) bool {
-
-	engineCpu := int64(math.Max(float64(cResource.LimitsCpu.MilliValue())*0.1, 300))
-	engineMemory := int64(math.Max(float64(cResource.LimitsMemory.Value())*0.1, 250*1024*1024))
-	modelCpu := cResource.LimitsCpu.MilliValue() - engineCpu
-	modelMemory := cResource.LimitsMemory.Value() - engineMemory
-	modelGpu := cResource.LimitsGpu.Value()
-
-	currentCpu := modelContainer.Resources.Limits.Cpu().MilliValue()
-	currentMemory := modelContainer.Resources.Limits.Memory().Value()
-	currentGpu := modelContainer.Resources.Limits["nvidia.com/gpu"]
-	currentGpuNum := currentGpu.Value()
-
-	// fmt.Println("============")
-	// fmt.Println("modelCpu", modelCpu)
-	// fmt.Println("modelMemory", modelMemory)
-	// fmt.Println("modelGpu", modelGpu)
-	// fmt.Println("currentCpu", currentCpu)
-	// fmt.Println("currentMemory", currentMemory)
-	// fmt.Println("currentGpuNum", currentGpuNum)
-	// fmt.Println("============")
-
-	if currentCpu != modelCpu || currentMemory != modelMemory || modelGpu != currentGpuNum {
-		fmt.Println("instanceType is different")
-		return true
-	}
-
-	return false
-}
-
-func nonStopAndModelReplicaIsDiff(phDeployment *primehubv1alpha1.PhDeployment, currentDeployment *v1.Deployment) bool {
-	// phDeployment is not stop, but current deployment replicas is different from phDeployment spec
-	// return true to update replicas
-	if phDeployment.Spec.Stop == false && int(*currentDeployment.Spec.Replicas) != phDeployment.Spec.Predictors[0].Replicas {
-		return true
-	}
-	return false
+	return lastApplied, nil
 }
