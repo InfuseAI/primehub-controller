@@ -89,52 +89,6 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	// update history
 	r.updateHistory(ctx, phDeployment)
 
-	// phDeployment has been stoped
-	if phDeployment.Spec.Stop == true {
-
-		deployment, err := r.getDeployment(ctx, getDeploymentKey(phDeployment))
-		if err != nil && !apierrors.IsNotFound(err) {
-			logger.Error(err, "return since k8s GET deployment error ")
-			return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
-		}
-
-		// scale down deployment
-		if err := r.scaleDownDeployment(ctx, deployment); err != nil {
-			logger.Error(err, "failed to delete deployment and stop phDeployment")
-			return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
-		}
-
-		if deployment.Status.AvailableReplicas != 0 || deployment.Status.UpdatedReplicas != 0 {
-			phDeployment.Status.Phase = primehubv1alpha1.DeploymentStopping
-			phDeployment.Status.Messsage = "deployment is stopping"
-			phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
-			phDeployment.Status.AvailableReplicas = 0
-		} else {
-			phDeployment.Status.Phase = primehubv1alpha1.DeploymentStopped
-			phDeployment.Status.Messsage = "deployment has stopped"
-			phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
-			phDeployment.Status.AvailableReplicas = 0
-		}
-
-		if !apiequality.Semantic.DeepEqual(oldStatus, phDeployment.Status) {
-			if err := r.updatePhDeploymentStatus(ctx, phDeployment); err != nil {
-				return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
-			}
-		}
-
-		// apply new spec to the deployment
-		// we also have to update the deployment in the k8s
-		appliedSpec := phDeployment.Spec
-		SetLastApplied(deployment, &appliedSpec)
-		err = r.Client.Update(ctx, deployment)
-		if err != nil {
-			logger.Error(err, "return since k8s UPDATE deployment error")
-			return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
-		}
-
-		return ctrl.Result{}, nil
-	}
-
 	var enableModelDeployment bool = false
 	enableModelDeployment, err := r.checkModelDeploymentByGroup(ctx, phDeployment)
 	if err != nil {
@@ -309,6 +263,8 @@ func (r *PhDeploymentReconciler) createDeployment(ctx context.Context, phDeploym
 }
 
 func needUpdateDeployment(phDeployment *primehubv1alpha1.PhDeployment, lastAppliedSpec *primehubv1alpha1.PhDeploymentSpec) bool {
+	needUpdateDeployment := false
+
 	lastAppliedPredictor := lastAppliedSpec.Predictors[0]
 	lastAppliedImage := lastAppliedPredictor.ModelImage
 	lastAppliedPullSecret := lastAppliedPredictor.ImagePullSecret
@@ -317,18 +273,11 @@ func needUpdateDeployment(phDeployment *primehubv1alpha1.PhDeployment, lastAppli
 	if phDeployment.Spec.Predictors[0].ModelImage != lastAppliedImage ||
 		phDeployment.Spec.Predictors[0].ImagePullSecret != lastAppliedPullSecret ||
 		phDeployment.Spec.Predictors[0].InstanceType != lastAppliedInstanceType {
-		return true
-	}
-	return false
-}
 
-func needScaleDeployment(phDeployment *primehubv1alpha1.PhDeployment, lastAppliedSpec *primehubv1alpha1.PhDeploymentSpec) bool {
-	lastAppliedPredictor := lastAppliedSpec.Predictors[0]
-	lastAppliedReplicas := lastAppliedPredictor.Replicas
-	if (phDeployment.Spec.Stop == false && lastAppliedSpec.Stop == true) || int(lastAppliedReplicas) != phDeployment.Spec.Predictors[0].Replicas {
-		return true
+		needUpdateDeployment = true
 	}
-	return false
+
+	return needUpdateDeployment
 }
 
 func (r *PhDeploymentReconciler) updateDeployment(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, deploymentKey client.ObjectKey, currentDeployment *v1.Deployment) error {
@@ -338,8 +287,6 @@ func (r *PhDeploymentReconciler) updateDeployment(ctx context.Context, phDeploym
 
 	lastAppliedSpec, err := GetLastApplied(currentDeployment)
 	needUpdateDeployment := needUpdateDeployment(phDeployment, lastAppliedSpec)
-	needScaleDeployment := needScaleDeployment(phDeployment, lastAppliedSpec)
-	var isDeploymentUpdated bool = false
 
 	if needUpdateDeployment {
 		// update deployment
@@ -353,36 +300,38 @@ func (r *PhDeploymentReconciler) updateDeployment(ctx context.Context, phDeploym
 			r.updateStatus(phDeployment, nil, true, err.Error(), nil)
 			return nil
 		}
-
-		// update spec to update the whole deployment
 		currentDeployment.Spec = deploymentUpdated.Spec
 
-		//update Annotation
-		appliedSpec := phDeployment.Spec
-		SetLastApplied(currentDeployment, &appliedSpec)
-		isDeploymentUpdated = true
-	} else if needScaleDeployment {
-		// only update replicas
-		logger.Info("phDeployment has been updated, update the deployment to reflect the update.")
-		replicas := int32(phDeployment.Spec.Predictors[0].Replicas)
+	}
 
-		// only update replicas to update the deployment replicas
+	replicas := int32(phDeployment.Spec.Predictors[0].Replicas)
+	currentDeployment.Spec.Replicas = &replicas
+
+	if phDeployment.Spec.Stop == true {
+		// [Important]
+		// since users might change the spec during the deployment is stopped
+		// if we don't force the replicas to be 0
+		// deployment's replicas will be the replicas from the spec after r.buildDeployment
+		// the pod will be created
+		replicas := int32(0)
 		currentDeployment.Spec.Replicas = &replicas
-
-		// applied new spec to deployment
-		appliedSpec := phDeployment.Spec
-		SetLastApplied(currentDeployment, &appliedSpec)
-		isDeploymentUpdated = true
 	}
 
-	if isDeploymentUpdated {
-		err = r.Client.Update(ctx, currentDeployment)
-		if err != nil {
-			logger.Error(err, "return since k8s UPDATE deployment error")
-			return err
-		}
-		logger.Info("deployment updated", "deployment", currentDeployment.Name)
+	// set the last applied to the current spec in the annotation
+	appliedSpec := phDeployment.Spec
+	SetLastApplied(currentDeployment, &appliedSpec)
+
+	// always update the deployment
+	// because when user update the spec during the deployment is stopped
+	// we still need to update the annotation
+	// if there is no change among spec.stop, annotation, image, instanceType, secret, replicas
+	// currentDeployment will be the same and k8s won't update it.
+	err = r.Client.Update(ctx, currentDeployment)
+	if err != nil {
+		logger.Error(err, "return since k8s UPDATE deployment error")
+		return err
 	}
+	logger.Info("deployment updated", "deployment", currentDeployment.Name)
 
 	// if update/create deployment successfully
 	// we get the deployment from cluster again.
@@ -434,6 +383,21 @@ func (r *PhDeploymentReconciler) updateStatus(phDeployment *primehubv1alpha1.PhD
 	configurationError bool,
 	configurationErrorReason string,
 	failedPods []FailedPodStatus) error {
+
+	if phDeployment.Spec.Stop {
+		if deployment.Status.AvailableReplicas != 0 || deployment.Status.UpdatedReplicas != 0 {
+			phDeployment.Status.Phase = primehubv1alpha1.DeploymentStopping
+			phDeployment.Status.Messsage = "deployment is stopping"
+			phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
+			phDeployment.Status.AvailableReplicas = 0
+		} else {
+			phDeployment.Status.Phase = primehubv1alpha1.DeploymentStopped
+			phDeployment.Status.Messsage = "deployment has stopped"
+			phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
+			phDeployment.Status.AvailableReplicas = 0
+		}
+		return nil
+	}
 
 	// configurationError happens while following events happen
 	// 1. group, instanceTyep not found
