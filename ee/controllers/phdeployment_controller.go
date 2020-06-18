@@ -218,10 +218,10 @@ func (r *PhDeploymentReconciler) reconcileDeployment(ctx context.Context, phDepl
 	if deployment == nil {
 		logger.Info("deployment doesn't exist, create one...")
 		return r.createDeployment(ctx, phDeployment)
+	} else {
+		logger.Info("deployment exist, check the status of current deployment and update phDeployment")
+		return r.updateDeployment(ctx, phDeployment, deploymentKey, deployment)
 	}
-
-	logger.Info("deployment exist, check the status of current deployment and update phDeployment")
-	return r.updateDeployment(ctx, phDeployment, deploymentKey, deployment)
 }
 
 func (r *PhDeploymentReconciler) checkModelDeploymentByGroup(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment) (bool, error) {
@@ -269,10 +269,13 @@ func needUpdateDeployment(phDeployment *primehubv1alpha1.PhDeployment, lastAppli
 	lastAppliedImage := lastAppliedPredictor.ModelImage
 	lastAppliedPullSecret := lastAppliedPredictor.ImagePullSecret
 	lastAppliedInstanceType := lastAppliedPredictor.InstanceType
+	lastAppliedReplicas := lastAppliedPredictor.Replicas
 
 	if phDeployment.Spec.Predictors[0].ModelImage != lastAppliedImage ||
 		phDeployment.Spec.Predictors[0].ImagePullSecret != lastAppliedPullSecret ||
-		phDeployment.Spec.Predictors[0].InstanceType != lastAppliedInstanceType {
+		phDeployment.Spec.Predictors[0].InstanceType != lastAppliedInstanceType ||
+		phDeployment.Spec.Predictors[0].Replicas != lastAppliedReplicas ||
+		phDeployment.Spec.Stop != lastAppliedSpec.Stop {
 
 		needUpdateDeployment = true
 	}
@@ -301,20 +304,6 @@ func (r *PhDeploymentReconciler) updateDeployment(ctx context.Context, phDeploym
 			return nil
 		}
 		currentDeployment.Spec = deploymentUpdated.Spec
-
-	}
-
-	replicas := int32(phDeployment.Spec.Predictors[0].Replicas)
-	currentDeployment.Spec.Replicas = &replicas
-
-	if phDeployment.Spec.Stop == true {
-		// [Important]
-		// since users might change the spec during the deployment is stopped
-		// if we don't force the replicas to be 0
-		// deployment's replicas will be the replicas from the spec after r.buildDeployment
-		// the pod will be created
-		replicas := int32(0)
-		currentDeployment.Spec.Replicas = &replicas
 	}
 
 	// set the last applied to the current spec in the annotation
@@ -658,6 +647,9 @@ func (r *PhDeploymentReconciler) buildDeployment(ctx context.Context, phDeployme
 	r.adjustResourcesToFitConstraint(engineContainer, modelContainer)
 
 	replicas := int32(phDeployment.Spec.Predictors[0].Replicas)
+	if (phDeployment.Spec.Stop) {
+		replicas = 0
+	}
 	defaultMode := corev1.DownwardAPIVolumeSourceDefaultMode
 
 	imagepullsecrets := []corev1.LocalObjectReference{}
