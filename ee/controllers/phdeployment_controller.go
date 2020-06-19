@@ -280,16 +280,21 @@ func needUpdateDeployment(phDeployment *primehubv1alpha1.PhDeployment, lastAppli
 	return needUpdateDeployment
 }
 
+func needScaleDeployment(phDeployment *primehubv1alpha1.PhDeployment, lastAppliedSpec *primehubv1alpha1.PhDeploymentSpec) bool {
+	return phDeployment.Spec.Stop != lastAppliedSpec.Stop ||
+		phDeployment.Spec.Predictors[0].Replicas != lastAppliedSpec.Predictors[0].Replicas
+}
+
 func (r *PhDeploymentReconciler) updateDeployment(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, deploymentKey client.ObjectKey, currentDeployment *v1.Deployment) error {
 	logger := r.Log.WithValues("phDeployment", phDeployment.Name)
 
 	var err error
 
 	lastAppliedSpec, err := GetLastApplied(currentDeployment)
-	needUpdateDeployment := needUpdateDeployment(phDeployment, lastAppliedSpec)
 
-	if needUpdateDeployment {
-		// update deployment
+	// Fully update
+	if needUpdateDeployment(phDeployment, lastAppliedSpec) {
+		// Update: if image, pull secret, instance type change
 		logger.Info("phDeployment has been updated, update the deployment to reflect the update.")
 
 		deploymentUpdated, err := r.buildDeployment(ctx, phDeployment)
@@ -302,18 +307,14 @@ func (r *PhDeploymentReconciler) updateDeployment(ctx context.Context, phDeploym
 		}
 		currentDeployment.Spec = deploymentUpdated.Spec
 
-	}
+	} else if needScaleDeployment(phDeployment, lastAppliedSpec) {
+		//Scale: if stop, replicas changes
+		logger.Info("phDeployment has been scaled, scale the deployment to reflect the update.")
 
-	replicas := int32(phDeployment.Spec.Predictors[0].Replicas)
-	currentDeployment.Spec.Replicas = &replicas
-
-	if phDeployment.Spec.Stop == true {
-		// [Important]
-		// since users might change the spec during the deployment is stopped
-		// if we don't force the replicas to be 0
-		// deployment's replicas will be the replicas from the spec after r.buildDeployment
-		// the pod will be created
-		replicas := int32(0)
+		replicas := int32(phDeployment.Spec.Predictors[0].Replicas)
+		if phDeployment.Spec.Stop {
+			replicas = 0
+		}
 		currentDeployment.Spec.Replicas = &replicas
 	}
 
@@ -658,6 +659,9 @@ func (r *PhDeploymentReconciler) buildDeployment(ctx context.Context, phDeployme
 	r.adjustResourcesToFitConstraint(engineContainer, modelContainer)
 
 	replicas := int32(phDeployment.Spec.Predictors[0].Replicas)
+	if phDeployment.Spec.Stop {
+		replicas = 0
+	}
 	defaultMode := corev1.DownwardAPIVolumeSourceDefaultMode
 
 	imagepullsecrets := []corev1.LocalObjectReference{}
