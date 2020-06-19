@@ -53,7 +53,7 @@ type FailedPodStatus struct {
 }
 
 const (
-	lastAppliedAnnotation = "primehub.io/last-applied-configuration"
+	lastAppliedAnnotation = "phdeployment.primehub.io/last-applied-configuration"
 )
 
 // +kubebuilder:rbac:groups=primehub.io,resources=phdeployments,verbs=get;list;watch;create;update;patch;delete
