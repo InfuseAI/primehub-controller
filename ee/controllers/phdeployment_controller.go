@@ -1233,6 +1233,7 @@ func (r *PhDeploymentReconciler) updateIngress(ctx context.Context, phDeployment
 		delete(ingress.Annotations, "nginx.ingress.kubernetes.io/auth-secret")
 		delete(ingress.Annotations, "nginx.ingress.kubernetes.io/auth-secret-type")
 		delete(ingress.Annotations, "nginx.ingress.kubernetes.io/auth-realm")
+		delete(ingress.Annotations, "nginx.ingress.kubernetes.io/configuration-snippet")
 		shouldUpdate = true
 	} else if isPrivateAccess(phDeployment) && ingress.Annotations["nginx.ingress.kubernetes.io/auth-type"] != "basic" {
 		// Update ingress from public to private
@@ -1240,6 +1241,7 @@ func (r *PhDeploymentReconciler) updateIngress(ctx context.Context, phDeployment
 		ingress.Annotations["nginx.ingress.kubernetes.io/auth-secret"] = secretKey.Name
 		ingress.Annotations["nginx.ingress.kubernetes.io/auth-secret-type"] = "auth-file"
 		ingress.Annotations["nginx.ingress.kubernetes.io/auth-realm"] = "Authentication Required"
+		ingress.Annotations["nginx.ingress.kubernetes.io/configuration-snippet"] = `proxy_set_header X-Forwarded-User $remote_user;`
 		shouldUpdate = true
 	}
 
