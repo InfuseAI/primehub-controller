@@ -1178,6 +1178,7 @@ func (r *PhDeploymentReconciler) createIngress(ctx context.Context, phDeployment
 		annotations["nginx.ingress.kubernetes.io/auth-secret"] = secretKey.Name
 		annotations["nginx.ingress.kubernetes.io/auth-secret-type"] = "auth-file"
 		annotations["nginx.ingress.kubernetes.io/auth-realm"] = "Authentication Required - "
+		annotations["nginx.ingress.kubernetes.io/configuration-snippet"] = `proxy_set_header X-Forwarded-User $remote_user;`
 	}
 
 	ingress := &v1beta1.Ingress{
