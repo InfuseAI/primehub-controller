@@ -124,6 +124,8 @@ jobs:
             if [[ -n "$DOCKER_PASS" ]]; then
                   docker login -u $DOCKER_USER -p $DOCKER_PASS
                   docker push ${CONTAINER_NAME}:${DOCKER_TAG}
+                  docker tag ${CONTAINER_NAME}:${DOCKER_TAG} ${CONTAINER_NAME}:latest
+                  docker push ${CONTAINER_NAME}:latest
             fi
 
   build_ee:
@@ -187,6 +189,8 @@ jobs:
             if [[ -n "$DOCKER_PASS" ]]; then
                   docker login -u $DOCKER_USER -p $DOCKER_PASS
                   docker push ${EE_CONTAINER_NAME}:${DOCKER_TAG}
+                  docker tag ${EE_CONTAINER_NAME}:${DOCKER_TAG} ${EE_CONTAINER_NAME}:latest
+                  docker push ${EE_CONTAINER_NAME}:latest
             fi
 
 workflows:
