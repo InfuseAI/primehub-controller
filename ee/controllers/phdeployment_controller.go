@@ -265,6 +265,10 @@ func (r *PhDeploymentReconciler) createDeployment(ctx context.Context, phDeploym
 func needUpdateDeployment(phDeployment *primehubv1alpha1.PhDeployment, lastAppliedSpec *primehubv1alpha1.PhDeploymentSpec) bool {
 	needUpdateDeployment := false
 
+	if lastAppliedSpec == nil {
+		return true
+	}
+
 	lastAppliedPredictor := lastAppliedSpec.Predictors[0]
 	lastAppliedImage := lastAppliedPredictor.ModelImage
 	lastAppliedPullSecret := lastAppliedPredictor.ImagePullSecret
