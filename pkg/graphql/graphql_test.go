@@ -16,14 +16,14 @@ func TestFetchContext(t *testing.T) {
 		Data: DtoData{
 			System: DtoSystem{},
 			User: DtoUser{
-				Id: userId,
+				Id:       userId,
 				Username: "Test User",
-				IsAdmin: true,
-				Groups:  []DtoGroup{
+				IsAdmin:  true,
+				Groups: []DtoGroup{
 					{
-						Name: "phusers",
+						Name:          "phusers",
 						InstanceTypes: []DtoInstanceType{{Name: "cpu-only"}},
-						Images: []DtoImage{{Name: "base-notebook"}},
+						Images:        []DtoImage{{Name: "base-notebook"}},
 					},
 				},
 			},

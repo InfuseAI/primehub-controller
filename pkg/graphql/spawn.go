@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/spf13/viper"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -88,6 +89,9 @@ func NewSpawnerByData(data DtoData, groupName string, instanceTypeName string, i
 	// Group volume
 	for _, group := range data.User.Groups {
 		spawner.applyVolumeForGroup(groupName, group)
+	}
+	if viper.GetString("jobSubmission.phfsEnabled") == "true" {
+		spawner.applyVolumeForPhfs(groupName)
 	}
 
 	// Instance type
@@ -279,6 +283,32 @@ func (spawner *Spawner) applyVolumeForGroup(launchGroup string, group DtoGroup) 
 	spawner.volumeMounts = append(spawner.volumeMounts, volumeMount)
 	if homeSymlink {
 		spawner.symlinks = append(spawner.symlinks, fmt.Sprintf("ln -s %s .", mountPath))
+	}
+}
+
+func (spawner *Spawner) applyVolumeForPhfs(groupName string) {
+	groupName = strings.ToLower(strings.ReplaceAll(groupName, "_", "-"))
+
+	pvcName := viper.GetString("jobSubmission.phfsPVC")
+	if len(pvcName) > 0 {
+		volume := corev1.Volume{
+			Name: "phfs",
+			VolumeSource: corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: pvcName,
+				},
+			},
+		}
+
+		volumeMount := corev1.VolumeMount{
+			MountPath: "/phfs",
+			Name:      "phfs",
+			SubPath:   "groups/" + groupName,
+		}
+
+		spawner.volumes = append(spawner.volumes, volume)
+		spawner.volumeMounts = append(spawner.volumeMounts, volumeMount)
+		spawner.symlinks = append(spawner.symlinks, fmt.Sprintf("ln -s %s .", "/phfs"))
 	}
 }
 
