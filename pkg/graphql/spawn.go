@@ -7,7 +7,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/spf13/viper"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -15,6 +14,8 @@ import (
 type SpawnerDataOptions struct {
 	WorkingDir     string
 	WorkingDirSize resource.Quantity
+	PhfsEnabled    bool
+	PhfsPVC        string
 }
 
 // Represent the pod spawner.
@@ -90,8 +91,8 @@ func NewSpawnerByData(data DtoData, groupName string, instanceTypeName string, i
 	for _, group := range data.User.Groups {
 		spawner.applyVolumeForGroup(groupName, group)
 	}
-	if viper.GetString("jobSubmission.phfsEnabled") == "true" {
-		spawner.applyVolumeForPhfs(groupName)
+	if options.PhfsEnabled {
+		spawner.applyVolumeForPhfs(groupName, options.PhfsPVC)
 	}
 
 	// Instance type
@@ -286,10 +287,9 @@ func (spawner *Spawner) applyVolumeForGroup(launchGroup string, group DtoGroup) 
 	}
 }
 
-func (spawner *Spawner) applyVolumeForPhfs(groupName string) {
+func (spawner *Spawner) applyVolumeForPhfs(groupName string, pvcName string) {
 	groupName = strings.ToLower(strings.ReplaceAll(groupName, "_", "-"))
 
-	pvcName := viper.GetString("jobSubmission.phfsPVC")
 	if len(pvcName) > 0 {
 		volume := corev1.Volume{
 			Name: "phfs",

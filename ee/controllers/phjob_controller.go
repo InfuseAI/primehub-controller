@@ -44,6 +44,8 @@ type PhJobReconciler struct {
 	NodeSelector                   map[string]string
 	Tolerations                    []corev1.Toleration
 	Affinity                       corev1.Affinity
+	PhfsEnabled                    bool
+	PhfsPVC                        string
 }
 
 func (r *PhJobReconciler) getTimeZone() (timezone string, err error) {
@@ -82,6 +84,8 @@ func (r *PhJobReconciler) buildPod(phJob *primehubv1alpha1.PhJob) (*corev1.Pod, 
 	var spawner *graphql.Spawner
 	options := graphql.SpawnerDataOptions{
 		WorkingDirSize: r.WorkingDirSize,
+		PhfsEnabled:    r.PhfsEnabled,
+		PhfsPVC:        r.PhfsPVC,
 	}
 	if spawner, err = graphql.NewSpawnerByData(result.Data, phJob.Spec.GroupName, phJob.Spec.InstanceType, phJob.Spec.Image, options); err != nil {
 		return nil, err
