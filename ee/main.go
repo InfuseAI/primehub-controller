@@ -137,6 +137,8 @@ func main() {
 		NodeSelector:                   nodeSelector,
 		Tolerations:                    tolerationsSlice,
 		Affinity:                       affinity,
+		PhfsEnabled:                    viper.GetBool("jobSubmission.phfsEnabled"),
+		PhfsPVC:                        viper.GetString("jobSubmission.phfsPVC"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PhJob")
 		os.Exit(1)

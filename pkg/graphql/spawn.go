@@ -14,6 +14,8 @@ import (
 type SpawnerDataOptions struct {
 	WorkingDir     string
 	WorkingDirSize resource.Quantity
+	PhfsEnabled    bool
+	PhfsPVC        string
 }
 
 // Represent the pod spawner.
@@ -88,6 +90,9 @@ func NewSpawnerByData(data DtoData, groupName string, instanceTypeName string, i
 	// Group volume
 	for _, group := range data.User.Groups {
 		spawner.applyVolumeForGroup(groupName, group)
+	}
+	if options.PhfsEnabled {
+		spawner.applyVolumeForPhfs(groupName, options.PhfsPVC)
 	}
 
 	// Instance type
@@ -279,6 +284,31 @@ func (spawner *Spawner) applyVolumeForGroup(launchGroup string, group DtoGroup) 
 	spawner.volumeMounts = append(spawner.volumeMounts, volumeMount)
 	if homeSymlink {
 		spawner.symlinks = append(spawner.symlinks, fmt.Sprintf("ln -s %s .", mountPath))
+	}
+}
+
+func (spawner *Spawner) applyVolumeForPhfs(groupName string, pvcName string) {
+	groupName = strings.ToLower(strings.ReplaceAll(groupName, "_", "-"))
+
+	if len(pvcName) > 0 {
+		volume := corev1.Volume{
+			Name: "phfs",
+			VolumeSource: corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: pvcName,
+				},
+			},
+		}
+
+		volumeMount := corev1.VolumeMount{
+			MountPath: "/phfs",
+			Name:      "phfs",
+			SubPath:   "groups/" + groupName,
+		}
+
+		spawner.volumes = append(spawner.volumes, volume)
+		spawner.volumeMounts = append(spawner.volumeMounts, volumeMount)
+		spawner.symlinks = append(spawner.symlinks, fmt.Sprintf("ln -s %s .", "/phfs"))
 	}
 }
 
