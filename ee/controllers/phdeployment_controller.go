@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"reflect"
 	"strings"
 	"time"
 
@@ -78,8 +79,6 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	defer func() {
 		logger.Info("Finished Reconciling phDeployment ", "phDeployment", phDeployment.Name, "ReconcileTime", time.Since(startTime))
 	}()
-
-	oldStatus := phDeployment.Status.DeepCopy()
 	phDeployment = phDeployment.DeepCopy()
 
 	if phDeployment.Status.History == nil {
@@ -133,9 +132,25 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 		}
 	}
 
+	// get the phdeployment again to minimize the possibility of updating a stale object
+	// because the sync loop interval might be too small
+	// for operator to get the stale object from the cache
+	// this is a common issue in kubebuilder
+	// ref: https://github.com/banzaicloud/bank-vaults/issues/364
+	phDeploymentToBeUpdated := &primehubv1alpha1.PhDeployment{}
+	if err := r.Get(ctx, req.NamespacedName, phDeploymentToBeUpdated); err != nil {
+		if apierrors.IsNotFound(err) {
+			logger.Info("PhDeployment deleted")
+		} else {
+			logger.Error(err, "Unable to fetch PhDeployment")
+		}
+		return ctrl.Result{}, nil
+	}
+
 	// if the status has changed, update the phDeployment status
-	if !apiequality.Semantic.DeepEqual(oldStatus, phDeployment.Status) {
-		if err := r.updatePhDeploymentStatus(ctx, phDeployment); err != nil {
+	if !reflect.DeepEqual(phDeploymentToBeUpdated.Status, phDeployment.Status) {
+		phDeploymentToBeUpdated.Status = phDeployment.Status
+		if err := r.updatePhDeploymentStatus(ctx, phDeploymentToBeUpdated); err != nil {
 			return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
 		}
 	}
@@ -324,19 +339,21 @@ func (r *PhDeploymentReconciler) updateDeployment(ctx context.Context, phDeploym
 
 	// set the last applied to the current spec in the annotation
 	appliedSpec := phDeployment.Spec
-	SetLastApplied(currentDeployment, &appliedSpec)
+	if !reflect.DeepEqual(&appliedSpec, lastAppliedSpec) {
+		SetLastApplied(currentDeployment, &appliedSpec)
 
-	// always update the deployment
-	// because when user update the spec during the deployment is stopped
-	// we still need to update the annotation
-	// if there is no change among spec.stop, annotation, image, instanceType, secret, replicas
-	// currentDeployment will be the same and k8s won't update it.
-	err = r.Client.Update(ctx, currentDeployment)
-	if err != nil {
-		logger.Error(err, "return since k8s UPDATE deployment error")
-		return err
+		// update the deployment when spec has changed
+		// because when user update the spec during the deployment is stopped
+		// we still need to update the annotation
+		// if there is no change among spec.stop, annotation, image, instanceType, secret, replicas
+		// currentDeployment will be the same and k8s won't update it.
+		err = r.Client.Update(ctx, currentDeployment)
+		if err != nil {
+			logger.Error(err, "return since k8s UPDATE deployment error")
+			return err
+		}
+		logger.Info("deployment updated", "deployment", currentDeployment.Name)
 	}
-	logger.Info("deployment updated", "deployment", currentDeployment.Name)
 
 	// if update/create deployment successfully
 	// we get the deployment from cluster again.
@@ -673,6 +690,25 @@ func (r *PhDeploymentReconciler) buildDeployment(ctx context.Context, phDeployme
 		imagepullsecrets = append(imagepullsecrets, corev1.LocalObjectReference{Name: phDeployment.Spec.Predictors[0].ImagePullSecret})
 	}
 
+	// get the instancetype from graphql
+	predictorInstanceType := phDeployment.Spec.Predictors[0].InstanceType
+	predictorImage := phDeployment.Spec.Predictors[0].ModelImage
+	var result *graphql.DtoResult
+	if result, err = r.GraphqlClient.FetchByUserId(phDeployment.Spec.UserId); err != nil {
+		return nil, err
+	}
+	var spawner *graphql.Spawner
+	options := graphql.SpawnerDataOptions{}
+	if spawner, err = graphql.NewSpawnerForModelDeployment(result.Data, phDeployment.Spec.GroupName, predictorInstanceType, predictorImage, options); err != nil {
+		return nil, err
+	}
+	nodeSelector := make(map[string]string)
+	for k, v := range spawner.NodeSelector {
+		nodeSelector[k] = v
+	}
+	tolerations := make([]corev1.Toleration, 0)
+	tolerations = append(tolerations, spawner.Tolerations...)
+
 	deployment := &v1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "deploy-" + phDeployment.Name,
@@ -714,6 +750,8 @@ func (r *PhDeploymentReconciler) buildDeployment(ctx context.Context, phDeployme
 					},
 				},
 				Spec: corev1.PodSpec{
+					NodeSelector:     nodeSelector,
+					Tolerations:      tolerations,
 					RestartPolicy:    corev1.RestartPolicyAlways,
 					DNSPolicy:        corev1.DNSClusterFirst,
 					SchedulerName:    "default-scheduler",
@@ -722,6 +760,7 @@ func (r *PhDeploymentReconciler) buildDeployment(ctx context.Context, phDeployme
 						*modelContainer,
 						*engineContainer,
 					},
+
 					Volumes: []corev1.Volume{
 						{
 							Name: "podinfo",
@@ -1289,7 +1328,6 @@ func (r *PhDeploymentReconciler) updateHistory(ctx context.Context, phDeployment
 			Spec: phDeployment.Spec,
 		}
 		phDeployment.Status.History = append(phDeployment.Status.History, history)
-		log.Info(history)
 	} else {
 		latestHistory := phDeployment.Status.History[0]
 		if !apiequality.Semantic.DeepEqual(phDeployment.Spec, latestHistory.Spec) { // current spec is not the same as latest history
@@ -1328,18 +1366,16 @@ func getEngineVarJson(predictor PredictorSpec) (string, error) {
 	return base64.StdEncoding.EncodeToString(str), nil
 }
 
-func SetLastApplied(obj metav1.Object, lastAppliedSpec *primehubv1alpha1.PhDeploymentSpec) error {
+func SetLastApplied(obj *v1.Deployment, lastAppliedSpec *primehubv1alpha1.PhDeploymentSpec) error {
 	lastAppliedJSON, err := json.Marshal(lastAppliedSpec)
 	if err != nil {
 		return fmt.Errorf("can't marshal last applied config: %v", err)
 	}
 
-	ann := obj.GetAnnotations()
-	if ann == nil {
-		ann = make(map[string]string, 1)
+	if obj.ObjectMeta.Annotations == nil {
+		obj.ObjectMeta.Annotations = make(map[string]string, 1)
 	}
-	ann[lastAppliedAnnotation] = string(lastAppliedJSON)
-	obj.SetAnnotations(ann)
+	obj.ObjectMeta.Annotations[lastAppliedAnnotation] = string(lastAppliedJSON)
 	return nil
 }
 
