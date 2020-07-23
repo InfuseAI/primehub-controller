@@ -219,10 +219,14 @@ workflows:
           filters:
             tags:
               only: /.*/
+            branches:
+              ignore: /.*/
       - unit_test_ee:
           filters:
             tags:
               only: /.*/
+            branches:
+              ignore: /.*/
       - build_ce:
           requires:
             - unit_test_ce
@@ -230,6 +234,8 @@ workflows:
           filters:
             tags:
               only: /.*/
+            branches:
+              ignore: /.*/
       - build_ee:
           requires:
             - unit_test_ce
@@ -237,3 +243,5 @@ workflows:
           filters:
             tags:
               only: /.*/
+            branches:
+              ignore: /.*/
