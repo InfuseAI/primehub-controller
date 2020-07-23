@@ -126,7 +126,7 @@ jobs:
                   docker push ${CONTAINER_NAME}:${DOCKER_TAG}
                   if [[ -n "$CIRCLE_TAG" ]]; then
                     docker tag ${CONTAINER_NAME}:${DOCKER_TAG} ${CONTAINER_NAME}:${CIRCLE_TAG}
-                    docker push ${CONTAINER_NAME}:${DOCKER_TAG}
+                    docker push ${CONTAINER_NAME}:${CIRCLE_TAG}
                   else
                     docker tag ${CONTAINER_NAME}:${DOCKER_TAG} ${CONTAINER_NAME}:latest
                     docker push ${CONTAINER_NAME}:latest
@@ -196,7 +196,7 @@ jobs:
                   docker push ${EE_CONTAINER_NAME}:${DOCKER_TAG}
                   if [[ -n "$CIRCLE_TAG" ]]; then
                     docker tag ${EE_CONTAINER_NAME}:${DOCKER_TAG} ${CONTAINER_NAME}:${CIRCLE_TAG}
-                    docker push ${EE_CONTAINER_NAME}:${DOCKER_TAG}
+                    docker push ${EE_CONTAINER_NAME}:${CIRCLE_TAG}
                   else
                     docker tag ${EE_CONTAINER_NAME}:${DOCKER_TAG} ${CONTAINER_NAME}:latest
                     docker push ${EE_CONTAINER_NAME}:latest
