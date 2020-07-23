@@ -215,6 +215,14 @@ workflows:
               only: master
   build_tag:
     jobs:
+      - unit_test_ce:
+          filters:
+            tags:
+              only: /.*/
+      - unit_test_ee:
+          filters:
+            tags:
+              only: /.*/
       - build_ce:
           requires:
             - unit_test_ce
