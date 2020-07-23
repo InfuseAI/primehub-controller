@@ -195,11 +195,11 @@ jobs:
                   docker login -u $DOCKER_USER -p $DOCKER_PASS
                   docker push ${EE_CONTAINER_NAME}:${DOCKER_TAG}
                   if [[ -n "$CIRCLE_TAG" ]]; then
-                    docker tag ${CONTAINER_NAME}:${DOCKER_TAG} ${CONTAINER_NAME}:${CIRCLE_TAG}
-                    docker push ${CONTAINER_NAME}:${DOCKER_TAG}
+                    docker tag ${EE_CONTAINER_NAME}:${DOCKER_TAG} ${CONTAINER_NAME}:${CIRCLE_TAG}
+                    docker push ${EE_CONTAINER_NAME}:${DOCKER_TAG}
                   else
-                    docker tag ${CONTAINER_NAME}:${DOCKER_TAG} ${CONTAINER_NAME}:latest
-                    docker push ${CONTAINER_NAME}:latest
+                    docker tag ${EE_CONTAINER_NAME}:${DOCKER_TAG} ${CONTAINER_NAME}:latest
+                    docker push ${EE_CONTAINER_NAME}:latest
                   fi
             fi
 
