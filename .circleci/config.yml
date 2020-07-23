@@ -213,3 +213,25 @@ workflows:
           filters:
             branches:
               only: master
+  build_tag:
+    jobs:
+      - unit_test_ce
+      - unit_test_ee
+      - build_ce:
+          requires:
+            - unit_test_ce
+            - unit_test_ee
+          filters:
+            tags:
+              only: /.*/
+            branches:
+              ignore: /.*/
+      - build_ee:
+          requires:
+            - unit_test_ce
+            - unit_test_ee
+          filters:
+            tags:
+              only: /.*/
+            branches:
+              ignore: /.*/
