@@ -747,6 +747,7 @@ func (r *PhDeploymentReconciler) buildDeployment(ctx context.Context, phDeployme
 						"prometheus.io/path":   "prometheus",
 						"prometheus.io/port":   "8000",
 						"prometheus.io/scrape": "true",
+						"primehub.io/usage":    r.buildUsageAnnotation(phDeployment),
 					},
 				},
 				Spec: corev1.PodSpec{
@@ -791,6 +792,14 @@ func (r *PhDeploymentReconciler) buildDeployment(ctx context.Context, phDeployme
 	}
 
 	return deployment, nil
+}
+
+func (r *PhDeploymentReconciler) buildUsageAnnotation(phDeployment *primehubv1alpha1.PhDeployment) string {
+	usageAnnotations, _ := json.Marshal(map[string]string{
+		"component":     "deployment",
+		"instance_type": phDeployment.Spec.Predictors[0].InstanceType,
+		"group":         phDeployment.Spec.GroupName})
+	return string(usageAnnotations)
 }
 
 func (r *PhDeploymentReconciler) adjustResourcesToFitConstraint(engineContainer *corev1.Container, modelContainer *corev1.Container) {

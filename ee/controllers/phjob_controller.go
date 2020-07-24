@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"primehub-controller/pkg/graphql"
 	"strings"
 	"time"
@@ -62,13 +63,29 @@ func (r *PhJobReconciler) getTimeZone() (timezone string, err error) {
 	return TimezoneCache.Get(cacheKey).Value().(string), nil
 }
 
+func (r *PhJobReconciler) buildAnnotationsWithUsageMetadata(phJob *primehubv1alpha1.PhJob) map[string]string {
+	annotations := make(map[string]string)
+	for k, v := range phJob.ObjectMeta.Annotations {
+		annotations[k] = v
+	}
+
+	usageMetadata, _ := json.Marshal(map[string]string{
+		"component":     "job",
+		"instance_type": phJob.Spec.InstanceType,
+		"group":         phJob.Spec.GroupName,
+		"user":          phJob.Spec.UserName,
+	})
+	annotations["primehub.io/usage"] = string(usageMetadata)
+	return annotations
+}
+
 func (r *PhJobReconciler) buildPod(phJob *primehubv1alpha1.PhJob) (*corev1.Pod, error) {
 	var err error
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        phJob.ObjectMeta.Name,
 			Namespace:   phJob.Namespace,
-			Annotations: phJob.ObjectMeta.Annotations,
+			Annotations: r.buildAnnotationsWithUsageMetadata(phJob),
 			Labels:      phJob.ObjectMeta.Labels,
 		},
 	}
