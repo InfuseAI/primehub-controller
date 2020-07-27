@@ -70,8 +70,9 @@ func (r *PhJobReconciler) buildAnnotationsWithUsageMetadata(phJob *primehubv1alp
 	}
 
 	usageMetadata, _ := json.Marshal(map[string]string{
-		"component":     "job",
-		"instance_type": phJob.Spec.InstanceType,
+		"component":      "job",
+		"component_name": phJob.Name,
+		"instance_type":  phJob.Spec.InstanceType,
 		"group":         phJob.Spec.GroupName,
 		"user":          phJob.Spec.UserName,
 	})
