@@ -495,7 +495,7 @@ func TestDatasetNfs(t *testing.T) {
 func TestDatasetEnv(t *testing.T) {
 
 	dataset := DtoDataset{
-		Name: "ds",
+		Name: "TEST-ENV",
 		Spec: DtoDatasetSpec{
 			Type: "env",
 			Variables: map[string]string{
@@ -506,6 +506,20 @@ func TestDatasetEnv(t *testing.T) {
 
 	spawner := &Spawner{}
 	spawner.applyVolumeForEnvDataset(dataset)
+
+	spawnerTests := []struct {
+		key   string
+		value string
+	}{
+		{"TEST-ENV_FOO", "bar"},
+		{"TEST_ENV_FOO", "bar"},
+	}
+	for idx, test := range spawnerTests {
+		t.Run(test.key, func(t *testing.T) {
+			assert.Equal(t, test.key, spawner.env[idx].Name)
+			assert.Equal(t, test.value, spawner.env[idx].Value)
+		})
+	}
 
 	tests := []struct {
 		key         string
