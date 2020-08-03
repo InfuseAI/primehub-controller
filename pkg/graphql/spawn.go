@@ -544,8 +544,14 @@ func (spawner *Spawner) applyVolumeForEnvDataset(dataset DtoDataset) {
 		if !valid {
 			continue
 		} else {
+			// For backward compatibility in env
 			spawner.env = append(spawner.env, corev1.EnvVar{
 				Name:  envKey,
+				Value: value,
+			})
+			// Actually, hyphen is not supported in bash
+			spawner.env = append(spawner.env, corev1.EnvVar{
+				Name:  strings.ReplaceAll(envKey, "-", "_"),
 				Value: value,
 			})
 		}
