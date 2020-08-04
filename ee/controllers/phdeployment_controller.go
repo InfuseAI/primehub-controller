@@ -981,7 +981,7 @@ func (r PhDeploymentReconciler) buildModelContainer(phDeployment *primehubv1alph
 	modelContainer := &corev1.Container{
 		Name:            "model",
 		Image:           phDeployment.Spec.Predictors[0].ModelImage,
-		ImagePullPolicy: corev1.PullPolicy("IfNotPresent"),
+		ImagePullPolicy: corev1.PullAlways,
 		ReadinessProbe: &corev1.Probe{
 			Handler:             corev1.Handler{TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromString("http")}},
 			InitialDelaySeconds: 20,
