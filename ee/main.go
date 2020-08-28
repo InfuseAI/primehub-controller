@@ -235,6 +235,8 @@ func main() {
 }
 
 func loadConfig() {
+	viper.AutomaticEnv()
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
 	viper.AddConfigPath("/etc/primehub-controller/") // path to look for the config file in
