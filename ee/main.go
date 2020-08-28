@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	//primehubv1alpha1 "primehub-controller/api/v1alpha1"
 	eeprimehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
