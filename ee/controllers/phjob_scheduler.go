@@ -356,6 +356,17 @@ func (r *PHJobScheduler) Schedule() {
 		groupInfo, err := r.getGroupInfo(phJob.Spec.GroupId)
 		if err != nil {
 			r.Log.Error(err, "cannot get group info")
+
+			phJobCopy := phJob.DeepCopy()
+			phJobCopy.Status.Phase = primehubv1alpha1.JobFailed
+			phJobCopy.Status.Reason = primehubv1alpha1.JobReasonPodCreationFailed
+			phJobCopy.Status.Message = "cannot get group info"
+			now := metav1.Now()
+			phJobCopy.Status.FinishTime = &now
+			err := r.Status().Update(ctx, phJobCopy)
+			if err != nil {
+				r.Log.Error(err, "update phjob status failed")
+			}
 			continue
 		}
 		instanceInfo, err := r.getInstanceTypeInfo(phJob.Spec.InstanceType)
