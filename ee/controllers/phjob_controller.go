@@ -73,8 +73,8 @@ func (r *PhJobReconciler) buildAnnotationsWithUsageMetadata(phJob *primehubv1alp
 		"component":      "job",
 		"component_name": phJob.Name,
 		"instance_type":  phJob.Spec.InstanceType,
-		"group":         phJob.Spec.GroupName,
-		"user":          phJob.Spec.UserName,
+		"group":          phJob.Spec.GroupName,
+		"user":           phJob.Spec.UserName,
 	})
 	annotations["primehub.io/usage"] = string(usageMetadata)
 	return annotations
@@ -380,12 +380,15 @@ func (r *PhJobReconciler) reconcilePod(ctx context.Context, phJob *primehubv1alp
 		if err == nil { // create pod successfully
 			phJob.Status.PodName = podkey.Name
 			log.Info("created pod", "pod", pod)
-
 		} else { // error occurs when creating pod
-			admissionReject = r.handleCreatePodFailed(phJob, pod, err)
-			if admissionReject == false {
-				createPodFailed = true
-				createPodFailedReason = err.Error()
+			if !apierrors.IsAlreadyExists(err) {
+				admissionReject = r.handleCreatePodFailed(phJob, pod, err)
+				if admissionReject == false {
+					createPodFailed = true
+					createPodFailedReason = err.Error()
+				}
+			} else {
+				log.Error(err, "ignore the pod has been here")
 			}
 		}
 	} else { // pod exist, check the status of current pod and update the phJob
