@@ -137,6 +137,18 @@ func (r *PhJobReconciler) buildPod(phJob *primehubv1alpha1.PhJob) (*corev1.Pod, 
 		r.Log.Error(err, "cannot get location")
 	}
 
+	// add envs for the primehub-job python package (submit a function as a job)
+	for idx, _ := range pod.Spec.Containers {
+		envsToAppend := []corev1.EnvVar{
+			corev1.EnvVar{Name: "GROUP_ID", Value: phJob.Spec.GroupId},
+			corev1.EnvVar{Name: "GROUP_NAME", Value: phJob.Spec.GroupName},
+			corev1.EnvVar{Name: "JUPYTERHUB_USER", Value: phJob.Spec.UserName},
+			corev1.EnvVar{Name: "INSTANCE_TYPE", Value: phJob.Spec.InstanceType},
+			corev1.EnvVar{Name: "IMAGE_NAME", Value: phJob.Spec.Image},
+		}
+		pod.Spec.Containers[idx].Env = append(pod.Spec.Containers[idx].Env, envsToAppend...)
+	}
+
 	// mount shared memory volume
 	pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts, corev1.VolumeMount{
 		Name:      "dshm",
