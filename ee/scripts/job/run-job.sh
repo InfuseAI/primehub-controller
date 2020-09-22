@@ -6,7 +6,7 @@
 # Configurable variable
 PHJOB_NAME=${PHJOB_NAME:-job-$(date '+%Y%m%d%H%M%S')}
 PHJOB_ARTIFACT_ENABLED=${PHJOB_ARTIFACT_ENABLED:-false}
-PHJOB_ARTIFACT_LIMIT_MB=${PHJOB_ARTIFACT_LIMIT_MB:-100}
+PHJOB_ARTIFACT_LIMIT_SIZE_MB=${PHJOB_ARTIFACT_LIMIT_SIZE_MB:-100}
 PHJOB_ARTIFACT_LIMIT_FILES=${PHJOB_ARTIFACT_LIMIT_FILES:-1000}
 
 COMMAND=$1
@@ -14,13 +14,13 @@ COMMAND=$1
 # Copy artifiacts
 #
 # To test artifact copy. We can use
-# PHJOB_ARTIFACT_ENABLED=true ARTIFACTS_SRC='/tmp/artifacts/src/' ARTIFACTS_DEST="/tmp/artifacts/$(date '+%Y%m%d-%H%M%S')/" ./run-job.sh "echo hello"
+# PHJOB_ARTIFACT_ENABLED=true ARTIFACTS_SRC='/tmp/artifacts/src' ARTIFACTS_DEST="/tmp/artifacts/$(date '+%Y%m%d-%H%M%S')" ./run-job.sh "echo hello"
 copy_artifacts() {
   ARTIFACTS_DRYRUN=${ARTIFACTS_DRYRUN:-false}
-  ARTIFACTS_SRC=${ARTIFACTS_SRC:-"artifacts/"}
-  ARTIFACTS_DEST=${ARTIFACTS_DEST:-"/phfs/jobArtifacts/${PHJOB_NAME}/"}
+  ARTIFACTS_SRC=${ARTIFACTS_SRC:-"artifacts"}
+  ARTIFACTS_DEST=${ARTIFACTS_DEST:-"/phfs/jobArtifacts/${PHJOB_NAME}"}
   FILE_COUNT_MAX=$PHJOB_ARTIFACT_LIMIT_FILES
-  TOTAL_SIZE_MAX=$(($((PHJOB_ARTIFACT_LIMIT_MB))*1024*1024))
+  TOTAL_SIZE_MAX=$(($((PHJOB_ARTIFACT_LIMIT_SIZE_MB))*1024*1024))
 
   if [[ ! -e ${ARTIFACTS_SRC} ]]; then
     echo "Artifacts: no artifact found"
@@ -61,7 +61,7 @@ copy_artifacts() {
   # Copy the artificats
   if [[ "${ARTIFACTS_DRYRUN}" != true ]]; then
     mkdir -p "${ARTIFACTS_DEST}" || return 1
-    cp -R "${ARTIFACTS_SRC}" "${ARTIFACTS_DEST}"
+    cp -R ${ARTIFACTS_SRC}/* ${ARTIFACTS_DEST} || return 1
   else
     echo "Copy artifacts from ${ARTIFACTS_SRC} to ${ARTIFACTS_DEST}"
   fi

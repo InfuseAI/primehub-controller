@@ -698,8 +698,7 @@ func (r *PhDeploymentReconciler) buildDeployment(ctx context.Context, phDeployme
 		return nil, err
 	}
 	var spawner *graphql.Spawner
-	options := graphql.SpawnerDataOptions{}
-	if spawner, err = graphql.NewSpawnerForModelDeployment(result.Data, phDeployment.Spec.GroupName, predictorInstanceType, predictorImage, options); err != nil {
+	if spawner, err = graphql.NewSpawnerForModelDeployment(result.Data, phDeployment.Spec.GroupName, predictorInstanceType, predictorImage); err != nil {
 		return nil, err
 	}
 	nodeSelector := make(map[string]string)
@@ -969,9 +968,8 @@ func (r PhDeploymentReconciler) buildModelContainer(phDeployment *primehubv1alph
 		return nil, err
 	}
 	var spawner *graphql.Spawner
-	options := graphql.SpawnerDataOptions{}
 	podSpec := corev1.PodSpec{}
-	if spawner, err = graphql.NewSpawnerForModelDeployment(result.Data, phDeployment.Spec.GroupName, predictorInstanceType, predictorImage, options); err != nil {
+	if spawner, err = graphql.NewSpawnerForModelDeployment(result.Data, phDeployment.Spec.GroupName, predictorInstanceType, predictorImage); err != nil {
 		return nil, err
 	}
 
