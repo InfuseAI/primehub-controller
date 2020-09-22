@@ -11,11 +11,14 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
-type SpawnerDataOptions struct {
+type SpawnerForJobOptions struct {
 	WorkingDir     string
 	WorkingDirSize resource.Quantity
 	PhfsEnabled    bool
 	PhfsPVC        string
+	ArtifactEnabled	bool
+	ArtifactLimitSizeMb	int32
+	ArtifactLimitFiles	int32
 }
 
 // Represent the pod spawner.
@@ -62,7 +65,7 @@ type ContainerResource struct {
 }
 
 // Set spanwer by graphql response data
-func NewSpawnerByData(data DtoData, groupName string, instanceTypeName string, imageName string, options SpawnerDataOptions) (*Spawner, error) {
+func NewSpawnerForJob(data DtoData, groupName string, instanceTypeName string, imageName string, options SpawnerForJobOptions) (*Spawner, error) {
 	var group DtoGroup
 	var groupGlobal DtoGroup
 	var image DtoImage
@@ -116,12 +119,17 @@ func NewSpawnerByData(data DtoData, groupName string, instanceTypeName string, i
 	// User and Group env variables
 	spawner.applyUserAndGroupEnv(data.User.Username, groupName)
 
+	// Apply artifacts relative
+	if options.ArtifactEnabled && options.PhfsEnabled {
+		spawner.applyJobArtifact(options.ArtifactLimitSizeMb, options.ArtifactLimitFiles)
+	}
+
 	spawner.containerName = "main"
 
 	return spawner, nil
 }
 
-func NewSpawnerForModelDeployment(data DtoData, groupName string, instanceTypeName string, imageUrl string, options SpawnerDataOptions) (*Spawner, error) {
+func NewSpawnerForModelDeployment(data DtoData, groupName string, instanceTypeName string, imageUrl string) (*Spawner, error) {
 	var group DtoGroup
 	var groupGlobal DtoGroup
 	var instanceType DtoInstanceType
@@ -680,6 +688,60 @@ func (spawner *Spawner) applyUserAndGroupEnv(userName string, groupName string) 
 	}
 
 	spawner.env = append(spawner.env, user, group)
+}
+
+func (spawner *Spawner) applyJobArtifact(limitSizeMb int32, limitFiles int32) {
+	// Environments
+	name := corev1.EnvVar{
+		Name:  "PHJOB_NAME",
+		ValueFrom: &corev1.EnvVarSource {
+			FieldRef: &corev1.ObjectFieldSelector{
+				FieldPath:  "metadata.name",
+			},
+		},
+	}
+	artifact := corev1.EnvVar{
+		Name:  "PHJOB_ARTIFACT_ENABLED",
+		Value: "true",
+	}
+	spawner.env = append(spawner.env, name, artifact)
+
+	if limitSizeMb > 0 {
+		spawner.env = append(spawner.env, corev1.EnvVar{
+			Name:  "PHJOB_ARTIFACT_LIMIT_SIZE_MB",
+			Value: fmt.Sprint(limitSizeMb),
+		})
+	}
+
+	if limitFiles > 0 {
+		spawner.env = append(spawner.env, corev1.EnvVar{
+			Name:  "PHJOB_ARTIFACT_LIMIT_FILES",
+			Value: fmt.Sprint(limitFiles),
+		})
+	}
+
+	// Scripts
+	volumeName := "scripts"
+	defaultMode := int32(0777)
+	volume := corev1.Volume{
+		Name: volumeName,
+		VolumeSource: corev1.VolumeSource{
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference {
+					Name: "primehub-controller-job-scripts",
+				},
+				DefaultMode: &defaultMode,
+			},
+		},
+	}
+
+	volumeMount := corev1.VolumeMount{
+		MountPath: "/scripts",
+		Name:      volumeName,
+	}
+
+	spawner.volumes = append(spawner.volumes, volume)
+	spawner.volumeMounts = append(spawner.volumeMounts, volumeMount)
 }
 
 func (spawner *Spawner) BuildPodSpec(podSpec *corev1.PodSpec) {

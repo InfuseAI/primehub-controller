@@ -140,6 +140,10 @@ func main() {
 		Affinity:                       affinity,
 		PhfsEnabled:                    viper.GetBool("jobSubmission.phfsEnabled"),
 		PhfsPVC:                        viper.GetString("jobSubmission.phfsPVC"),
+		ArtifactEnabled:                viper.GetBool("jobSubmission.artifact.enabled"),
+		ArtifactLimitSizeMb:	    	viper.GetInt32("jobSubmission.artifact.limitSizeMb"),
+		ArtifactLimitFiles:             viper.GetInt32("jobSubmission.artifact.limitFiles"),
+
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PhJob")
 		os.Exit(1)

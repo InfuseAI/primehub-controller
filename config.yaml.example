@@ -1,6 +1,5 @@
 customImage:
-
-  pushSecretName: push-secret-for-gcr
+  pushSecretName: primehub-controller-custom-image-push-secret
   # Prefix for image. (e.g. 'gcr.io/infuseai' for 'gcr.io/infuseai/primehub-controller:be20ee69c5')
   pushRepoPrefix: gcr.io/infuseai
 
@@ -14,12 +13,23 @@ customImage:
         memory: 1000Mi
 
 jobSubmission:
-  graphqlEndpoint: https://primehub.local/graphql
+  graphqlEndpoint: https://primehub.local/api/graphql
   graphqlSecret: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-
   workingDirSize: 5Gi
   defaultActiveDeadlineSeconds: 86400
   defaultTTLSecondsAfterFinished: 604800
+  phfsEnabled: false
+  phfsPVC: primehub-store
+  artifact:
+    enabled: false
+    limitSizeMb: 100
+    limitFiles: 1000
 
 modelDeployment:
   enabled: false
+  primehubUrl: https://primehub.local
+  engineContainer:
+    image:
+      repository: seldonio/seldon-core-executor
+      tag: 1.1.0
+      pullPolicy: IfNotPresen

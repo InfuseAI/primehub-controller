@@ -60,9 +60,9 @@ func (r *PhScheduleReconciler) buildPhJob(phSchedule *primehubv1alpha1.PhSchedul
 	if result, err = r.GraphqlClient.FetchByUserId(phJobSpec.UserId); err != nil {
 		return nil, err
 	}
-	options := graphql.SpawnerDataOptions{PhfsEnabled: false}
+	options := graphql.SpawnerForJobOptions{PhfsEnabled: false}
 	log.Info("info:", "phJobSpec.GroupName", phJobSpec.GroupName, "phJobSpec.InstanceType", phJobSpec.InstanceType, "phJobSpec.Image", phJobSpec.Image)
-	if _, err = graphql.NewSpawnerByData(result.Data, phJobSpec.GroupName, phJobSpec.InstanceType, phJobSpec.Image, options); err != nil {
+	if _, err = graphql.NewSpawnerForJob(result.Data, phJobSpec.GroupName, phJobSpec.InstanceType, phJobSpec.Image, options); err != nil {
 		return nil, err
 	}
 
