@@ -796,7 +796,7 @@ func (r *PhDeploymentReconciler) buildDeployment(ctx context.Context, phDeployme
 
 func (r *PhDeploymentReconciler) buildUsageAnnotation(phDeployment *primehubv1alpha1.PhDeployment) string {
 	usageAnnotations, _ := json.Marshal(map[string]string{
-		"component":      "deployment",
+		"component":      "model_deploy",
 		"component_name": phDeployment.Name,
 		"instance_type":  phDeployment.Spec.Predictors[0].InstanceType,
 		"group":          phDeployment.Spec.GroupName})
