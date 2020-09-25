@@ -20,7 +20,6 @@ import (
 )
 
 var (
-	GroupCache        = ccache.New(ccache.Configure().MaxSize(1000).ItemsToPrune(100))
 	InstanceTypeCache = ccache.New(ccache.Configure().MaxSize(1000).ItemsToPrune(100))
 
 	groupAggregationKey = "primehub.io/group"
@@ -80,19 +79,20 @@ type PHJobScheduler struct {
 	client.Client
 	Log           logr.Logger
 	GraphqlClient graphql.AbstractGraphqlClient
+	GroupCache    *ccache.Cache
 }
 
 func (r *PHJobScheduler) getGroupInfo(groupId string) (*graphql.DtoGroup, error) {
 	cacheKey := "group:" + groupId
-	cacheItem := GroupCache.Get(cacheKey)
+	cacheItem := r.GroupCache.Get(cacheKey)
 	if cacheItem == nil || cacheItem.Expired() {
 		groupInfo, err := r.GraphqlClient.FetchGroupInfo(groupId)
 		if err != nil {
 			return nil, err
 		}
-		GroupCache.Set(cacheKey, groupInfo, cacheExpiredTime)
+		r.GroupCache.Set(cacheKey, groupInfo, cacheExpiredTime)
 	}
-	return GroupCache.Get(cacheKey).Value().(*graphql.DtoGroup), nil
+	return r.GroupCache.Get(cacheKey).Value().(*graphql.DtoGroup), nil
 }
 
 func (r *PHJobScheduler) getInstanceTypeInfo(instanceTypeId string) (*graphql.DtoInstanceType, error) {
