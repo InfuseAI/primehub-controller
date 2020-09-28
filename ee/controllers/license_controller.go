@@ -187,7 +187,7 @@ func (r *LicenseReconciler) EnsureLicense(mgr ctrl.Manager) (err error) {
 
 	// ref: https://github.com/kubernetes/test-infra/pull/15489/files
 	// Wait for cachesync then ensure license installed
-	mgrSyncCtx, mgrSyncCtxCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	mgrSyncCtx, mgrSyncCtxCancel := context.WithTimeout(context.Background(), 10 * 60 * time.Second)
 	defer mgrSyncCtxCancel()
 
 	if synced := mgr.GetCache().WaitForCacheSync(mgrSyncCtx.Done()); !synced {
