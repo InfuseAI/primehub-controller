@@ -28,7 +28,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	// +kubebuilder:scaffold:imports
-
+	"github.com/karlseguin/ccache"
 	"github.com/spf13/viper"
 )
 
@@ -127,6 +127,8 @@ func main() {
 		panic(err.Error() + " cannot UnmarshalKey affinity")
 	}
 
+	groupCache := ccache.New(ccache.Configure().MaxSize(1000).ItemsToPrune(100))
+
 	if err = (&eecontrollers.PhJobReconciler{
 		Client:                         mgr.GetClient(),
 		Log:                            ctrl.Log.WithName("controllers").WithName("PhJob"),
@@ -141,9 +143,9 @@ func main() {
 		PhfsEnabled:                    viper.GetBool("jobSubmission.phfsEnabled"),
 		PhfsPVC:                        viper.GetString("jobSubmission.phfsPVC"),
 		ArtifactEnabled:                viper.GetBool("jobSubmission.artifact.enabled"),
-		ArtifactLimitSizeMb:	    	viper.GetInt32("jobSubmission.artifact.limitSizeMb"),
+		ArtifactLimitSizeMb:            viper.GetInt32("jobSubmission.artifact.limitSizeMb"),
 		ArtifactLimitFiles:             viper.GetInt32("jobSubmission.artifact.limitFiles"),
-
+		GroupCache:                     groupCache,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PhJob")
 		os.Exit(1)
@@ -223,6 +225,7 @@ func main() {
 		Client:        mgr.GetClient(),
 		Log:           ctrl.Log.WithName("scheduler").WithName("PhJob"),
 		GraphqlClient: graphqlClient,
+		GroupCache:    groupCache,
 	}
 	go wait.Until(phJobScheduler.Schedule, time.Second*1, stopChan)
 

@@ -50,6 +50,7 @@ type PhJobReconciler struct {
 	ArtifactEnabled                bool
 	ArtifactLimitSizeMb            int32
 	ArtifactLimitFiles             int32
+	GroupCache                     *ccache.Cache
 }
 
 func (r *PhJobReconciler) getTimeZone() (timezone string, err error) {
@@ -64,6 +65,19 @@ func (r *PhJobReconciler) getTimeZone() (timezone string, err error) {
 		r.Log.Info("fetch", "timezone", location)
 	}
 	return TimezoneCache.Get(cacheKey).Value().(string), nil
+}
+
+func (r *PhJobReconciler) getGroupInfo(groupId string) (*graphql.DtoGroup, error) {
+	cacheKey := "group:" + groupId
+	cacheItem := r.GroupCache.Get(cacheKey)
+	if cacheItem == nil || cacheItem.Expired() {
+		groupInfo, err := r.GraphqlClient.FetchGroupInfo(groupId)
+		if err != nil {
+			return nil, err
+		}
+		r.GroupCache.Set(cacheKey, groupInfo, time.Minute)
+	}
+	return r.GroupCache.Get(cacheKey).Value().(*graphql.DtoGroup), nil
 }
 
 func (r *PhJobReconciler) buildAnnotationsWithUsageMetadata(phJob *primehubv1alpha1.PhJob) map[string]string {
@@ -104,12 +118,12 @@ func (r *PhJobReconciler) buildPod(phJob *primehubv1alpha1.PhJob) (*corev1.Pod, 
 	// Build the podTemplate according to data from graphql and phjob group, instanceType, image settings
 	var spawner *graphql.Spawner
 	options := graphql.SpawnerForJobOptions{
-		WorkingDirSize: r.WorkingDirSize,
-		PhfsEnabled:    r.PhfsEnabled,
-		PhfsPVC:        r.PhfsPVC,
-		ArtifactEnabled: r.ArtifactEnabled,
+		WorkingDirSize:      r.WorkingDirSize,
+		PhfsEnabled:         r.PhfsEnabled,
+		PhfsPVC:             r.PhfsPVC,
+		ArtifactEnabled:     r.ArtifactEnabled,
 		ArtifactLimitSizeMb: r.ArtifactLimitSizeMb,
-		ArtifactLimitFiles: r.ArtifactLimitFiles,
+		ArtifactLimitFiles:  r.ArtifactLimitFiles,
 	}
 	if spawner, err = graphql.NewSpawnerForJob(result.Data, phJob.Spec.GroupName, phJob.Spec.InstanceType, phJob.Spec.Image, options); err != nil {
 		return nil, err
@@ -226,8 +240,16 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	// if user didn't set ActiveDeadlineSeconds, use default value which is 1 day (86400)
 	if phJob.Spec.ActiveDeadlineSeconds == nil {
-		phJob.Spec.ActiveDeadlineSeconds = &r.DefaultActiveDeadlineSeconds
-		err := r.Client.Update(ctx, phJob)
+		groupInfo, err := r.getGroupInfo(phJob.Spec.GroupId)
+		if err != nil {
+			log.Error(err, "Failed to get group info")
+		}
+		if err == nil && groupInfo.JobDefaultActiveDeadlineSeconds != nil {
+			phJob.Spec.ActiveDeadlineSeconds = groupInfo.JobDefaultActiveDeadlineSeconds
+		} else {
+			phJob.Spec.ActiveDeadlineSeconds = &r.DefaultActiveDeadlineSeconds
+		}
+		err = r.Client.Update(ctx, phJob)
 		if err != nil {
 			log.Error(err, "Failed to update phJob")
 			return ctrl.Result{RequeueAfter: errorCheckAfter}, err

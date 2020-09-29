@@ -51,20 +51,21 @@ type DtoUser struct {
 }
 
 type DtoGroup struct {
-	Name                 string
-	DisplayName          string
-	EnabledSharedVolume  bool
-	SharedVolumeCapacity string
-	HomeSymlink          *bool
-	LaunchGroupOnly      *bool
-	QuotaCpu             float32
-	QuotaGpu             float32
-	QuotaMemory          string
-	UserVolumeCapacity   string
-	ProjectQuotaCpu      float32
-	ProjectQuotaGpu      float32
-	ProjectQuotaMemory   string
-	EnabledDeployment    bool
+	Name                            string
+	DisplayName                     string
+	EnabledSharedVolume             bool
+	SharedVolumeCapacity            string
+	HomeSymlink                     *bool
+	LaunchGroupOnly                 *bool
+	QuotaCpu                        float32
+	QuotaGpu                        float32
+	QuotaMemory                     string
+	UserVolumeCapacity              string
+	ProjectQuotaCpu                 float32
+	ProjectQuotaGpu                 float32
+	ProjectQuotaMemory              string
+	EnabledDeployment               bool
+	JobDefaultActiveDeadlineSeconds *int64
 
 	InstanceTypes []DtoInstanceType
 	Images        []DtoImage
@@ -325,6 +326,7 @@ func (c GraphqlClient) FetchGroupInfo(groupId string) (*DtoGroup, error) {
 					projectQuotaCpu
 					projectQuotaGpu
 					projectQuotaMemory
+					jobDefaultActiveDeadlineSeconds
 	  }
 	}
 	`
