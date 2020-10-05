@@ -13,14 +13,15 @@ import (
 )
 
 type SpawnerForJobOptions struct {
-	WorkingDir          string
-	WorkingDirSize      resource.Quantity
-	PhfsEnabled         bool
-	PhfsPVC             string
-	ArtifactEnabled     bool
-	ArtifactLimitSizeMb int32
-	ArtifactLimitFiles  int32
-	GrantSudo           bool
+	WorkingDir               string
+	WorkingDirSize           resource.Quantity
+	PhfsEnabled              bool
+	PhfsPVC                  string
+	ArtifactEnabled          bool
+	ArtifactLimitSizeMb      int32
+	ArtifactLimitFiles       int32
+	ArtifactRetentionSeconds int32
+	GrantSudo                bool
 }
 
 // Represent the pod spawner.
@@ -123,10 +124,12 @@ func NewSpawnerForJob(data DtoData, groupName string, instanceTypeName string, i
 	spawner.applyUserAndGroupEnv(data.User.Username, groupName)
 
 	// Apply artifacts relative
-	spawner.applyJobArtifact((options.ArtifactEnabled && options.PhfsEnabled), options.ArtifactLimitSizeMb, options.ArtifactLimitFiles)
 
-	// Apply grant sudo
-	spawner.applyGrantSudo(options.GrantSudo)
+	if options.ArtifactEnabled && options.PhfsEnabled {
+		spawner.applyJobArtifact(options.ArtifactLimitSizeMb, options.ArtifactLimitFiles, options.ArtifactRetentionSeconds)
+		// Apply grant sudo
+		spawner.applyGrantSudo(options.GrantSudo)
+	}
 
 	spawner.containerName = "main"
 
@@ -694,7 +697,7 @@ func (spawner *Spawner) applyUserAndGroupEnv(userName string, groupName string) 
 	spawner.env = append(spawner.env, user, group)
 }
 
-func (spawner *Spawner) applyJobArtifact(artifactEnabled bool, limitSizeMb int32, limitFiles int32) {
+func (spawner *Spawner) applyJobArtifact(limitSizeMb int32, limitFiles int32, retentionSeconds int32) {
 	// Environments
 	name := corev1.EnvVar{
 		Name: "PHJOB_NAME",
@@ -706,7 +709,7 @@ func (spawner *Spawner) applyJobArtifact(artifactEnabled bool, limitSizeMb int32
 	}
 	artifact := corev1.EnvVar{
 		Name:  "PHJOB_ARTIFACT_ENABLED",
-		Value: strconv.FormatBool(artifactEnabled),
+		Value: strconv.FormatBool(true),
 	}
 	spawner.env = append(spawner.env, name, artifact)
 
@@ -723,6 +726,11 @@ func (spawner *Spawner) applyJobArtifact(artifactEnabled bool, limitSizeMb int32
 			Value: fmt.Sprint(limitFiles),
 		})
 	}
+
+	spawner.env = append(spawner.env, corev1.EnvVar{
+		Name:  "PHJOB_ARTIFACT_RETENTION_SECONDS",
+		Value: fmt.Sprint(retentionSeconds),
+	})
 
 	// Scripts
 	volumeName := "scripts"
