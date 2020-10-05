@@ -50,6 +50,7 @@ type PhJobReconciler struct {
 	ArtifactEnabled                bool
 	ArtifactLimitSizeMb            int32
 	ArtifactLimitFiles             int32
+	ArtifactRetentionSeconds       int32
 	GroupCache                     *ccache.Cache
 }
 
@@ -124,6 +125,7 @@ func (r *PhJobReconciler) buildPod(phJob *primehubv1alpha1.PhJob) (*corev1.Pod, 
 		ArtifactEnabled:     r.ArtifactEnabled,
 		ArtifactLimitSizeMb: r.ArtifactLimitSizeMb,
 		ArtifactLimitFiles:  r.ArtifactLimitFiles,
+		ArtifactRetentionSeconds:	r.ArtifactRetentionSeconds,
 	}
 	if spawner, err = graphql.NewSpawnerForJob(result.Data, phJob.Spec.GroupName, phJob.Spec.InstanceType, phJob.Spec.Image, options); err != nil {
 		return nil, err

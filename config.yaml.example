@@ -24,6 +24,7 @@ jobSubmission:
     enabled: false
     limitSizeMb: 100
     limitFiles: 1000
+    retentionSeconds: 604800
 
 modelDeployment:
   enabled: false
