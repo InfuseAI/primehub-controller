@@ -229,6 +229,14 @@ func main() {
 	}
 	go wait.Until(phJobScheduler.Schedule, time.Second*1, stopChan)
 
+	phJobCleaner := eecontrollers.PHJobCleaner{
+		Client:        mgr.GetClient(),
+		Log:           ctrl.Log.WithName("cleaner").WithName("PhJob"),
+		JobTTLSeconds: viper.GetInt64("jobSubmission.jobTTLSeconds"),
+		JobLimit:      viper.GetInt32("jobSubmission.jobLimit"),
+	}
+	go wait.Until(phJobCleaner.Clean, time.Second*30, stopChan)
+
 	go func() {
 		if err := licenseReconciler.EnsureLicense(mgr); err != nil {
 			panic("unable to initialize license reconciler: " + err.Error())
