@@ -37,12 +37,15 @@ func ReadTotalInactiveFile(filename string) (int64, error) {
 
 	if index := strings.Index(content, "\n"); index >= 0 {
 		content = content[:index]
-		value, err := strconv.ParseInt(content, 10, 64)
-		if err != nil {
-			return 0, err
-		}
-		return value, nil
+	}
+	if index := strings.Index(content, " "); index >= 0 {
+		content = content[index:]
 	}
 
-	return 0, nil
+	value, err := strconv.ParseInt(strings.TrimSpace(content), 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	return value, nil
+
 }
