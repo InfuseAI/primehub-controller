@@ -8,6 +8,7 @@ PHJOB_NAME=${PHJOB_NAME:-job-$(date '+%Y%m%d%H%M%S')}
 PHJOB_ARTIFACT_ENABLED=${PHJOB_ARTIFACT_ENABLED:-false}
 PHJOB_ARTIFACT_LIMIT_SIZE_MB=${PHJOB_ARTIFACT_LIMIT_SIZE_MB:-100}
 PHJOB_ARTIFACT_LIMIT_FILES=${PHJOB_ARTIFACT_LIMIT_FILES:-1000}
+GRANT_SUDO=${GRANT_SUDO:-true}
 
 COMMAND=$1
 
@@ -69,8 +70,22 @@ copy_artifacts() {
   echo "Artifacts: ($((FILE_COUNT)) files / $((TOTAL_SIZE)) bytes) uploaded"
 }
 
+# Grant sudo
+if [[ "${GRANT_SUDO}" == "true" ]]; then
+  if [[ -n $NB_USER ]]; then
+    USER=$NB_USER
+  fi
+  if [[ -n $USER ]] && [[ -d /etc/sudoers.d ]]; then
+    echo "$USER ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/job
+  fi
+fi
+
 # Run Command
-bash -c "$COMMAND"
+if [[ "$GRANT_SUDO" == "true" ]] && [[ -n $USER ]]; then
+  exec sudo -E -H -u $USER PATH=$PATH bash -c "$COMMAND"
+else
+  bash -c "$COMMAND"
+fi
 RETCODE=$?
 
 # Copy Artifacts

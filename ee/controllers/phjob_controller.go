@@ -50,6 +50,7 @@ type PhJobReconciler struct {
 	ArtifactEnabled                bool
 	ArtifactLimitSizeMb            int32
 	ArtifactLimitFiles             int32
+	GrantSudo                      bool
 	GroupCache                     *ccache.Cache
 }
 
@@ -124,6 +125,7 @@ func (r *PhJobReconciler) buildPod(phJob *primehubv1alpha1.PhJob) (*corev1.Pod, 
 		ArtifactEnabled:     r.ArtifactEnabled,
 		ArtifactLimitSizeMb: r.ArtifactLimitSizeMb,
 		ArtifactLimitFiles:  r.ArtifactLimitFiles,
+		GrantSudo:           r.GrantSudo,
 	}
 	if spawner, err = graphql.NewSpawnerForJob(result.Data, phJob.Spec.GroupName, phJob.Spec.InstanceType, phJob.Spec.Image, options); err != nil {
 		return nil, err
@@ -138,11 +140,7 @@ func (r *PhJobReconciler) buildPod(phJob *primehubv1alpha1.PhJob) (*corev1.Pod, 
 	operatorAffinity := r.Affinity
 	spawner.ApplyAffinityForOperator(operatorAffinity)
 
-	if options.PhfsEnabled && options.ArtifactEnabled {
-		spawner.WithCommand([]string{"/scripts/run-job.sh", "sleep 1\n" + phJob.Spec.Command})
-	} else {
-		spawner.WithCommand([]string{"sh", "-c", "sleep 1\n" + phJob.Spec.Command})
-	}
+	spawner.WithCommand([]string{"/scripts/run-job.sh", "sleep 1\n" + phJob.Spec.Command})
 
 	spawner.BuildPodSpec(&podSpec)
 
