@@ -145,6 +145,7 @@ func main() {
 		ArtifactEnabled:                viper.GetBool("jobSubmission.artifact.enabled"),
 		ArtifactLimitSizeMb:            viper.GetInt32("jobSubmission.artifact.limitSizeMb"),
 		ArtifactLimitFiles:             viper.GetInt32("jobSubmission.artifact.limitFiles"),
+		GrantSudo:                      viper.GetBool("jobSubmission.grantSudo"),
 		GroupCache:                     groupCache,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PhJob")

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -12,13 +13,14 @@ import (
 )
 
 type SpawnerForJobOptions struct {
-	WorkingDir     string
-	WorkingDirSize resource.Quantity
-	PhfsEnabled    bool
-	PhfsPVC        string
-	ArtifactEnabled	bool
-	ArtifactLimitSizeMb	int32
-	ArtifactLimitFiles	int32
+	WorkingDir          string
+	WorkingDirSize      resource.Quantity
+	PhfsEnabled         bool
+	PhfsPVC             string
+	ArtifactEnabled     bool
+	ArtifactLimitSizeMb int32
+	ArtifactLimitFiles  int32
+	GrantSudo           bool
 }
 
 // Represent the pod spawner.
@@ -41,9 +43,10 @@ type Spawner struct {
 	imagePullSecret string   // main container: imagePullSecret
 	command         []string // main container: command
 
-	NodeSelector map[string]string
-	Tolerations  []corev1.Toleration
-	Affinity     corev1.Affinity
+	PodSecurityContext corev1.PodSecurityContext
+	NodeSelector       map[string]string
+	Tolerations        []corev1.Toleration
+	Affinity           corev1.Affinity
 
 	// main container: resources requests and limits for
 	requestsCpu    resource.Quantity
@@ -120,9 +123,10 @@ func NewSpawnerForJob(data DtoData, groupName string, instanceTypeName string, i
 	spawner.applyUserAndGroupEnv(data.User.Username, groupName)
 
 	// Apply artifacts relative
-	if options.ArtifactEnabled && options.PhfsEnabled {
-		spawner.applyJobArtifact(options.ArtifactLimitSizeMb, options.ArtifactLimitFiles)
-	}
+	spawner.applyJobArtifact((options.ArtifactEnabled && options.PhfsEnabled), options.ArtifactLimitSizeMb, options.ArtifactLimitFiles)
+
+	// Apply grant sudo
+	spawner.applyGrantSudo(options.GrantSudo)
 
 	spawner.containerName = "main"
 
@@ -690,19 +694,19 @@ func (spawner *Spawner) applyUserAndGroupEnv(userName string, groupName string) 
 	spawner.env = append(spawner.env, user, group)
 }
 
-func (spawner *Spawner) applyJobArtifact(limitSizeMb int32, limitFiles int32) {
+func (spawner *Spawner) applyJobArtifact(artifactEnabled bool, limitSizeMb int32, limitFiles int32) {
 	// Environments
 	name := corev1.EnvVar{
-		Name:  "PHJOB_NAME",
-		ValueFrom: &corev1.EnvVarSource {
+		Name: "PHJOB_NAME",
+		ValueFrom: &corev1.EnvVarSource{
 			FieldRef: &corev1.ObjectFieldSelector{
-				FieldPath:  "metadata.name",
+				FieldPath: "metadata.name",
 			},
 		},
 	}
 	artifact := corev1.EnvVar{
 		Name:  "PHJOB_ARTIFACT_ENABLED",
-		Value: "true",
+		Value: strconv.FormatBool(artifactEnabled),
 	}
 	spawner.env = append(spawner.env, name, artifact)
 
@@ -727,7 +731,7 @@ func (spawner *Spawner) applyJobArtifact(limitSizeMb int32, limitFiles int32) {
 		Name: volumeName,
 		VolumeSource: corev1.VolumeSource{
 			ConfigMap: &corev1.ConfigMapVolumeSource{
-				LocalObjectReference: corev1.LocalObjectReference {
+				LocalObjectReference: corev1.LocalObjectReference{
 					Name: "primehub-controller-job-scripts",
 				},
 				DefaultMode: &defaultMode,
@@ -742,6 +746,19 @@ func (spawner *Spawner) applyJobArtifact(limitSizeMb int32, limitFiles int32) {
 
 	spawner.volumes = append(spawner.volumes, volume)
 	spawner.volumeMounts = append(spawner.volumeMounts, volumeMount)
+}
+
+func (spawner *Spawner) applyGrantSudo(grantSudo bool) {
+	securityContext := corev1.PodSecurityContext{}
+	if grantSudo {
+		runAsUser := int64(0)
+		securityContext.RunAsUser = &runAsUser
+	}
+	spawner.env = append(spawner.env, corev1.EnvVar{
+		Name:  "GRANT_SUDO",
+		Value: strconv.FormatBool(grantSudo),
+	})
+	spawner.PodSecurityContext = securityContext
 }
 
 func (spawner *Spawner) BuildPodSpec(podSpec *corev1.PodSpec) {
@@ -798,6 +815,7 @@ func (spawner *Spawner) BuildPodSpec(podSpec *corev1.PodSpec) {
 
 	// pod
 	podSpec.Volumes = append(podSpec.Volumes, spawner.volumes...)
+	podSpec.SecurityContext = &spawner.PodSecurityContext
 	podSpec.Containers = append(podSpec.Containers, container)
 
 	if spawner.imagePullSecret != "" {
