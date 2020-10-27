@@ -81,7 +81,7 @@ if [[ "${GRANT_SUDO}" == "true" ]]; then
 fi
 
 # Run Command
-if [[ "$GRANT_SUDO" == "true" ]] && [[ -n $USER ]]; then
+if command -v sudo > /dev/null && [[ "$GRANT_SUDO" == "true" ]] && [[ -n $USER ]]; then
   exec sudo -E -H -u $USER PATH=$PATH bash -c "$COMMAND"
 else
   bash -c "$COMMAND"
