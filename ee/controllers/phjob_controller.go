@@ -52,6 +52,9 @@ type PhJobReconciler struct {
 	ArtifactLimitFiles             int32
 	GrantSudo                      bool
 	ArtifactRetentionSeconds       int32
+	MonitoringAgentImageRepository string
+	MonitoringAgentImageTag        string
+	MonitoringAgentImagePullPolicy corev1.PullPolicy
 	GroupCache                     *ccache.Cache
 }
 
@@ -145,6 +148,7 @@ func (r *PhJobReconciler) buildPod(phJob *primehubv1alpha1.PhJob) (*corev1.Pod, 
 	spawner.WithCommand([]string{"/scripts/run-job.sh", "sleep 1\n" + phJob.Spec.Command})
 
 	spawner.BuildPodSpec(&podSpec)
+	r.attachMonitoringAgent(phJob, &podSpec)
 
 	podSpec.RestartPolicy = corev1.RestartPolicyNever
 	pod.Spec = podSpec
@@ -205,10 +209,60 @@ func (r *PhJobReconciler) buildPod(phJob *primehubv1alpha1.PhJob) (*corev1.Pod, 
 	return pod, nil
 }
 
+func (r *PhJobReconciler) attachMonitoringAgent(phJob *primehubv1alpha1.PhJob, podSpec *corev1.PodSpec) {
+	log := r.Log.WithValues("phjob", phJob.Namespace)
+
+	if !r.ArtifactEnabled {
+		return
+	}
+
+	const monitoringAgentImageRepository = "infuseai/primehub-monitoring-agent"
+	const monitoringAgentImageTag = "latest"
+	const sharedVolumeName = "monitoring-utils"
+	const sharedVolumeMountPath = "/monitoring-utils"
+
+	if r.MonitoringAgentImageRepository == "" {
+		r.MonitoringAgentImageRepository = monitoringAgentImageRepository
+		log.Info("monitoringAgent.image.repository is not set, use default value: " + r.MonitoringAgentImageRepository)
+	}
+
+	if r.MonitoringAgentImageTag == "" {
+		r.MonitoringAgentImageTag = monitoringAgentImageTag
+		log.Info("monitoringAgent.image.tag is not set, use default value: " + r.MonitoringAgentImageTag)
+	}
+
+	if r.MonitoringAgentImagePullPolicy == "" {
+		r.MonitoringAgentImagePullPolicy = corev1.PullIfNotPresent
+		log.Info("monitoringAgent.image.pullPolicy is not set, use default value: " + string(r.MonitoringAgentImagePullPolicy))
+	}
+
+	podSpec.Volumes = append(podSpec.Volumes, corev1.Volume{
+		Name: sharedVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		},
+	})
+
+	podSpec.Containers[0].VolumeMounts = append(podSpec.Containers[0].VolumeMounts, corev1.VolumeMount{
+		Name:      sharedVolumeName,
+		MountPath: sharedVolumeMountPath,
+	})
+
+	podSpec.InitContainers = append(podSpec.InitContainers, corev1.Container{
+		Name:    "copy-monitoring-utils",
+		Command: []string{"cp", "/primehub-monitoring-agent", sharedVolumeMountPath},
+		VolumeMounts: []corev1.VolumeMount{{
+			Name:      sharedVolumeName,
+			MountPath: sharedVolumeMountPath,
+		}},
+		Image:           r.MonitoringAgentImageRepository + ":" + r.MonitoringAgentImageTag,
+		ImagePullPolicy: r.MonitoringAgentImagePullPolicy,
+	})
+}
+
 // +kubebuilder:rbac:groups=primehub.io,resources=phjobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=primehub.io,resources=phjobs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups="",resources=jobs,verbs=get;list;watch;create;update;delete
-
 func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
 	log := r.Log.WithValues("phjob", req.NamespacedName)

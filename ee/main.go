@@ -147,6 +147,9 @@ func main() {
 		ArtifactLimitFiles:             viper.GetInt32("jobSubmission.artifact.limitFiles"),
 		ArtifactRetentionSeconds:       viper.GetInt32("jobSubmission.artifact.retentionSeconds"),
 		GrantSudo:                      viper.GetBool("jobSubmission.grantSudo"),
+		MonitoringAgentImageRepository: viper.GetString("monitoringAgent.image.repository"),
+		MonitoringAgentImageTag:        viper.GetString("monitoringAgent.image.tag"),
+		MonitoringAgentImagePullPolicy: corev1.PullPolicy(viper.GetString("monitoringAgent.image.pullPolicy")),
 		GroupCache:                     groupCache,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PhJob")

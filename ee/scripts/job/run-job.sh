@@ -10,6 +10,7 @@ PHJOB_ARTIFACT_LIMIT_SIZE_MB=${PHJOB_ARTIFACT_LIMIT_SIZE_MB:-100}
 PHJOB_ARTIFACT_LIMIT_FILES=${PHJOB_ARTIFACT_LIMIT_FILES:-1000}
 GRANT_SUDO=${GRANT_SUDO:-true}
 PHJOB_ARTIFACT_RETENTION_SECONDS=${PHJOB_ARTIFACT_RETENTION_SECONDS:-604800}
+ARTIFACTS_DEST=${ARTIFACTS_DEST:-"/phfs/jobArtifacts/${PHJOB_NAME}"}
 
 COMMAND=$1
 
@@ -79,6 +80,25 @@ copy_artifacts() {
   echo "Artifacts: ($((FILE_COUNT)) files / $((TOTAL_SIZE)) MB) uploaded"
 }
 
+monitoring_start() {
+  # Launch Monitoring Agent when PHJOB_ARTIFACT_ENABLED
+  if [[ "${PHJOB_ARTIFACT_ENABLED}" == "true" ]]; then
+    if [[ -x /monitoring-utils/primehub-monitoring-agent ]]; then
+      mkdir -p "${ARTIFACTS_DEST}/.metadata" || true
+      /monitoring-utils/primehub-monitoring-agent
+    fi
+  fi
+}
+
+monitoring_stop() {
+  if [[ -f .monitoring-agent.pid ]]; then
+    # flush buffer to file
+    kill -1 $(cat .monitoring-agent.pid)
+    # stop the agent
+    kill -9 $(cat .monitoring-agent.pid)
+  fi
+}
+
 # Grant sudo
 if [[ "${GRANT_SUDO}" == "true" ]]; then
   if [[ -n $NB_USER ]]; then
@@ -88,6 +108,8 @@ if [[ "${GRANT_SUDO}" == "true" ]]; then
     echo "$USER ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/job
   fi
 fi
+
+monitoring_start
 
 # Run Command
 if command -v sudo > /dev/null && [[ "$GRANT_SUDO" == "true" ]] && [[ -n $USER ]]; then
@@ -100,6 +122,7 @@ RETCODE=$?
 # Copy Artifacts
 if [[ "${PHJOB_ARTIFACT_ENABLED}" == "true" ]]; then
   copy_artifacts
+  monitoring_stop
 fi
 
 # Return result
