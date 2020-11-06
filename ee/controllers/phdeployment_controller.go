@@ -332,7 +332,7 @@ func (r *PhDeploymentReconciler) updateDeployment(ctx context.Context, phDeploym
 
 	// Fully update
 	if needUpdateDeployment(phDeployment, lastAppliedSpec) {
-		// Update: if image, pull secret, instance type change
+		// Update: if image, pull secret, instance type, or environment variables change
 		logger.Info("phDeployment has been updated, update the deployment to reflect the update.")
 
 		deploymentUpdated, err := r.buildDeployment(ctx, phDeployment)
