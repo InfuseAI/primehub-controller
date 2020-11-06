@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -31,6 +32,7 @@ type PhDeploymentSpec struct {
 	UpdateMessage string                  `json:"updateMessage,omitempty"`
 	Predictors    []PhDeploymentPredictor `json:"predictors"`
 	Endpoint      PhDeploymentEndpoint    `json:"endpoint,omitempty"`
+	Env           []corev1.EnvVar         `json:"env,omitempty"`
 }
 
 type PhDeploymentMetadata map[string]string

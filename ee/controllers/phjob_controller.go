@@ -123,14 +123,14 @@ func (r *PhJobReconciler) buildPod(phJob *primehubv1alpha1.PhJob) (*corev1.Pod, 
 	// Build the podTemplate according to data from graphql and phjob group, instanceType, image settings
 	var spawner *graphql.Spawner
 	options := graphql.SpawnerForJobOptions{
-		WorkingDirSize:      r.WorkingDirSize,
-		PhfsEnabled:         r.PhfsEnabled,
-		PhfsPVC:             r.PhfsPVC,
-		ArtifactEnabled:     r.ArtifactEnabled,
-		ArtifactLimitSizeMb: r.ArtifactLimitSizeMb,
-		ArtifactLimitFiles:  r.ArtifactLimitFiles,
-		ArtifactRetentionSeconds:	r.ArtifactRetentionSeconds,
-		GrantSudo:           r.GrantSudo,
+		WorkingDirSize:           r.WorkingDirSize,
+		PhfsEnabled:              r.PhfsEnabled,
+		PhfsPVC:                  r.PhfsPVC,
+		ArtifactEnabled:          r.ArtifactEnabled,
+		ArtifactLimitSizeMb:      r.ArtifactLimitSizeMb,
+		ArtifactLimitFiles:       r.ArtifactLimitFiles,
+		ArtifactRetentionSeconds: r.ArtifactRetentionSeconds,
+		GrantSudo:                r.GrantSudo,
 	}
 	if spawner, err = graphql.NewSpawnerForJob(result.Data, phJob.Spec.GroupName, phJob.Spec.InstanceType, phJob.Spec.Image, options); err != nil {
 		return nil, err

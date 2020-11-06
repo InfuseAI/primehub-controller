@@ -277,6 +277,23 @@ func (r *PhDeploymentReconciler) createDeployment(ctx context.Context, phDeploym
 	return nil
 }
 
+func compareEnvVar(a []corev1.EnvVar, b []corev1.EnvVar) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	for i, obj := range a {
+		if obj.Name != b[i].Name {
+			return false
+		}
+		if obj.Value != b[i].Value {
+			return false
+		}
+	}
+
+	return true
+}
+
 func needUpdateDeployment(phDeployment *primehubv1alpha1.PhDeployment, lastAppliedSpec *primehubv1alpha1.PhDeploymentSpec) bool {
 	needUpdateDeployment := false
 
@@ -288,10 +305,12 @@ func needUpdateDeployment(phDeployment *primehubv1alpha1.PhDeployment, lastAppli
 	lastAppliedImage := lastAppliedPredictor.ModelImage
 	lastAppliedPullSecret := lastAppliedPredictor.ImagePullSecret
 	lastAppliedInstanceType := lastAppliedPredictor.InstanceType
+	lastAppliedEnv := lastAppliedSpec.Env
 
 	if phDeployment.Spec.Predictors[0].ModelImage != lastAppliedImage ||
 		phDeployment.Spec.Predictors[0].ImagePullSecret != lastAppliedPullSecret ||
-		phDeployment.Spec.Predictors[0].InstanceType != lastAppliedInstanceType {
+		phDeployment.Spec.Predictors[0].InstanceType != lastAppliedInstanceType ||
+		compareEnvVar(phDeployment.Spec.Env, lastAppliedEnv) == false {
 
 		needUpdateDeployment = true
 	}
@@ -961,6 +980,7 @@ func (r PhDeploymentReconciler) buildModelContainer(phDeployment *primehubv1alph
 	// currently we only have one predictor, need to change when need to support multiple predictors
 	predictorInstanceType := phDeployment.Spec.Predictors[0].InstanceType
 	predictorImage := phDeployment.Spec.Predictors[0].ModelImage
+	env := phDeployment.Spec.Env
 
 	// get the instancetype from graphql
 	var result *graphql.DtoResult
@@ -1018,6 +1038,9 @@ func (r PhDeploymentReconciler) buildModelContainer(phDeployment *primehubv1alph
 			{ContainerPort: 9000, Name: "http", Protocol: corev1.ProtocolTCP},
 		},
 		Resources: podSpec.Containers[0].Resources,
+	}
+	if len(env) > 0 {
+		modelContainer.Env = append(modelContainer.Env, env...)
 	}
 	return modelContainer, nil
 }
