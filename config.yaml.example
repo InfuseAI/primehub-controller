@@ -26,6 +26,12 @@ jobSubmission:
     limitFiles: 1000
     retentionSeconds: 604800
 
+monitoringAgent:
+  image: 
+    repository: infuseai/primehub-monitoring-agent
+    tag: latest
+    pullPolicy: IfNotPresent
+
 modelDeployment:
   enabled: false
   primehubUrl: https://primehub.local
@@ -33,4 +39,5 @@ modelDeployment:
     image:
       repository: seldonio/seldon-core-executor
       tag: 1.1.0
-      pullPolicy: IfNotPresen
+      pullPolicy: IfNotPresent
+
