@@ -127,9 +127,9 @@ func NewSpawnerForJob(data DtoData, groupName string, instanceTypeName string, i
 
 	if options.ArtifactEnabled && options.PhfsEnabled {
 		spawner.applyJobArtifact(options.ArtifactLimitSizeMb, options.ArtifactLimitFiles, options.ArtifactRetentionSeconds)
-		// Apply grant sudo
-		spawner.applyGrantSudo(options.GrantSudo)
 	}
+	// Apply grant sudo
+	spawner.applyGrantSudo(options.GrantSudo)
 
 	spawner.containerName = "main"
 
