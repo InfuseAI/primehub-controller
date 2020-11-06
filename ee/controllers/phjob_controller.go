@@ -145,6 +145,7 @@ func (r *PhJobReconciler) buildPod(phJob *primehubv1alpha1.PhJob) (*corev1.Pod, 
 	spawner.WithCommand([]string{"/scripts/run-job.sh", "sleep 1\n" + phJob.Spec.Command})
 
 	spawner.BuildPodSpec(&podSpec)
+	attachMonitoringAgent(&podSpec)
 
 	podSpec.RestartPolicy = corev1.RestartPolicyNever
 	pod.Spec = podSpec
@@ -205,10 +206,37 @@ func (r *PhJobReconciler) buildPod(phJob *primehubv1alpha1.PhJob) (*corev1.Pod, 
 	return pod, nil
 }
 
+func attachMonitoringAgent(podSpec *corev1.PodSpec) {
+	// TODO extract hardcode image and pullpolicy
+	podSpec.Volumes = append(podSpec.Volumes, corev1.Volume{
+		Name: "monitoring-utils",
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		},
+	})
+
+	podSpec.Containers[0].VolumeMounts = append(podSpec.Containers[0].VolumeMounts, corev1.VolumeMount{
+		Name:      "monitoring-utils",
+		MountPath: "/monitoring-utils",
+	})
+
+	podSpec.InitContainers = append(podSpec.InitContainers, corev1.Container{
+		Name:    "copy-monitoring-utils",
+		Command: []string{"cp", "/primehub-monitoring-agent", "/monitoring-utils"},
+		VolumeMounts: []corev1.VolumeMount{
+			corev1.VolumeMount{
+				Name:      "monitoring-utils",
+				MountPath: "/monitoring-utils",
+			},
+		},
+		Image: "infuseai/primehub-monitoring-agent:latest",
+		ImagePullPolicy: corev1.PullIfNotPresent,
+	})
+}
+
 // +kubebuilder:rbac:groups=primehub.io,resources=phjobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=primehub.io,resources=phjobs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups="",resources=jobs,verbs=get;list;watch;create;update;delete
-
 func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
 	log := r.Log.WithValues("phjob", req.NamespacedName)

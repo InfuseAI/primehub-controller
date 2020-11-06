@@ -9,7 +9,11 @@ PHJOB_ARTIFACT_ENABLED=${PHJOB_ARTIFACT_ENABLED:-false}
 PHJOB_ARTIFACT_LIMIT_SIZE_MB=${PHJOB_ARTIFACT_LIMIT_SIZE_MB:-100}
 PHJOB_ARTIFACT_LIMIT_FILES=${PHJOB_ARTIFACT_LIMIT_FILES:-1000}
 GRANT_SUDO=${GRANT_SUDO:-true}
+<<<<<<< HEAD
 PHJOB_ARTIFACT_RETENTION_SECONDS=${PHJOB_ARTIFACT_RETENTION_SECONDS:-604800}
+=======
+ARTIFACTS_DEST=${ARTIFACTS_DEST:-"/phfs/jobArtifacts/${PHJOB_NAME}"}
+>>>>>>> 0c12b0d... Run monitoring-agent around job execution
 
 COMMAND=$1
 
@@ -18,12 +22,19 @@ COMMAND=$1
 # To test artifact copy. We can use
 # PHJOB_ARTIFACT_ENABLED=true ARTIFACTS_SRC='/tmp/artifacts/src' ARTIFACTS_DEST="/tmp/artifacts/$(date '+%Y%m%d-%H%M%S')" ./run-job.sh "echo hello"
 copy_artifacts() {
+<<<<<<< HEAD
   local ARTIFACTS_DRYRUN=${ARTIFACTS_DRYRUN:-false}
   local ARTIFACTS_SRC=${ARTIFACTS_SRC:-"artifacts"}
   local ARTIFACTS_DEST=${ARTIFACTS_DEST:-"/phfs/jobArtifacts/${PHJOB_NAME}"}
   local FILE_COUNT_MAX=$PHJOB_ARTIFACT_LIMIT_FILES
   local TOTAL_SIZE_MAX=$PHJOB_ARTIFACT_LIMIT_SIZE_MB
   local RETENTION=$PHJOB_ARTIFACT_RETENTION_SECONDS
+=======
+  ARTIFACTS_DRYRUN=${ARTIFACTS_DRYRUN:-false}
+  ARTIFACTS_SRC=${ARTIFACTS_SRC:-"artifacts"}
+  FILE_COUNT_MAX=$PHJOB_ARTIFACT_LIMIT_FILES
+  TOTAL_SIZE_MAX=$PHJOB_ARTIFACT_LIMIT_SIZE_MB
+>>>>>>> 0c12b0d... Run monitoring-agent around job execution
 
   if [[ ! -e ${ARTIFACTS_SRC} ]]; then
     echo "Artifacts: no artifact found"
@@ -89,6 +100,14 @@ if [[ "${GRANT_SUDO}" == "true" ]]; then
   fi
 fi
 
+# Launch Monitoring Agent when PHJOB_ARTIFACT_ENABLED
+if [[ "${PHJOB_ARTIFACT_ENABLED}" == "true" ]]; then
+  if [[ -x /monitoring-utils/primehub-monitoring-agent ]]; then
+    mkdir -p "${ARTIFACTS_DEST}/.metadata" || true
+    /monitoring-utils/primehub-monitoring-agent
+  fi
+fi
+
 # Run Command
 if command -v sudo > /dev/null && [[ "$GRANT_SUDO" == "true" ]] && [[ -n $USER ]]; then
   sudo -E -H -u $USER PATH=$PATH bash -c "$COMMAND"
@@ -100,6 +119,12 @@ RETCODE=$?
 # Copy Artifacts
 if [[ "${PHJOB_ARTIFACT_ENABLED}" == "true" ]]; then
   copy_artifacts
+  if [[ -f .monitoring-agent.pid ]]; then
+    # flush buffer to file
+    kill -1 $(cat .monitoring-agent.pid)
+    # stop the agent
+    kill -9 $(cat .monitoring-agent.pid)
+  fi
 fi
 
 # Return result
