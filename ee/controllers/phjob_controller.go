@@ -126,11 +126,8 @@ func (r *PhJobReconciler) buildPod(phJob *primehubv1alpha1.PhJob) (*corev1.Pod, 
 		ArtifactEnabled:     r.ArtifactEnabled,
 		ArtifactLimitSizeMb: r.ArtifactLimitSizeMb,
 		ArtifactLimitFiles:  r.ArtifactLimitFiles,
-<<<<<<< HEAD
-		GrantSudo:           r.GrantSudo,
-=======
->>>>>>> 98250aa46e7c023c9b39f0fcddb4011acaf9f055
 		ArtifactRetentionSeconds:	r.ArtifactRetentionSeconds,
+		GrantSudo:           r.GrantSudo,
 	}
 	if spawner, err = graphql.NewSpawnerForJob(result.Data, phJob.Spec.GroupName, phJob.Spec.InstanceType, phJob.Spec.Image, options); err != nil {
 		return nil, err
