@@ -35,14 +35,16 @@ import (
 // PhDeploymentReconciler reconciles a PhDeployment object
 type PhDeploymentReconciler struct {
 	client.Client
-	Log                   logr.Logger
-	Scheme                *runtime.Scheme
-	GraphqlClient         graphql.AbstractGraphqlClient
-	Ingress               PhIngress
-	PrimehubUrl           string
-	EngineImage           string
-	EngineImagePullPolicy corev1.PullPolicy
-	PhfsPVC               string
+	Log                               logr.Logger
+	Scheme                            *runtime.Scheme
+	GraphqlClient                     graphql.AbstractGraphqlClient
+	Ingress                           PhIngress
+	PrimehubUrl                       string
+	EngineImage                       string
+	EngineImagePullPolicy             corev1.PullPolicy
+	ModelStorageInitializerImage      string
+	ModelStorageInitializerPullPolicy corev1.PullPolicy
+	PhfsPVC                           string
 }
 
 type FailedPodStatus struct {
@@ -728,6 +730,7 @@ func (r *PhDeploymentReconciler) buildDeployment(ctx context.Context, phDeployme
 			},
 		},
 	}
+
 	if len(phDeployment.Spec.Predictors[0].ModelURI) > 0 {
 		modelURI := phDeployment.Spec.Predictors[0].ModelURI
 		initContainersVolumeMount := []corev1.VolumeMount{
@@ -738,6 +741,9 @@ func (r *PhDeploymentReconciler) buildDeployment(ctx context.Context, phDeployme
 		}
 
 		if len(modelURI) > 4 && strings.HasPrefix(modelURI, "phfs") {
+			if _, err = r.getPVC(ctx, r.getPhfsPVCKey(phDeployment)); err != nil {
+				return nil, err
+			}
 			groupName := strings.ToLower(strings.ReplaceAll(phDeployment.Spec.GroupName, "_", "-"))
 			modelURI = strings.ReplaceAll(modelURI, "phfs://", "file:///phfs")
 			initContainersVolumeMount = append(initContainersVolumeMount, corev1.VolumeMount{
@@ -757,10 +763,11 @@ func (r *PhDeploymentReconciler) buildDeployment(ctx context.Context, phDeployme
 		}
 
 		initContainers = append(initContainers, corev1.Container{
-			Name:         "model-storage-initializer",
-			Image:        "gcr.io/kfserving/storage-initializer:v0.4.0",
-			Args:         []string{modelURI, "/mnt/models"},
-			VolumeMounts: initContainersVolumeMount,
+			Name:            "model-storage-initializer",
+			Image:           r.ModelStorageInitializerImage,
+			ImagePullPolicy: r.ModelStorageInitializerPullPolicy,
+			Args:            []string{modelURI, "/mnt/models"},
+			VolumeMounts:    initContainersVolumeMount,
 		})
 		volumes = append(volumes, corev1.Volume{
 			Name: "model-storage",
@@ -1468,4 +1475,19 @@ func GetLastApplied(obj metav1.Object) (*primehubv1alpha1.PhDeploymentSpec, erro
 		return nil, fmt.Errorf("can't unmarshal %q annotation: %v", lastAppliedAnnotation, err)
 	}
 	return lastApplied, nil
+}
+
+func (r *PhDeploymentReconciler) getPhfsPVCKey(p *primehubv1alpha1.PhDeployment) client.ObjectKey {
+	return client.ObjectKey{
+		Namespace: p.Namespace,
+		Name:      r.PhfsPVC,
+	}
+}
+
+func (r *PhDeploymentReconciler) getPVC(ctx context.Context, pvcKey client.ObjectKey) (*corev1.PersistentVolumeClaim, error) {
+	pvc := &corev1.PersistentVolumeClaim{}
+	if err := r.Client.Get(ctx, pvcKey, pvc); err != nil {
+		return nil, err
+	}
+	return pvc, nil
 }
