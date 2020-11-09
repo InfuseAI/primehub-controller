@@ -19,6 +19,7 @@ type SpawnerForJobOptions struct {
 	ArtifactEnabled	bool
 	ArtifactLimitSizeMb	int32
 	ArtifactLimitFiles	int32
+	ArtifactRetentionSeconds	int32
 }
 
 // Represent the pod spawner.
@@ -121,7 +122,7 @@ func NewSpawnerForJob(data DtoData, groupName string, instanceTypeName string, i
 
 	// Apply artifacts relative
 	if options.ArtifactEnabled && options.PhfsEnabled {
-		spawner.applyJobArtifact(options.ArtifactLimitSizeMb, options.ArtifactLimitFiles)
+		spawner.applyJobArtifact(options.ArtifactLimitSizeMb, options.ArtifactLimitFiles, options.ArtifactRetentionSeconds)
 	}
 
 	spawner.containerName = "main"
@@ -690,7 +691,7 @@ func (spawner *Spawner) applyUserAndGroupEnv(userName string, groupName string) 
 	spawner.env = append(spawner.env, user, group)
 }
 
-func (spawner *Spawner) applyJobArtifact(limitSizeMb int32, limitFiles int32) {
+func (spawner *Spawner) applyJobArtifact(limitSizeMb int32, limitFiles int32, retentionSeconds int32) {
 	// Environments
 	name := corev1.EnvVar{
 		Name:  "PHJOB_NAME",
@@ -719,6 +720,11 @@ func (spawner *Spawner) applyJobArtifact(limitSizeMb int32, limitFiles int32) {
 			Value: fmt.Sprint(limitFiles),
 		})
 	}
+
+	spawner.env = append(spawner.env, corev1.EnvVar{
+		Name:  "PHJOB_ARTIFACT_RETENTION_SECONDS",
+		Value: fmt.Sprint(retentionSeconds),
+	})
 
 	// Scripts
 	volumeName := "scripts"
