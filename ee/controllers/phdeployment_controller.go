@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"reflect"
@@ -44,6 +45,7 @@ type PhDeploymentReconciler struct {
 	EngineImagePullPolicy             corev1.PullPolicy
 	ModelStorageInitializerImage      string
 	ModelStorageInitializerPullPolicy corev1.PullPolicy
+	PhfsEnabled                       bool
 	PhfsPVC                           string
 }
 
@@ -741,8 +743,8 @@ func (r *PhDeploymentReconciler) buildDeployment(ctx context.Context, phDeployme
 		}
 
 		if len(modelURI) > 4 && strings.HasPrefix(modelURI, "phfs") {
-			if _, err = r.getPVC(ctx, r.getPhfsPVCKey(phDeployment)); err != nil {
-				return nil, err
+			if !r.PhfsEnabled || len(r.PhfsPVC) <= 0 {
+				return nil, errors.New("Phfs is not enabled")
 			}
 			groupName := strings.ToLower(strings.ReplaceAll(phDeployment.Spec.GroupName, "_", "-"))
 			modelURI = strings.ReplaceAll(modelURI, "phfs://", "file:///phfs")
@@ -1475,19 +1477,4 @@ func GetLastApplied(obj metav1.Object) (*primehubv1alpha1.PhDeploymentSpec, erro
 		return nil, fmt.Errorf("can't unmarshal %q annotation: %v", lastAppliedAnnotation, err)
 	}
 	return lastApplied, nil
-}
-
-func (r *PhDeploymentReconciler) getPhfsPVCKey(p *primehubv1alpha1.PhDeployment) client.ObjectKey {
-	return client.ObjectKey{
-		Namespace: p.Namespace,
-		Name:      r.PhfsPVC,
-	}
-}
-
-func (r *PhDeploymentReconciler) getPVC(ctx context.Context, pvcKey client.ObjectKey) (*corev1.PersistentVolumeClaim, error) {
-	pvc := &corev1.PersistentVolumeClaim{}
-	if err := r.Client.Get(ctx, pvcKey, pvc); err != nil {
-		return nil, err
-	}
-	return pvc, nil
 }

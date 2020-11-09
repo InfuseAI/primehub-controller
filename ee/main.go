@@ -129,9 +129,11 @@ func main() {
 
 	groupCache := ccache.New(ccache.Configure().MaxSize(1000).ItemsToPrune(100))
 
+	phfsEnabled := viper.GetBool("phfsEnabled")
 	phfsPVC := viper.GetString("phfsPVC")
 	// older settings compatibility
 	if len(phfsPVC) <= 0 {
+		phfsEnabled = viper.GetBool("jobSubmission.phfsEnabled")
 		phfsPVC = viper.GetString("jobSubmission.phfsPVC")
 	}
 
@@ -146,7 +148,7 @@ func main() {
 		NodeSelector:                   nodeSelector,
 		Tolerations:                    tolerationsSlice,
 		Affinity:                       affinity,
-		PhfsEnabled:                    viper.GetBool("jobSubmission.phfsEnabled"),
+		PhfsEnabled:                    phfsEnabled,
 		PhfsPVC:                        phfsPVC,
 		ArtifactEnabled:                viper.GetBool("jobSubmission.artifact.enabled"),
 		ArtifactLimitSizeMb:            viper.GetInt32("jobSubmission.artifact.limitSizeMb"),
@@ -239,6 +241,7 @@ func main() {
 			EngineImagePullPolicy:             engineContainerPullPolicy,
 			ModelStorageInitializerImage:      modelStorageInitializerImage,
 			ModelStorageInitializerPullPolicy: modelStorageInitializerPullPolicy,
+			PhfsEnabled:                       phfsEnabled,
 			PhfsPVC:                           phfsPVC,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "PhDeployment")
