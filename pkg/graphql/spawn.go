@@ -123,11 +123,14 @@ func NewSpawnerForJob(data DtoData, groupName string, instanceTypeName string, i
 	// User and Group env variables
 	spawner.applyUserAndGroupEnv(data.User.Username, groupName)
 
-	// Apply artifacts relative
+	// Mount `scripts`
+	spawner.applyScripts()
 
+	// Apply artifacts relative
 	if options.ArtifactEnabled && options.PhfsEnabled {
 		spawner.applyJobArtifact(options.ArtifactLimitSizeMb, options.ArtifactLimitFiles, options.ArtifactRetentionSeconds)
 	}
+
 	// Apply grant sudo
 	spawner.applyGrantSudo(options.GrantSudo)
 
@@ -697,6 +700,30 @@ func (spawner *Spawner) applyUserAndGroupEnv(userName string, groupName string) 
 	spawner.env = append(spawner.env, user, group)
 }
 
+func (spawner *Spawner) applyScripts() {
+	volumeName := "scripts"
+	defaultMode := int32(0777)
+	volume := corev1.Volume{
+		Name: volumeName,
+		VolumeSource: corev1.VolumeSource{
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: "primehub-controller-job-scripts",
+				},
+				DefaultMode: &defaultMode,
+			},
+		},
+	}
+
+	volumeMount := corev1.VolumeMount{
+		MountPath: "/scripts",
+		Name:      volumeName,
+	}
+
+	spawner.volumes = append(spawner.volumes, volume)
+	spawner.volumeMounts = append(spawner.volumeMounts, volumeMount)
+}
+
 func (spawner *Spawner) applyJobArtifact(limitSizeMb int32, limitFiles int32, retentionSeconds int32) {
 	// Environments
 	name := corev1.EnvVar{
@@ -731,29 +758,6 @@ func (spawner *Spawner) applyJobArtifact(limitSizeMb int32, limitFiles int32, re
 		Name:  "PHJOB_ARTIFACT_RETENTION_SECONDS",
 		Value: fmt.Sprint(retentionSeconds),
 	})
-
-	// Scripts
-	volumeName := "scripts"
-	defaultMode := int32(0777)
-	volume := corev1.Volume{
-		Name: volumeName,
-		VolumeSource: corev1.VolumeSource{
-			ConfigMap: &corev1.ConfigMapVolumeSource{
-				LocalObjectReference: corev1.LocalObjectReference{
-					Name: "primehub-controller-job-scripts",
-				},
-				DefaultMode: &defaultMode,
-			},
-		},
-	}
-
-	volumeMount := corev1.VolumeMount{
-		MountPath: "/scripts",
-		Name:      volumeName,
-	}
-
-	spawner.volumes = append(spawner.volumes, volume)
-	spawner.volumeMounts = append(spawner.volumeMounts, volumeMount)
 }
 
 func (spawner *Spawner) applyGrantSudo(grantSudo bool) {
