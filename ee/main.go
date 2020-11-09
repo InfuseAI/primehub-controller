@@ -218,6 +218,7 @@ func main() {
 			PrimehubUrl:           primehubUrl,
 			EngineImage:           engineContainerImage,
 			EngineImagePullPolicy: engineContainerPullPolicy,
+			PhfsPVC:               viper.GetString("jobSubmission.phfsPVC"),
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "PhDeployment")
 			os.Exit(1)

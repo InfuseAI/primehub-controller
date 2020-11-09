@@ -84,6 +84,8 @@ spec:
                     type: object
                   modelImage:
                     type: string
+                  modelURI:
+                    type: string
                   name:
                     type: string
                   replicas:
@@ -163,6 +165,8 @@ spec:
                                 type: string
                               type: object
                             modelImage:
+                              type: string
+                            modelURI:
                               type: string
                             name:
                               type: string

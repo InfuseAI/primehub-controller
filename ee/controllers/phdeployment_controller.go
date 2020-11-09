@@ -42,6 +42,7 @@ type PhDeploymentReconciler struct {
 	PrimehubUrl           string
 	EngineImage           string
 	EngineImagePullPolicy corev1.PullPolicy
+	PhfsPVC               string
 }
 
 type FailedPodStatus struct {
@@ -288,10 +289,12 @@ func needUpdateDeployment(phDeployment *primehubv1alpha1.PhDeployment, lastAppli
 	lastAppliedImage := lastAppliedPredictor.ModelImage
 	lastAppliedPullSecret := lastAppliedPredictor.ImagePullSecret
 	lastAppliedInstanceType := lastAppliedPredictor.InstanceType
+	lastAppliedModelURI := lastAppliedPredictor.ModelURI
 
 	if phDeployment.Spec.Predictors[0].ModelImage != lastAppliedImage ||
 		phDeployment.Spec.Predictors[0].ImagePullSecret != lastAppliedPullSecret ||
-		phDeployment.Spec.Predictors[0].InstanceType != lastAppliedInstanceType {
+		phDeployment.Spec.Predictors[0].InstanceType != lastAppliedInstanceType ||
+		phDeployment.Spec.Predictors[0].ModelURI != lastAppliedModelURI {
 
 		needUpdateDeployment = true
 	}
@@ -708,6 +711,65 @@ func (r *PhDeploymentReconciler) buildDeployment(ctx context.Context, phDeployme
 	tolerations := make([]corev1.Toleration, 0)
 	tolerations = append(tolerations, spawner.Tolerations...)
 
+	initContainers := make([]corev1.Container, 0)
+	volumes := []corev1.Volume{
+		{
+			Name: "podinfo",
+			VolumeSource: corev1.VolumeSource{
+				DownwardAPI: &corev1.DownwardAPIVolumeSource{
+					Items: []corev1.DownwardAPIVolumeFile{
+						{
+							Path:     "annotations",
+							FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.annotations", APIVersion: "v1"},
+						},
+					},
+					DefaultMode: &defaultMode,
+				},
+			},
+		},
+	}
+	if len(phDeployment.Spec.Predictors[0].ModelURI) > 0 {
+		modelURI := phDeployment.Spec.Predictors[0].ModelURI
+		initContainersVolumeMount := []corev1.VolumeMount{
+			corev1.VolumeMount{
+				Name:      "model-storage",
+				MountPath: "/mnt/models",
+			},
+		}
+
+		if len(modelURI) > 4 && strings.HasPrefix(modelURI, "phfs") {
+			groupName := strings.ToLower(strings.ReplaceAll(phDeployment.Spec.GroupName, "_", "-"))
+			modelURI = strings.ReplaceAll(modelURI, "phfs://", "file:///phfs")
+			initContainersVolumeMount = append(initContainersVolumeMount, corev1.VolumeMount{
+				MountPath: "/phfs",
+				Name:      "phfs",
+				SubPath:   "groups/" + groupName,
+				ReadOnly:  true,
+			})
+			volumes = append(volumes, corev1.Volume{
+				Name: "phfs",
+				VolumeSource: corev1.VolumeSource{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+						ClaimName: r.PhfsPVC,
+					},
+				},
+			})
+		}
+
+		initContainers = append(initContainers, corev1.Container{
+			Name:         "model-storage-initializer",
+			Image:        "gcr.io/kfserving/storage-initializer:v0.4.0",
+			Args:         []string{modelURI, "/mnt/models"},
+			VolumeMounts: initContainersVolumeMount,
+		})
+		volumes = append(volumes, corev1.Volume{
+			Name: "model-storage",
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		})
+	}
+
 	deployment := &v1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "deploy-" + phDeployment.Name,
@@ -756,27 +818,13 @@ func (r *PhDeploymentReconciler) buildDeployment(ctx context.Context, phDeployme
 					DNSPolicy:        corev1.DNSClusterFirst,
 					SchedulerName:    "default-scheduler",
 					ImagePullSecrets: imagepullsecrets,
+					InitContainers:   initContainers,
 					Containers: []corev1.Container{
 						*modelContainer,
 						*engineContainer,
 					},
 
-					Volumes: []corev1.Volume{
-						{
-							Name: "podinfo",
-							VolumeSource: corev1.VolumeSource{
-								DownwardAPI: &corev1.DownwardAPIVolumeSource{
-									Items: []corev1.DownwardAPIVolumeFile{
-										{
-											Path:     "annotations",
-											FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.annotations", APIVersion: "v1"},
-										},
-									},
-									DefaultMode: &defaultMode,
-								},
-							},
-						},
-					},
+					Volumes: volumes,
 				},
 			},
 		},
@@ -975,6 +1023,39 @@ func (r PhDeploymentReconciler) buildModelContainer(phDeployment *primehubv1alph
 
 	spawner.BuildPodSpec(&podSpec)
 
+	envs := []corev1.EnvVar{
+		{Name: "PREDICTIVE_UNIT_SERVICE_PORT", Value: "9000"},
+		{Name: "PREDICTIVE_UNIT_ID", Value: "model"},
+		{Name: "PREDICTOR_ID", Value: "deploy"},
+		{Name: "SELDON_DEPLOYMENT_ID", Value: "deploy-" + phDeployment.Name},
+	}
+	volumeMounts := []corev1.VolumeMount{
+		corev1.VolumeMount{
+			Name:      "podinfo",
+			MountPath: "/etc/podinfo",
+		},
+	}
+
+	if len(phDeployment.Spec.Predictors[0].ModelURI) > 0 {
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      "model-storage",
+			MountPath: "/mnt/models",
+		})
+		envs = append(envs, corev1.EnvVar{
+			Name:  "PREDICTIVE_UNIT_PARAMETERS",
+			Value: "[{\"name\":\"model_uri\",\"value\":\"/mnt/models\",\"type\":\"STRING\"}]",
+		})
+		if len(phDeployment.Spec.Predictors[0].ModelURI) > 4 && strings.HasPrefix(phDeployment.Spec.Predictors[0].ModelURI, "phfs") {
+			groupName := strings.ToLower(strings.ReplaceAll(phDeployment.Spec.GroupName, "_", "-"))
+			volumeMounts = append(volumeMounts, corev1.VolumeMount{
+				MountPath: "/phfs",
+				Name:      "phfs",
+				SubPath:   "groups/" + groupName,
+				ReadOnly:  true,
+			})
+		}
+	}
+
 	// build mode container
 	modelContainer := &corev1.Container{
 		Name:  "model",
@@ -1002,18 +1083,8 @@ func (r PhDeploymentReconciler) buildModelContainer(phDeployment *primehubv1alph
 				},
 			},
 		},
-		Env: []corev1.EnvVar{
-			{Name: "PREDICTIVE_UNIT_SERVICE_PORT", Value: "9000"},
-			{Name: "PREDICTIVE_UNIT_ID", Value: "model"},
-			{Name: "PREDICTOR_ID", Value: "deploy"},
-			{Name: "SELDON_DEPLOYMENT_ID", Value: "deploy-" + phDeployment.Name},
-		},
-		VolumeMounts: []corev1.VolumeMount{
-			corev1.VolumeMount{
-				Name:      "podinfo",
-				MountPath: "/etc/podinfo",
-			},
-		},
+		Env:          envs,
+		VolumeMounts: volumeMounts,
 		Ports: []corev1.ContainerPort{
 			{ContainerPort: 9000, Name: "http", Protocol: corev1.ProtocolTCP},
 		},
