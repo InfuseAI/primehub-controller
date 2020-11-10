@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"sort"
 	"strings"
 	"time"
 
@@ -88,6 +89,11 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 
 	if phDeployment.Status.History == nil {
 		phDeployment.Status.History = make([]primehubv1alpha1.PhDeploymentHistory, 0)
+	}
+	if len(phDeployment.Spec.Env) > 0 {
+		sort.Slice(phDeployment.Spec.Env, func(i, j int) bool {
+			return phDeployment.Spec.Env[i].Name < phDeployment.Spec.Env[j].Name
+		})
 	}
 
 	// update history
@@ -282,6 +288,23 @@ func (r *PhDeploymentReconciler) createDeployment(ctx context.Context, phDeploym
 	return nil
 }
 
+func compareEnvVar(a []corev1.EnvVar, b []corev1.EnvVar) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	for i, obj := range a {
+		if obj.Name != b[i].Name {
+			return false
+		}
+		if obj.Value != b[i].Value {
+			return false
+		}
+	}
+
+	return true
+}
+
 func needUpdateDeployment(phDeployment *primehubv1alpha1.PhDeployment, lastAppliedSpec *primehubv1alpha1.PhDeploymentSpec) bool {
 	needUpdateDeployment := false
 
@@ -294,11 +317,13 @@ func needUpdateDeployment(phDeployment *primehubv1alpha1.PhDeployment, lastAppli
 	lastAppliedPullSecret := lastAppliedPredictor.ImagePullSecret
 	lastAppliedInstanceType := lastAppliedPredictor.InstanceType
 	lastAppliedModelURI := lastAppliedPredictor.ModelURI
+	lastAppliedEnv := lastAppliedSpec.Env
 
 	if phDeployment.Spec.Predictors[0].ModelImage != lastAppliedImage ||
 		phDeployment.Spec.Predictors[0].ImagePullSecret != lastAppliedPullSecret ||
 		phDeployment.Spec.Predictors[0].InstanceType != lastAppliedInstanceType ||
-		phDeployment.Spec.Predictors[0].ModelURI != lastAppliedModelURI {
+		phDeployment.Spec.Predictors[0].ModelURI != lastAppliedModelURI ||
+		compareEnvVar(phDeployment.Spec.Env, lastAppliedEnv) == false {
 
 		needUpdateDeployment = true
 	}
@@ -320,7 +345,7 @@ func (r *PhDeploymentReconciler) updateDeployment(ctx context.Context, phDeploym
 
 	// Fully update
 	if needUpdateDeployment(phDeployment, lastAppliedSpec) {
-		// Update: if image, pull secret, instance type change
+		// Update: if image, pull secret, instance type, or environment variables change
 		logger.Info("phDeployment has been updated, update the deployment to reflect the update.")
 
 		deploymentUpdated, err := r.buildDeployment(ctx, phDeployment)
@@ -1018,6 +1043,7 @@ func (r PhDeploymentReconciler) buildModelContainer(phDeployment *primehubv1alph
 	// currently we only have one predictor, need to change when need to support multiple predictors
 	predictorInstanceType := phDeployment.Spec.Predictors[0].InstanceType
 	predictorImage := phDeployment.Spec.Predictors[0].ModelImage
+	env := phDeployment.Spec.Env
 
 	// get the instancetype from graphql
 	var result *graphql.DtoResult
@@ -1098,6 +1124,9 @@ func (r PhDeploymentReconciler) buildModelContainer(phDeployment *primehubv1alph
 			{ContainerPort: 9000, Name: "http", Protocol: corev1.ProtocolTCP},
 		},
 		Resources: podSpec.Containers[0].Resources,
+	}
+	if len(env) > 0 {
+		modelContainer.Env = append(modelContainer.Env, env...)
 	}
 	return modelContainer, nil
 }

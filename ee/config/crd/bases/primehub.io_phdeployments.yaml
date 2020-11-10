@@ -48,6 +48,18 @@ spec:
               type: string
             displayName:
               type: string
+            env:
+              items:
+                properties:
+                  name:
+                    type: string
+                  value:
+                    type: string
+                required:
+                - name
+                - value
+                type: object
+              type: array
             endpoint:
               properties:
                 accessType:
