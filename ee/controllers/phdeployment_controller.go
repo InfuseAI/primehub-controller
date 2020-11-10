@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"sort"
 	"strings"
 	"time"
 
@@ -88,6 +89,11 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 
 	if phDeployment.Status.History == nil {
 		phDeployment.Status.History = make([]primehubv1alpha1.PhDeploymentHistory, 0)
+	}
+	if len(phDeployment.Spec.Env) > 0 {
+		sort.Slice(phDeployment.Spec.Env, func(i, j int) bool {
+			return phDeployment.Spec.Env[i].Name < phDeployment.Spec.Env[j].Name
+		})
 	}
 
 	// update history
