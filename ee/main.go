@@ -129,6 +129,14 @@ func main() {
 
 	groupCache := ccache.New(ccache.Configure().MaxSize(1000).ItemsToPrune(100))
 
+	phfsEnabled := viper.GetBool("phfsEnabled")
+	phfsPVC := viper.GetString("phfsPVC")
+	// older settings compatibility
+	if len(phfsPVC) <= 0 {
+		phfsEnabled = viper.GetBool("jobSubmission.phfsEnabled")
+		phfsPVC = viper.GetString("jobSubmission.phfsPVC")
+	}
+
 	if err = (&eecontrollers.PhJobReconciler{
 		Client:                         mgr.GetClient(),
 		Log:                            ctrl.Log.WithName("controllers").WithName("PhJob"),
@@ -140,8 +148,8 @@ func main() {
 		NodeSelector:                   nodeSelector,
 		Tolerations:                    tolerationsSlice,
 		Affinity:                       affinity,
-		PhfsEnabled:                    viper.GetBool("jobSubmission.phfsEnabled"),
-		PhfsPVC:                        viper.GetString("jobSubmission.phfsPVC"),
+		PhfsEnabled:                    phfsEnabled,
+		PhfsPVC:                        phfsPVC,
 		ArtifactEnabled:                viper.GetBool("jobSubmission.artifact.enabled"),
 		ArtifactLimitSizeMb:            viper.GetInt32("jobSubmission.artifact.limitSizeMb"),
 		ArtifactLimitFiles:             viper.GetInt32("jobSubmission.artifact.limitFiles"),
@@ -209,15 +217,32 @@ func main() {
 			engineContainerPullPolicy = corev1.PullIfNotPresent
 		}
 
+		var modelStorageInitializerImage string
+		modelStorageInitializerRepository := viper.GetString("modelDeployment.modelStorageInitializer.image.repository")
+		modelStorageInitializerTag := viper.GetString("modelDeployment.modelStorageInitializer.image.tag")
+		modelStorageInitializerPullPolicy := corev1.PullPolicy(viper.GetString("modelDeployment.modelStorageInitializer.image.pullPolicy"))
+		if modelStorageInitializerRepository != "" && modelStorageInitializerTag != "" {
+			modelStorageInitializerImage = fmt.Sprintf("%s:%s", modelStorageInitializerRepository, modelStorageInitializerTag)
+		} else {
+			modelStorageInitializerImage = "gcr.io/kfserving/storage-initializer:v0.4.0"
+		}
+		if modelStorageInitializerPullPolicy == "" {
+			modelStorageInitializerPullPolicy = corev1.PullIfNotPresent
+		}
+
 		if err = (&eecontrollers.PhDeploymentReconciler{
-			Client:                mgr.GetClient(),
-			Log:                   ctrl.Log.WithName("controllers").WithName("PhDeployment"),
-			Scheme:                mgr.GetScheme(),
-			GraphqlClient:         graphqlClient,
-			Ingress:               ingress,
-			PrimehubUrl:           primehubUrl,
-			EngineImage:           engineContainerImage,
-			EngineImagePullPolicy: engineContainerPullPolicy,
+			Client:                            mgr.GetClient(),
+			Log:                               ctrl.Log.WithName("controllers").WithName("PhDeployment"),
+			Scheme:                            mgr.GetScheme(),
+			GraphqlClient:                     graphqlClient,
+			Ingress:                           ingress,
+			PrimehubUrl:                       primehubUrl,
+			EngineImage:                       engineContainerImage,
+			EngineImagePullPolicy:             engineContainerPullPolicy,
+			ModelStorageInitializerImage:      modelStorageInitializerImage,
+			ModelStorageInitializerPullPolicy: modelStorageInitializerPullPolicy,
+			PhfsEnabled:                       phfsEnabled,
+			PhfsPVC:                           phfsPVC,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "PhDeployment")
 			os.Exit(1)
