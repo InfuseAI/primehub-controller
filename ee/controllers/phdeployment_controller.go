@@ -61,6 +61,7 @@ type FailedPodStatus struct {
 
 const (
 	lastAppliedAnnotation = "phdeployment.primehub.io/last-applied-configuration"
+	GPUResourceName       = "nvidia.com/gpu"
 )
 
 // +kubebuilder:rbac:groups=primehub.io,resources=phdeployments,verbs=get;list;watch;create;update;patch;delete
@@ -901,10 +902,15 @@ func (r *PhDeploymentReconciler) adjustResourcesToFitConstraint(engineContainer 
 		corev1.ResourceName(corev1.ResourceCPU):    *resource.NewMilliQuantity(engineCpu, resource.DecimalSI),
 		corev1.ResourceName(corev1.ResourceMemory): *resource.NewQuantity(engineMemory, resource.DecimalSI),
 	}
+
 	modelResources := corev1.ResourceList{
 		corev1.ResourceName(corev1.ResourceCPU):    *resource.NewMilliQuantity(modelCpu, resource.DecimalSI),
 		corev1.ResourceName(corev1.ResourceMemory): *resource.NewQuantity(modelMemory, resource.DecimalSI),
 	}
+	if value, ok := modelContainer.Resources.Limits[GPUResourceName]; ok {
+		modelResources[corev1.ResourceName(GPUResourceName)] = value
+	}
+
 	engineContainer.Resources = corev1.ResourceRequirements{
 		Limits:   engineResources,
 		Requests: engineResources,
