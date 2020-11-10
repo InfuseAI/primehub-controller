@@ -42,6 +42,7 @@ type PhDeploymentPredictor struct {
 	Replicas        int                  `json:"replicas"`
 	ModelImage      string               `json:"modelImage"`
 	InstanceType    string               `json:"instanceType"`
+	ModelURI        string               `json:"modelURI,omitempty"`
 	ImagePullSecret string               `json:"imagePullSecret,omitempty"`
 	Metadata        PhDeploymentMetadata `json:"metadata,omitempty"`
 }

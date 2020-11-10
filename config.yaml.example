@@ -12,14 +12,15 @@ customImage:
         cpu: 2000m
         memory: 1000Mi
 
+phfsEnabled: false
+phfsPVC: primehub-store
+
 jobSubmission:
   graphqlEndpoint: https://primehub.local/api/graphql
   graphqlSecret: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
   workingDirSize: 5Gi
   defaultActiveDeadlineSeconds: 86400
   defaultTTLSecondsAfterFinished: 604800
-  phfsEnabled: false
-  phfsPVC: primehub-store
   artifact:
     enabled: false
     limitSizeMb: 100
@@ -40,4 +41,8 @@ modelDeployment:
       repository: seldonio/seldon-core-executor
       tag: 1.1.0
       pullPolicy: IfNotPresent
-
+  modelStorageInitializer:
+    image:
+      repository: gcr.io/kfserving/storage-initializer
+      tag: v0.4.0
+      pullPolicy: IfNotPresent
