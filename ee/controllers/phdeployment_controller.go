@@ -51,12 +51,13 @@ type PhDeploymentReconciler struct {
 }
 
 type FailedPodStatus struct {
-	pod               string
-	conditions        []corev1.PodCondition
-	containerStatuses []corev1.ContainerStatus
-	isImageError      bool
-	isTerminated      bool
-	isUnschedulable   bool
+	pod                     string
+	conditions              []corev1.PodCondition
+	containerStatuses       []corev1.ContainerStatus
+	isImageError            bool
+	isTerminated            bool
+	isUnschedulable         bool
+	isModelStorageInitError bool
 }
 
 const (
@@ -167,7 +168,11 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 		}
 	}
 
-	return ctrl.Result{RequeueAfter: 2 * time.Minute}, nil
+	if phDeployment.Status.Phase == primehubv1alpha1.DeploymentDeploying {
+		return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
+	} else {
+		return ctrl.Result{RequeueAfter: 2 * time.Minute}, nil
+	}
 }
 
 func (r *PhDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -508,6 +513,10 @@ func (r *PhDeploymentReconciler) updateStatus(phDeployment *primehubv1alpha1.PhD
 		// - application terminated
 		if failedPods != nil {
 			for _, p := range failedPods {
+				if p.isModelStorageInitError {
+					phDeployment.Status.Messsage = "Failed because cannot successfully copy the model from the model URI." + r.explain(failedPods)
+					return nil
+				}
 				if p.isImageError {
 					phDeployment.Status.Messsage = "Failed because of wrong image settings." + r.explain(failedPods)
 					return nil
@@ -516,8 +525,6 @@ func (r *PhDeploymentReconciler) updateStatus(phDeployment *primehubv1alpha1.PhD
 					phDeployment.Status.Messsage = "Failed because of pod is terminated" + r.explain(failedPods)
 					return nil
 				}
-			}
-			for _, p := range failedPods {
 				if p.isUnschedulable {
 					// even pod is unschedulable, deployment is still deploying, wait for scale down
 					phDeployment.Status.Messsage = "Certain pods unschedulable." + r.explain(failedPods)
@@ -585,12 +592,13 @@ func (r *PhDeploymentReconciler) listFailedPods(ctx context.Context, phDeploymen
 			continue
 		}
 		result := FailedPodStatus{
-			pod:               pod.Name,
-			conditions:        make([]corev1.PodCondition, 0),
-			containerStatuses: make([]corev1.ContainerStatus, 0),
-			isImageError:      false,
-			isTerminated:      false,
-			isUnschedulable:   false,
+			pod:                     pod.Name,
+			conditions:              make([]corev1.PodCondition, 0),
+			containerStatuses:       make([]corev1.ContainerStatus, 0),
+			isImageError:            false,
+			isTerminated:            false,
+			isUnschedulable:         false,
+			isModelStorageInitError: false,
 		}
 		for _, c := range pod.Status.Conditions {
 
@@ -600,6 +608,31 @@ func (r *PhDeploymentReconciler) listFailedPods(ctx context.Context, phDeploymen
 
 			if c.Reason == "Unschedulable" {
 				result.isUnschedulable = true
+			}
+		}
+		for _, c := range pod.Status.InitContainerStatuses {
+			var s corev1.ContainerState
+			if c.Ready == true { // container is ready, we don't need to capture the error
+				s = c.State
+			} else {
+				if c.LastTerminationState == (corev1.ContainerState{}) {
+					s = c.State
+				} else {
+					s = c.LastTerminationState
+				}
+			}
+
+			if s.Terminated != nil && s.Terminated.ExitCode != 0 {
+				// terminated and exit code is not 0
+				if c.Name == "model-storage-initializer" {
+					result.isModelStorageInitError = true
+				}
+				result.isTerminated = true
+				result.containerStatuses = append(result.containerStatuses, c)
+			}
+			if s.Waiting != nil && (s.Waiting.Reason == "ImagePullBackOff" || s.Waiting.Reason == "ErrImagePull") {
+				result.isImageError = true
+				result.containerStatuses = append(result.containerStatuses, c)
 			}
 		}
 		for _, c := range pod.Status.ContainerStatuses {
@@ -791,11 +824,12 @@ func (r *PhDeploymentReconciler) buildDeployment(ctx context.Context, phDeployme
 		}
 
 		initContainers = append(initContainers, corev1.Container{
-			Name:            "model-storage-initializer",
-			Image:           r.ModelStorageInitializerImage,
-			ImagePullPolicy: r.ModelStorageInitializerPullPolicy,
-			Args:            []string{modelURI, "/mnt/models"},
-			VolumeMounts:    initContainersVolumeMount,
+			Name:                     "model-storage-initializer",
+			Image:                    r.ModelStorageInitializerImage,
+			ImagePullPolicy:          r.ModelStorageInitializerPullPolicy,
+			Args:                     []string{modelURI, "/mnt/models"},
+			VolumeMounts:             initContainersVolumeMount,
+			TerminationMessagePolicy: corev1.TerminationMessageFallbackToLogsOnError,
 		})
 		volumes = append(volumes, corev1.Volume{
 			Name: "model-storage",
@@ -1124,8 +1158,9 @@ func (r PhDeploymentReconciler) buildModelContainer(phDeployment *primehubv1alph
 				},
 			},
 		},
-		Env:          envs,
-		VolumeMounts: volumeMounts,
+		TerminationMessagePolicy: corev1.TerminationMessageFallbackToLogsOnError,
+		Env:                      envs,
+		VolumeMounts:             volumeMounts,
 		Ports: []corev1.ContainerPort{
 			{ContainerPort: 9000, Name: "http", Protocol: corev1.ProtocolTCP},
 		},
