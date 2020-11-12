@@ -60,7 +60,7 @@ type PhDeploymentEndpointClient struct {
 // PhDeploymentStatus defines the observed state of PhDeployment
 type PhDeploymentStatus struct {
 	Phase             PhDeploymentPhase     `json:"phase"`
-	Messsage          string                `json:"message,omitempty"`
+	Message           string                `json:"message,omitempty"`
 	Replicas          int                   `json:"replicas,omitempty"`
 	AvailableReplicas int                   `json:"availableReplicas,omitempty"`
 	Endpoint          string                `json:"endpoint,omitempty"`
