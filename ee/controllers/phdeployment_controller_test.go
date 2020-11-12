@@ -162,8 +162,8 @@ func TestConfigurationError(t *testing.T) {
 		if phDeployment.Status.Phase != tt.expectedPhase {
 			t.Errorf("%s: unexpected phase after update status. Expected %v, saw %v", name, tt.expectedPhase, phDeployment.Status.Phase)
 		}
-		if phDeployment.Status.Messsage != tt.expectedMessage {
-			t.Errorf("%s: unexpected message after update status. Expected %v, saw %v", name, tt.expectedMessage, phDeployment.Status.Messsage)
+		if phDeployment.Status.Message != tt.expectedMessage {
+			t.Errorf("%s: unexpected message after update status. Expected %v, saw %v", name, tt.expectedMessage, phDeployment.Status.Message)
 		}
 	}
 }
@@ -310,8 +310,8 @@ func TestRuntimeError(t *testing.T) {
 		if phDeployment.Status.Phase != tt.expectedPhase {
 			t.Errorf("%s: unexpected phase after update status. Expected %v, saw %v", name, tt.expectedPhase, phDeployment.Status.Phase)
 		}
-		if !strings.Contains(phDeployment.Status.Messsage, tt.expectedMessage) {
-			t.Errorf("%s: unexpected message after update status. Expected %v, saw %v", name, tt.expectedMessage, phDeployment.Status.Messsage)
+		if !strings.Contains(phDeployment.Status.Message, tt.expectedMessage) {
+			t.Errorf("%s: unexpected message after update status. Expected %v, saw %v", name, tt.expectedMessage, phDeployment.Status.Message)
 		}
 	}
 }
@@ -441,8 +441,8 @@ func TestQuotaNotEnough(t *testing.T) {
 		if phDeployment.Status.Phase != tt.expectedPhase {
 			t.Errorf("%s: unexpected phase after update status. Expected %v, saw %v", name, tt.expectedPhase, phDeployment.Status.Phase)
 		}
-		if !strings.Contains(phDeployment.Status.Messsage, tt.expectedMessage) {
-			t.Errorf("%s: unexpected message after update status. Expected %v, saw %v", name, tt.expectedMessage, phDeployment.Status.Messsage)
+		if !strings.Contains(phDeployment.Status.Message, tt.expectedMessage) {
+			t.Errorf("%s: unexpected message after update status. Expected %v, saw %v", name, tt.expectedMessage, phDeployment.Status.Message)
 		}
 	}
 }

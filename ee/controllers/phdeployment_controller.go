@@ -61,8 +61,9 @@ type FailedPodStatus struct {
 }
 
 const (
-	lastAppliedAnnotation = "phdeployment.primehub.io/last-applied-configuration"
-	GPUResourceName       = "nvidia.com/gpu"
+	lastAppliedAnnotation       = "phdeployment.primehub.io/last-applied-configuration"
+	GPUResourceName             = "nvidia.com/gpu"
+	ModelStorageInitializerName = "model-storage-initializer"
 )
 
 // +kubebuilder:rbac:groups=primehub.io,resources=phdeployments,verbs=get;list;watch;create;update;patch;delete
@@ -447,12 +448,12 @@ func (r *PhDeploymentReconciler) updateStatus(phDeployment *primehubv1alpha1.PhD
 	if phDeployment.Spec.Stop {
 		if deployment.Status.AvailableReplicas != 0 || deployment.Status.UpdatedReplicas != 0 {
 			phDeployment.Status.Phase = primehubv1alpha1.DeploymentStopping
-			phDeployment.Status.Messsage = "deployment is stopping"
+			phDeployment.Status.Message = "deployment is stopping"
 			phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
 			phDeployment.Status.AvailableReplicas = 0
 		} else {
 			phDeployment.Status.Phase = primehubv1alpha1.DeploymentStopped
-			phDeployment.Status.Messsage = "deployment has stopped"
+			phDeployment.Status.Message = "deployment has stopped"
 			phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
 			phDeployment.Status.AvailableReplicas = 0
 		}
@@ -467,7 +468,7 @@ func (r *PhDeploymentReconciler) updateStatus(phDeployment *primehubv1alpha1.PhD
 
 	if configurationError {
 		phDeployment.Status.Phase = primehubv1alpha1.DeploymentFailed
-		phDeployment.Status.Messsage = configurationErrorReason
+		phDeployment.Status.Message = configurationErrorReason
 		phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
 
 		if deployment == nil {
@@ -481,7 +482,7 @@ func (r *PhDeploymentReconciler) updateStatus(phDeployment *primehubv1alpha1.PhD
 	// if deployment is still nil
 	if deployment == nil {
 		phDeployment.Status.Phase = primehubv1alpha1.DeploymentDeploying
-		phDeployment.Status.Messsage = "Deployment is being deployed and not available now"
+		phDeployment.Status.Message = "Deployment is being deployed and not available now"
 		phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
 		phDeployment.Status.AvailableReplicas = 0
 
@@ -502,7 +503,7 @@ func (r *PhDeploymentReconciler) updateStatus(phDeployment *primehubv1alpha1.PhD
 		// - because request exceeds quota and is denied by admission webhook
 		for _, c := range deployment.Status.Conditions {
 			if c.Type == v1.DeploymentReplicaFailure && c.Status == corev1.ConditionTrue && c.Reason == "FailedCreate" {
-				phDeployment.Status.Messsage = strings.Split(c.Message, "denied the request: ")[1]
+				phDeployment.Status.Message = strings.Split(c.Message, "denied the request: ")[1]
 				return nil
 			}
 		}
@@ -514,31 +515,31 @@ func (r *PhDeploymentReconciler) updateStatus(phDeployment *primehubv1alpha1.PhD
 		if failedPods != nil {
 			for _, p := range failedPods {
 				if p.isModelStorageInitError {
-					phDeployment.Status.Messsage = "Failed because cannot successfully copy the model from the model URI." + r.explain(failedPods)
+					phDeployment.Status.Message = "Failed because cannot successfully copy the model from the model URI." + r.explain(failedPods)
 					return nil
 				}
 				if p.isImageError {
-					phDeployment.Status.Messsage = "Failed because of wrong image settings." + r.explain(failedPods)
+					phDeployment.Status.Message = "Failed because of wrong image settings." + r.explain(failedPods)
 					return nil
 				}
 				if p.isTerminated {
-					phDeployment.Status.Messsage = "Failed because of pod is terminated" + r.explain(failedPods)
+					phDeployment.Status.Message = "Failed because of pod is terminated" + r.explain(failedPods)
 					return nil
 				}
 				if p.isUnschedulable {
 					// even pod is unschedulable, deployment is still deploying, wait for scale down
-					phDeployment.Status.Messsage = "Certain pods unschedulable." + r.explain(failedPods)
+					phDeployment.Status.Message = "Certain pods unschedulable." + r.explain(failedPods)
 					return nil
 				}
 			}
 		}
 
-		phDeployment.Status.Messsage = "Deployment is being deployed and not available now"
+		phDeployment.Status.Message = "Deployment is being deployed and not available now"
 
 		return nil
 	} else {
 		phDeployment.Status.Phase = primehubv1alpha1.DeploymentDeployed
-		phDeployment.Status.Messsage = "Deployment is deployed and available now"
+		phDeployment.Status.Message = "Deployment is deployed and available now"
 		phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
 		phDeployment.Status.AvailableReplicas = int(deployment.Status.AvailableReplicas)
 
@@ -624,7 +625,7 @@ func (r *PhDeploymentReconciler) listFailedPods(ctx context.Context, phDeploymen
 
 			if s.Terminated != nil && s.Terminated.ExitCode != 0 {
 				// terminated and exit code is not 0
-				if c.Name == "model-storage-initializer" {
+				if c.Name == ModelStorageInitializerName {
 					result.isModelStorageInitError = true
 				}
 				result.isTerminated = true
@@ -824,7 +825,7 @@ func (r *PhDeploymentReconciler) buildDeployment(ctx context.Context, phDeployme
 		}
 
 		initContainers = append(initContainers, corev1.Container{
-			Name:                     "model-storage-initializer",
+			Name:                     ModelStorageInitializerName,
 			Image:                    r.ModelStorageInitializerImage,
 			ImagePullPolicy:          r.ModelStorageInitializerPullPolicy,
 			Args:                     []string{modelURI, "/mnt/models"},
