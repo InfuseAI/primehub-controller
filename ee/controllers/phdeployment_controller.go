@@ -831,6 +831,18 @@ func (r *PhDeploymentReconciler) buildDeployment(ctx context.Context, phDeployme
 			Args:                     []string{modelURI, "/mnt/models"},
 			VolumeMounts:             initContainersVolumeMount,
 			TerminationMessagePolicy: corev1.TerminationMessageFallbackToLogsOnError,
+			Env: []corev1.EnvVar{
+				// Workaround to bypass credential discovery in GCE
+				// https://app.clubhouse.io/infuseai/story/14009/cannot-download-files-of-model-uri-in-gke
+				{
+					Name:  "GCE_METADATA_IP",
+					Value: "127.0.0.1",
+				},
+				{
+					Name:  "GCE_METADATA_HOST",
+					Value: "127.0.0.1",
+				},
+			},
 		})
 		volumes = append(volumes, corev1.Volume{
 			Name: "model-storage",
