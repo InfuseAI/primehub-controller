@@ -107,16 +107,14 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	if err != nil {
 		logger.Error(err, "check Model Deployment By Group failed")
 		if err.Error() == "can not find group in response" {
+			r.releaseResources(ctx, phDeployment)
 			r.updateStatus(phDeployment, nil, true, "Group Not Found", nil)
 		} else {
 			r.updateStatus(phDeployment, nil, true, err.Error(), nil)
 		}
 	} else if enableModelDeployment == false {
 		// release the resources
-		r.deleteDeployment(ctx, getDeploymentKey(phDeployment))
-		r.deleteService(ctx, getServiceKey(phDeployment))
-		r.deleteIngress(ctx, getIngressKey(phDeployment))
-		r.deleteSecret(ctx, getSecretKey(phDeployment))
+		r.releaseResources(ctx, phDeployment)
 
 		// update the status to failed
 		r.updateStatus(phDeployment, nil, true, "The model deployment is not enabled for the selected group", nil)
@@ -174,6 +172,13 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	} else {
 		return ctrl.Result{RequeueAfter: 2 * time.Minute}, nil
 	}
+}
+
+func (r *PhDeploymentReconciler) releaseResources(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment) {
+	r.deleteDeployment(ctx, getDeploymentKey(phDeployment))
+	r.deleteService(ctx, getServiceKey(phDeployment))
+	r.deleteIngress(ctx, getIngressKey(phDeployment))
+	r.deleteSecret(ctx, getSecretKey(phDeployment))
 }
 
 func (r *PhDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
