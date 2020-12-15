@@ -446,7 +446,7 @@ func (r *PhDeploymentReconciler) updateStatus(phDeployment *primehubv1alpha1.PhD
 	failedPods []FailedPodStatus) error {
 
 	if phDeployment.Spec.Stop {
-		if deployment.Status.AvailableReplicas != 0 || deployment.Status.UpdatedReplicas != 0 {
+		if deployment != nil && (deployment.Status.AvailableReplicas != 0 || deployment.Status.UpdatedReplicas != 0) {
 			phDeployment.Status.Phase = primehubv1alpha1.DeploymentStopping
 			phDeployment.Status.Message = "deployment is stopping"
 			phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
@@ -465,7 +465,6 @@ func (r *PhDeploymentReconciler) updateStatus(phDeployment *primehubv1alpha1.PhD
 	// 2. fetch group modelDeployment flag from graphql failed
 	// 3. group modelDeployment is disabled
 	// the status should be failed.
-
 	if configurationError {
 		phDeployment.Status.Phase = primehubv1alpha1.DeploymentFailed
 		phDeployment.Status.Message = configurationErrorReason
