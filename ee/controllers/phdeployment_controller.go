@@ -107,16 +107,14 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	if err != nil {
 		logger.Error(err, "check Model Deployment By Group failed")
 		if err.Error() == "can not find group in response" {
+			r.releaseResources(ctx, phDeployment)
 			r.updateStatus(phDeployment, nil, true, "Group Not Found", nil)
 		} else {
 			r.updateStatus(phDeployment, nil, true, err.Error(), nil)
 		}
 	} else if enableModelDeployment == false {
 		// release the resources
-		r.deleteDeployment(ctx, getDeploymentKey(phDeployment))
-		r.deleteService(ctx, getServiceKey(phDeployment))
-		r.deleteIngress(ctx, getIngressKey(phDeployment))
-		r.deleteSecret(ctx, getSecretKey(phDeployment))
+		r.releaseResources(ctx, phDeployment)
 
 		// update the status to failed
 		r.updateStatus(phDeployment, nil, true, "The model deployment is not enabled for the selected group", nil)
@@ -174,6 +172,13 @@ func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	} else {
 		return ctrl.Result{RequeueAfter: 2 * time.Minute}, nil
 	}
+}
+
+func (r *PhDeploymentReconciler) releaseResources(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment) {
+	r.deleteDeployment(ctx, getDeploymentKey(phDeployment))
+	r.deleteService(ctx, getServiceKey(phDeployment))
+	r.deleteIngress(ctx, getIngressKey(phDeployment))
+	r.deleteSecret(ctx, getSecretKey(phDeployment))
 }
 
 func (r *PhDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -446,7 +451,7 @@ func (r *PhDeploymentReconciler) updateStatus(phDeployment *primehubv1alpha1.PhD
 	failedPods []FailedPodStatus) error {
 
 	if phDeployment.Spec.Stop {
-		if deployment.Status.AvailableReplicas != 0 || deployment.Status.UpdatedReplicas != 0 {
+		if deployment != nil && (deployment.Status.AvailableReplicas != 0 || deployment.Status.UpdatedReplicas != 0) {
 			phDeployment.Status.Phase = primehubv1alpha1.DeploymentStopping
 			phDeployment.Status.Message = "deployment is stopping"
 			phDeployment.Status.Replicas = phDeployment.Spec.Predictors[0].Replicas
@@ -465,7 +470,6 @@ func (r *PhDeploymentReconciler) updateStatus(phDeployment *primehubv1alpha1.PhD
 	// 2. fetch group modelDeployment flag from graphql failed
 	// 3. group modelDeployment is disabled
 	// the status should be failed.
-
 	if configurationError {
 		phDeployment.Status.Phase = primehubv1alpha1.DeploymentFailed
 		phDeployment.Status.Message = configurationErrorReason
