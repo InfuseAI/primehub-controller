@@ -12,11 +12,12 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	primehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
+
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	primehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
 )
 
 // ImageSpecJobReconciler reconciles a ImageSpecJob object
@@ -242,6 +243,10 @@ func (r *ImageSpecJobReconciler) buildPod(imageSpecJob primehubv1alpha1.ImageSpe
 						{
 							Name:  "TARGET_IMAGE",
 							Value: imageSpecJob.Spec.RepoPrefix + "/" + imageSpecJob.Spec.TargetImage,
+						},
+						{
+							Name:  "SKIP_TLS_VERIFY",
+							Value: viper.GetString("customImage.insecureSkipVerify"),
 						},
 					},
 					VolumeMounts: []corev1.VolumeMount{
