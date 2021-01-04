@@ -356,6 +356,7 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			if err := r.updatePhJobStatus(ctx, phJob); err != nil {
 				return ctrl.Result{RequeueAfter: errorCheckAfter}, err
 			}
+			r.GraphqlClient.NotifyPhJobEvent(phJob.Name, string(phJob.Status.Phase))
 		}
 		return ctrl.Result{}, nil
 	}
@@ -416,6 +417,7 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			if err := r.updatePhJobStatus(ctx, phJob); err != nil {
 				return ctrl.Result{RequeueAfter: errorCheckAfter}, err
 			}
+			r.GraphqlClient.NotifyPhJobEvent(phJob.Name, string(phJob.Status.Phase))
 		}
 
 		return ctrl.Result{RequeueAfter: nextCheck}, nil
@@ -542,6 +544,8 @@ func (r *PhJobReconciler) updateStatus(
 		if err := r.updatePhJobStatus(ctx, phJob); err != nil {
 			return err
 		}
+		r.GraphqlClient.NotifyPhJobEvent(phJob.Name, string(phJob.Status.Phase))
+
 		return nil
 	}
 
@@ -553,6 +557,7 @@ func (r *PhJobReconciler) updateStatus(
 		}
 		phJob.Status.Reason = primehubv1alpha1.JobReasonPodSucceeded
 		phJob.Status.Message = "Job completed"
+		r.GraphqlClient.NotifyPhJobEvent(phJob.Name, string(phJob.Status.Phase))
 	}
 
 	if pod.Status.Phase == corev1.PodFailed {
@@ -565,6 +570,7 @@ func (r *PhJobReconciler) updateStatus(
 			phJob.Status.Reason = primehubv1alpha1.JobReasonPodFailed
 			phJob.Status.Message = "Job failed due to " + pod.Status.ContainerStatuses[0].State.Terminated.Reason + ": " + pod.Status.ContainerStatuses[0].State.Terminated.Message
 		}
+		r.GraphqlClient.NotifyPhJobEvent(phJob.Name, string(phJob.Status.Phase))
 	}
 
 	if pod.Status.Phase == corev1.PodUnknown {
@@ -577,6 +583,7 @@ func (r *PhJobReconciler) updateStatus(
 			phJob.Status.Reason = primehubv1alpha1.JobReasonPodUnknown
 			phJob.Status.Message = "[" + pod.Status.Conditions[0].Reason + "] " + pod.Status.Conditions[0].Message
 		}
+		r.GraphqlClient.NotifyPhJobEvent(phJob.Name, string(phJob.Status.Phase))
 	}
 
 	if pod.Status.Phase == corev1.PodPending {

@@ -154,6 +154,7 @@ type AbstractGraphqlClient interface {
 	FetchGroupInfo(string) (*DtoGroup, error)
 	FetchInstanceTypeInfo(string) (*DtoInstanceType, error)
 	FetchTimeZone() (string, error)
+	NotifyPhJobEvent(id string, eventType string) (float64, error)
 }
 
 type GraphqlClient struct {
@@ -463,4 +464,41 @@ func (c GraphqlClient) FetchTimeZone() (string, error) {
 	}
 
 	return _timezone["name"].(string), nil
+}
+
+// NotifyPhJobEvent to send to the graphql
+func (c GraphqlClient) NotifyPhJobEvent(id string, eventType string) (float64, error) {
+
+	query := `
+	mutation ($data: PhJobNotifyEventInput!) {
+		notifyPhJobEvent (data: $data)
+	}
+	`
+	requestData := map[string]interface{}{
+		"query": query,
+		"variables": map[string]interface{}{
+			"data": map[string]interface{}{
+				"id":   id,
+				"type": eventType,
+			},
+		},
+	}
+
+	body, err := c.QueryServer(requestData)
+	if err != nil {
+		return 1, err
+	}
+	data := map[string]interface{}{}
+	json.Unmarshal(body, &data)
+
+	data, ok := data["data"].(map[string]interface{})
+	if !ok {
+		return 1, errors.New("can not find data in response")
+	}
+
+	if data["notifyPhJobEvent"] == nil {
+		return 1, errors.New("there is no notifyPhJobEvent in response")
+	}
+
+	return data["notifyPhJobEvent"].(float64), nil
 }
