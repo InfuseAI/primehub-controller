@@ -4,6 +4,8 @@
 
 - Install Go ~> 1.12.5
 
+- Install kubebuilder 2.2.0, see [kubebuilder installation](https://book.kubebuilder.io/quick-start.html#installation)
+
 - Install PrimeHub, see [PrimeHub INSTALL.md](https://github.com/InfuseAI/primehub/blob/master/INSTALL.md)
 
 ## Configuration
