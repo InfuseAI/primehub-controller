@@ -53,8 +53,8 @@ func (r *LicenseReconciler) buildSecret(status *primehubv1alpha1.LicenseStatus) 
 
 		var value string
 		switch v := untypedValue.(type) {
-		case int:
-			value = strconv.Itoa(v)
+		case *int:
+			value = strconv.Itoa(*v)
 		case string:
 			value = v
 		default:
@@ -97,8 +97,9 @@ func (r *LicenseReconciler) generateStatus(content map[string]string) (status pr
 	status.LicensedTo = content["licensed_to"]
 	status.StartedAt = content["started_at"]
 	status.ExpiredAt = content["expired_at"]
-	status.MaxGroup, _ = strconv.Atoi(content["max_group"])
-	status.MaxNode, _ = strconv.Atoi(content["max_node"])
+	status.MaxGroup = getIntField(content, "max_group", -1)
+	status.MaxNode = getIntField(content, "max_node", -1)
+	status.MaxModelDeploy = getIntField(content, "max_model_deploy", 0)
 	return
 }
 
@@ -223,4 +224,14 @@ func (r *LicenseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&primehubv1alpha1.License{}).
 		Owns(&corev1.Secret{}).
 		Complete(r)
+}
+
+func getIntField(content map[string]string, key string, defaultValue int) *int {
+	value := new(int)
+	if v, ok := content[key]; ok {
+		*value, _ = strconv.Atoi(v)
+	} else {
+		*value = defaultValue
+	}
+	return value
 }

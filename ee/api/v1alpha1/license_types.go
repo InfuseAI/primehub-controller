@@ -20,13 +20,14 @@ type LicenseStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	Expired    string `json:"expired,omitempty"`
-	Reason     string `json:"reason,omitempty"`
-	LicensedTo string `json:"licensed_to,omitempty"`
-	StartedAt  string `json:"started_at,omitempty"`
-	ExpiredAt  string `json:"expired_at,omitempty"`
-	MaxGroup   int    `json:"max_group"`
-	MaxNode    int    `json:"max_node,omitempty"`
+	Expired        string `json:"expired,omitempty"`
+	Reason         string `json:"reason,omitempty"`
+	LicensedTo     string `json:"licensed_to,omitempty"`
+	StartedAt      string `json:"started_at,omitempty"`
+	ExpiredAt      string `json:"expired_at,omitempty"`
+	MaxGroup       *int   `json:"max_group,omitempty"`
+	MaxNode        *int   `json:"max_node,omitempty"`
+	MaxModelDeploy *int   `json:"max_model_deploy,omitempty"`
 }
 
 // +kubebuilder:subresource:status
