@@ -9,17 +9,6 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - jobs
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
   - pods
   verbs:
   - create
@@ -28,3 +17,43 @@ rules:
   - list
   - update
   - watch
+- apiGroups:
+  - primehub.io
+  resources:
+  - imagespecjobs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - primehub.io
+  resources:
+  - imagespecjobs/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - primehub.io
+  resources:
+  - imagespecs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - primehub.io
+  resources:
+  - imagespecs/status
+  verbs:
+  - get
+  - patch
+  - update

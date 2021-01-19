@@ -3,7 +3,8 @@ package controllers
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
+	"primehub-controller/api/v1alpha1"
+	"primehub-controller/pkg/random"
 	"text/template"
 
 	"github.com/go-logr/logr"
@@ -11,8 +12,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	primehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -37,7 +36,7 @@ func (r *ImageSpecJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	ctx := context.Background()
 	log := r.Log.WithValues("imagespecjob", req.NamespacedName)
 
-	var imageSpecJob primehubv1alpha1.ImageSpecJob
+	var imageSpecJob v1alpha1.ImageSpecJob
 	if err := r.Get(ctx, req.NamespacedName, &imageSpecJob); err != nil {
 		if ignoreNotFound(err) != nil {
 			log.Error(err, "unable to fetch ImageSpecJob")
@@ -55,7 +54,7 @@ func (r *ImageSpecJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	if imageSpecJobClone.Status.PodName != "" {
 		podName = imageSpecJobClone.Status.PodName
 	} else {
-		hash, err := generateRandomString(4)
+		hash, err := random.GenerateRandomString(4)
 		if err != nil {
 			log.Error(err, "unable to generate random string for pod name")
 			return ctrl.Result{}, err
@@ -126,12 +125,12 @@ func (r *ImageSpecJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 
 func (r *ImageSpecJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&primehubv1alpha1.ImageSpecJob{}).
+		For(&v1alpha1.ImageSpecJob{}).
 		Owns(&corev1.Pod{}).
 		Complete(r)
 }
 
-func generateDockerfile(imageSpecJob primehubv1alpha1.ImageSpecJob) string {
+func generateDockerfile(imageSpecJob v1alpha1.ImageSpecJob) string {
 	dockerfileTmpl := `FROM {{ .BaseImage }}
 
 USER root
@@ -168,38 +167,7 @@ RUN pip install --no-cache-dir
 	return res.String()
 }
 
-// GenerateRandomBytes returns securely generated random bytes.
-// It will return an error if the system's secure random
-// number generator fails to function correctly, in which
-// case the caller should not continue.
-func generateRandomBytes(n int) ([]byte, error) {
-	b := make([]byte, n)
-	_, err := rand.Read(b)
-	// Note that err == nil only if we read len(b) bytes.
-	if err != nil {
-		return nil, err
-	}
-
-	return b, nil
-}
-
-// GenerateRandomString returns a securely generated random string.
-// It will return an error if the system's secure random
-// number generator fails to function correctly, in which
-// case the caller should not continue.
-func generateRandomString(n int) (string, error) {
-	const letters = "0123456789abcdefghijklmnopqrstuvwxyz"
-	bytes, err := generateRandomBytes(n)
-	if err != nil {
-		return "", err
-	}
-	for i, b := range bytes {
-		bytes[i] = letters[b%byte(len(letters))]
-	}
-	return string(bytes), nil
-}
-
-func (r *ImageSpecJobReconciler) buildPod(imageSpecJob primehubv1alpha1.ImageSpecJob, podName string, dockerfile string) *corev1.Pod {
+func (r *ImageSpecJobReconciler) buildPod(imageSpecJob v1alpha1.ImageSpecJob, podName string, dockerfile string) *corev1.Pod {
 	containerName := "build-and-push"
 	containerImage := "quay.io/buildah/stable:v1.11.3"
 	privileged := true

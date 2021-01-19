@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	corev1 "k8s.io/api/core/v1"
+	"primehub-controller/api/v1alpha1"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -16,7 +17,6 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	primehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
 )
 
 const (
@@ -48,7 +48,7 @@ func (r *ImageSpecReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, err
 	}
 
-	var imageSpec primehubv1alpha1.ImageSpec
+	var imageSpec v1alpha1.ImageSpec
 	if err := r.Get(ctx, req.NamespacedName, &imageSpec); err != nil {
 		if ignoreNotFound(err) != nil {
 			log.Error(err, "unable to fetch ImageSpec")
@@ -80,7 +80,7 @@ func (r *ImageSpecReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	log.Info("Computed hash:", "hash", hash)
 
-	imageSpecJob := primehubv1alpha1.ImageSpecJob{}
+	imageSpecJob := v1alpha1.ImageSpecJob{}
 	name := imageSpec.ObjectMeta.Name + "-" + hash
 	err := r.Get(ctx, client.ObjectKey{Namespace: imageSpec.Namespace, Name: name}, &imageSpecJob)
 	if apierrors.IsNotFound(err) {
@@ -147,15 +147,15 @@ func checkPushSecret(r *ImageSpecReconciler, ctx context.Context, req ctrl.Reque
 
 func (r *ImageSpecReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&primehubv1alpha1.ImageSpec{}).
-		Owns(&primehubv1alpha1.ImageSpecJob{}).
+		For(&v1alpha1.ImageSpec{}).
+		Owns(&v1alpha1.ImageSpecJob{}).
 		Complete(r)
 }
 
-func buildImageSpecJob(imageSpec primehubv1alpha1.ImageSpec, hash string) *primehubv1alpha1.ImageSpecJob {
+func buildImageSpecJob(imageSpec v1alpha1.ImageSpec, hash string) *v1alpha1.ImageSpecJob {
 	pushSecretName := viper.GetString("customImage.pushSecretName")
 	repoPrefix := viper.GetString("customImage.pushRepoPrefix")
-	imageSpecJob := primehubv1alpha1.ImageSpecJob{
+	imageSpecJob := v1alpha1.ImageSpecJob{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        imageSpec.ObjectMeta.Name + "-" + hash,
 			Namespace:   imageSpec.Namespace,
@@ -165,7 +165,7 @@ func buildImageSpecJob(imageSpec primehubv1alpha1.ImageSpec, hash string) *prime
 				"app":                         "primehub-custom-image",
 			},
 		},
-		Spec: primehubv1alpha1.ImageSpecJobSpec{
+		Spec: v1alpha1.ImageSpecJobSpec{
 			BaseImage:   imageSpec.Spec.BaseImage,
 			PullSecret:  imageSpec.Spec.PullSecret,
 			Packages:    imageSpec.Spec.Packages,
@@ -179,7 +179,7 @@ func buildImageSpecJob(imageSpec primehubv1alpha1.ImageSpec, hash string) *prime
 	return &imageSpecJob
 }
 
-func computeHash(imageSpec primehubv1alpha1.ImageSpec) string {
+func computeHash(imageSpec v1alpha1.ImageSpec) string {
 	var s []string
 	s = append(s, imageSpec.Spec.BaseImage)
 	if len(imageSpec.Spec.Packages.Apt) > 0 {

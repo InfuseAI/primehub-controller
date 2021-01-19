@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"primehub-controller/api/v1alpha1"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -14,10 +15,7 @@ import (
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	// +kubebuilder:scaffold:imports
-
-	primehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
 )
 
 var _ = Context("Inside of a new namespace", func() {
@@ -64,14 +62,14 @@ var _ = Context("Inside of a new namespace", func() {
 		It("should not create a new ImageSpecJob resource after a new ImageSpec was created", func() {
 
 			now := metav1.Now()
-			imageSpec := &primehubv1alpha1.ImageSpec{
+			imageSpec := &v1alpha1.ImageSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "testresource",
 					Namespace: ns.Name,
 				},
-				Spec: primehubv1alpha1.ImageSpecSpec{
+				Spec: v1alpha1.ImageSpecSpec{
 					BaseImage: "jupyter/base-notebook",
-					Packages: primehubv1alpha1.ImageSpecSpecPackages{
+					Packages: v1alpha1.ImageSpecSpecPackages{
 						Apt:   []string{"curl"},
 						Pip:   []string{},
 						Conda: []string{},
@@ -82,7 +80,7 @@ var _ = Context("Inside of a new namespace", func() {
 
 			err := k8sClient.Create(ctx, imageSpec)
 			Expect(err).NotTo(HaveOccurred(), "failed to create test ImageSpec resource")
-			job := &primehubv1alpha1.ImageSpecJob{}
+			job := &v1alpha1.ImageSpecJob{}
 
 			Consistently(
 				func() metav1.StatusReason {
@@ -111,14 +109,14 @@ var _ = Context("Inside of a new namespace", func() {
 			}
 			viper.Set("customImage.pushSecretName", secretName)
 
-			imageSpec := &primehubv1alpha1.ImageSpec{
+			imageSpec := &v1alpha1.ImageSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "testresource",
 					Namespace: ns.Name,
 				},
-				Spec: primehubv1alpha1.ImageSpecSpec{
+				Spec: v1alpha1.ImageSpecSpec{
 					BaseImage: "jupyter/base-notebook",
-					Packages: primehubv1alpha1.ImageSpecSpecPackages{
+					Packages: v1alpha1.ImageSpecSpecPackages{
 						Apt:   []string{"curl"},
 						Pip:   []string{},
 						Conda: []string{},
@@ -130,7 +128,7 @@ var _ = Context("Inside of a new namespace", func() {
 			err := k8sClient.Create(ctx, secret)
 			err = k8sClient.Create(ctx, imageSpec)
 			Expect(err).NotTo(HaveOccurred(), "failed to create test ImageSpec resource")
-			job := &primehubv1alpha1.ImageSpecJob{}
+			job := &v1alpha1.ImageSpecJob{}
 
 			Eventually(
 				getResourceFunc(ctx, client.ObjectKey{Name: imageSpec.Name + "-96ff7925", Namespace: imageSpec.Namespace}, job),

@@ -2,8 +2,13 @@ package main
 
 import (
 	"flag"
+	"fmt"
+	"github.com/spf13/viper"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"os"
 	primehubv1alpha1 "primehub-controller/api/v1alpha1"
+	"primehub-controller/controllers"
+	"strings"
 
 	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -59,6 +64,8 @@ func main() {
 		o.Level = &l
 	}))
 
+	loadConfig()
+
 	stopChan := ctrl.SetupSignalHandler()
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
@@ -74,9 +81,74 @@ func main() {
 
 	// +kubebuilder:scaffold:builder
 
+	if err = (&controllers.ImageSpecReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("ImageSpec"),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ImageSpec")
+		os.Exit(1)
+	}
+	if err = (&controllers.ImageSpecJobReconciler{
+		Client:           mgr.GetClient(),
+		Log:              ctrl.Log.WithName("controllers").WithName("ImageSpecJob"),
+		Scheme:           mgr.GetScheme(),
+		EphemeralStorage: resource.MustParse(viper.GetString("customImage.buildJob.ephemeralStorage")),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ImageSpecJob")
+		os.Exit(1)
+	}
+
 	setupLog.Info("starting manager")
 	if err := mgr.Start(stopChan); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
+	}
+}
+
+func loadConfig() {
+	viper.AutomaticEnv()
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	viper.SetConfigName("config")
+	viper.SetConfigType("yaml")
+	viper.AddConfigPath("/etc/primehub-controller/") // path to look for the config file in
+	viper.AddConfigPath(".")                         // optionally look for config in the working directory
+	err := viper.ReadInConfig()                      // Find and read the config file
+	if err != nil {                                  // Handle errors reading the config file
+		panic(fmt.Errorf("Fatal error config file: %s \n", err))
+	}
+
+	configs := []string{
+		"customImage.pushSecretName",
+	}
+	for _, config := range configs {
+		if viper.GetString(config) == "" {
+			panic(config + " is required in config.yaml")
+		}
+	}
+
+	customImageDefaultEphemeralStorage := "30Gi"
+	viper.SetDefault("customImage.buildJob.ephemeralStorage", customImageDefaultEphemeralStorage)
+	// Check customImage.buildJob.ephemeralStorage
+	if _, err := resource.ParseQuantity(viper.GetString("customImage.buildJob.ephemeralStorage")); err != nil {
+		setupLog.Info("cannot parse customImage.buildJob.ephemeralStorage, use default value")
+		viper.Set("customImage.buildJob.ephemeralStorage", customImageDefaultEphemeralStorage)
+	}
+
+	// Check customImage.buildJob.resources
+	resourceNames := []string{"cpu", "memory"}
+	if len(viper.GetStringMap("customImage.buildJob.resources.requests")) > 0 {
+		for _, resourceName := range resourceNames {
+			if _, err := resource.ParseQuantity(viper.GetString("customImage.buildJob.resources.requests." + resourceName)); err != nil {
+				panic(fmt.Errorf("cannot parse customImage.buildJob.resources.requests.%s: %v", resourceName, err))
+			}
+		}
+	}
+	if len(viper.GetStringMap("customImage.buildJob.resources.limits")) > 0 {
+		for _, resourceName := range resourceNames {
+			if _, err := resource.ParseQuantity(viper.GetString("customImage.buildJob.resources.limits." + resourceName)); err != nil {
+				panic(fmt.Errorf("cannot parse customImage.buildJob.resources.limits.%s: %v", resourceName, err))
+			}
+		}
 	}
 }
