@@ -57,6 +57,9 @@ jobs:
           name: Unit tests
           no_output_timeout: 40m
           command: |
+            cd ~/primehub-controller
+            make generate
+            cd -
             make test
             go tool cover -html=cover.out -o coverage.html
             mkdir -p /tmp/artifacts
