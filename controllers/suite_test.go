@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"context"
 	"math/rand"
 	"path/filepath"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -18,7 +20,7 @@ import (
 
 	// +kubebuilder:scaffold:imports
 
-	primehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
+	primehubv1alpha1 "primehub-controller/api/v1alpha1"
 )
 
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
@@ -73,4 +75,18 @@ var _ = AfterSuite(func() {
 
 func init() {
 	rand.Seed(time.Now().UnixNano())
+}
+
+func getResourceFunc(ctx context.Context, key client.ObjectKey, obj runtime.Object) func() error {
+	return func() error {
+		return k8sClient.Get(ctx, key, obj)
+	}
+}
+
+func randStringRunes(n int) string {
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = letterRunes[rand.Intn(len(letterRunes))]
+	}
+	return string(b)
 }

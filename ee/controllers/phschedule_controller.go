@@ -11,9 +11,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	primehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
-	"primehub-controller/pkg/graphql"
-
 	"primehub-controller/pkg/escapism"
+	"primehub-controller/pkg/graphql"
+	"primehub-controller/pkg/random"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -39,7 +39,7 @@ func (r *PhScheduleReconciler) buildPhJob(phSchedule *primehubv1alpha1.PhSchedul
 
 	t := time.Now().UTC() // generate job name with timestamp based on UTC
 
-	hash, err := generateRandomString(6)
+	hash, err := random.GenerateRandomString(6)
 	phJobName := "job-" + t.Format("200601021504") + "-" + hash
 
 	phJob := &primehubv1alpha1.PhJob{
