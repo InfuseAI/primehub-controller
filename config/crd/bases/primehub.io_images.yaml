@@ -34,13 +34,74 @@ spec:
         spec:
           description: ImageSpec defines the desired state of Image
           properties:
-            foo:
-              description: Foo is an example field of Image. Edit Image_types.go to
-                remove/update
+            description:
+              type: string
+            displayName:
+              type: string
+            groupName:
+              type: string
+            imageSpec:
+              properties:
+                baseImage:
+                  type: string
+                cancel:
+                  type: boolean
+                packages:
+                  properties:
+                    apt:
+                      items:
+                        type: string
+                      type: array
+                    conda:
+                      items:
+                        type: string
+                      type: array
+                    pip:
+                      items:
+                        type: string
+                      type: array
+                  type: object
+                pullSecret:
+                  type: string
+                updateTime:
+                  format: date-time
+                  type: string
+              required:
+              - baseImage
+              type: object
+            pullSecret:
+              type: string
+            type:
+              type: string
+            url:
+              type: string
+            urlForGpu:
               type: string
           type: object
         status:
           description: ImageStatus defines the observed state of Image
+          properties:
+            jobCondition:
+              description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
+                of cluster Important: Run "make" to regenerate code after modifying
+                this file'
+              properties:
+                image:
+                  type: string
+                jobName:
+                  type: string
+                phase:
+                  description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
+                    of cluster Important: Run "make" to regenerate code after modifying
+                    this file'
+                  type: string
+              required:
+              - image
+              - jobName
+              - phase
+              type: object
+          required:
+          - jobCondition
           type: object
       type: object
   version: v1alpha1
