@@ -22,6 +22,7 @@ import (
 const (
 	CustomImageJobStatusSucceeded = "Succeeded"
 	CustomImageJobStatusCanceled  = "Canceled"
+	CustomImageJobStatusFailed    = "Failed"
 )
 
 // ImageSpecReconciler reconciles a ImageSpec object

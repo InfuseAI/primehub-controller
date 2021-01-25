@@ -32,19 +32,38 @@ const (
 )
 
 func makeImageControllerAction(r *ImageReconciler, ctx context.Context, image *v1alpha1.Image) (ImageSpecJobAction, *v1alpha1.ImageSpecJob) {
-	if image.Spec.ImageSpec.BaseImage != "" {
+	if image != nil && image.Spec.ImageSpec.BaseImage != "" {
+		// Get ImageSpecJob by Image
 		imageSpecJob := &v1alpha1.ImageSpecJob{}
 		imageSpecJobName := getImageSpecJobName(image)
 		err := r.Get(ctx, client.ObjectKey{Namespace: image.Namespace, Name: imageSpecJobName}, imageSpecJob)
+
+		// Create if no ImageSpecJob found
 		if apierrors.IsNotFound(err) && image.Spec.ImageSpec.Cancel == false {
 			return create, nil
 		}
+
+		// Cancel if cancel flag is marked in Image
 		if image.Spec.ImageSpec.Cancel == true && image.Status.JobCondiction.Phase != CustomImageJobStatusCanceled {
 			return cancel, imageSpecJob
+		}
+
+		// Rebuild if image phase was succeed or failed and image.updateTime after imageSpecJob.updateTime
+		phase := image.Status.JobCondiction.Phase
+		if (phase == CustomImageJobStatusSucceeded || phase == CustomImageJobStatusFailed) &&
+			image.Spec.ImageSpec.UpdateTime.After(imageSpecJob.Spec.UpdateTime.Time) {
+			return rebuild, nil
 		}
 		return update, imageSpecJob
 	}
 	return unknown, nil
+}
+
+func isImageCustomBuild(image *v1alpha1.Image) bool {
+	if image == nil || image.Spec.ImageSpec.BaseImage == "" {
+		return false
+	}
+	return true
 }
 
 func getImageSpecJobName(image *v1alpha1.Image) string {
@@ -58,8 +77,8 @@ func getImageSpecJobName(image *v1alpha1.Image) string {
 }
 
 func createImageSpecJob(r *ImageReconciler, ctx context.Context, image *v1alpha1.Image) error {
-	if image == nil {
-		return fmt.Errorf("creiateImageSpecJob do not provide image")
+	if isImageCustomBuild(image) == false {
+		return fmt.Errorf("creiateImageSpecJob do not provide correct image")
 	}
 
 	pushSecretName := viper.GetString("customImage.pushSecretName")
@@ -100,11 +119,11 @@ func createImageSpecJob(r *ImageReconciler, ctx context.Context, image *v1alpha1
 }
 
 func cancelImageSpecJob(r *ImageReconciler, ctx context.Context, image *v1alpha1.Image, imageSpecJob *v1alpha1.ImageSpecJob) error {
-	if image == nil {
-		return fmt.Errorf("cancelImageSpecJob do not provide image")
+	if isImageCustomBuild(image) {
+		return fmt.Errorf("cancelImageSpecJob do not provide correct image")
 	}
 	if imageSpecJob == nil {
-		return fmt.Errorf("cancelImageSpecJob do not provide imageSpecJob")
+		return fmt.Errorf("cancelImageSpecJob do not provide correct imageSpecJob")
 	}
 
 	if err := r.Delete(ctx, imageSpecJob, client.PropagationPolicy(metav1.DeletePropagationBackground)); err != nil {
@@ -121,9 +140,25 @@ func cancelImageSpecJob(r *ImageReconciler, ctx context.Context, image *v1alpha1
 	return nil
 }
 
+func rebuildImageSpecJob(r *ImageReconciler, ctx context.Context, image *v1alpha1.Image, imageSpecJob *v1alpha1.ImageSpecJob) error {
+	if isImageCustomBuild(image) {
+		return fmt.Errorf("rebuildImageSpecJob do not provide correct image")
+	}
+
+	// Delete the previous imageSpecJob before rebuild it
+	if imageSpecJob != nil {
+		err := r.Delete(ctx, imageSpecJob, client.PropagationPolicy(metav1.DeletePropagationBackground))
+		if err != nil {
+			return err
+		}
+	}
+
+	return createImageSpecJob(r, ctx, image)
+}
+
 func updateImageStatus(r *ImageReconciler, ctx context.Context, image *v1alpha1.Image, imageSpecJob *v1alpha1.ImageSpecJob) error {
-	if image == nil {
-		return fmt.Errorf("updateImage do not provide image")
+	if isImageCustomBuild(image) {
+		return fmt.Errorf("updateImage do not provide correct image")
 	}
 
 	if imageSpecJob != nil {
@@ -177,6 +212,12 @@ func (r *ImageReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	case cancel:
 		log.Info("Cancel ImageSpecJob")
 		err := cancelImageSpecJob(r, ctx, &image, imageSpecJob)
+		if err != nil {
+			return ctrl.Result{}, nil
+		}
+	case rebuild:
+		log.Info("Rebuild ImageSpecJop")
+		err := rebuildImageSpecJob(r, ctx, &image, imageSpecJob)
 		if err != nil {
 			return ctrl.Result{}, nil
 		}
