@@ -52,8 +52,10 @@ func makeImageControllerAction(r *ImageReconciler, ctx context.Context, image *v
 		phase := image.Status.JobCondiction.Phase
 		if (phase == CustomImageJobStatusSucceeded || phase == CustomImageJobStatusFailed) &&
 			image.Spec.ImageSpec.UpdateTime.After(imageSpecJob.Spec.UpdateTime.Time) {
-			return rebuild, nil
+			return rebuild, imageSpecJob
 		}
+
+		// Update if imageSpecJob exist
 		return update, imageSpecJob
 	}
 	return unknown, nil
@@ -77,7 +79,7 @@ func getImageSpecJobName(image *v1alpha1.Image) string {
 }
 
 func createImageSpecJob(r *ImageReconciler, ctx context.Context, image *v1alpha1.Image) error {
-	if isImageCustomBuild(image) == false {
+	if !isImageCustomBuild(image) {
 		return fmt.Errorf("creiateImageSpecJob do not provide correct image")
 	}
 
@@ -119,7 +121,7 @@ func createImageSpecJob(r *ImageReconciler, ctx context.Context, image *v1alpha1
 }
 
 func cancelImageSpecJob(r *ImageReconciler, ctx context.Context, image *v1alpha1.Image, imageSpecJob *v1alpha1.ImageSpecJob) error {
-	if isImageCustomBuild(image) {
+	if !isImageCustomBuild(image) {
 		return fmt.Errorf("cancelImageSpecJob do not provide correct image")
 	}
 	if imageSpecJob == nil {
@@ -141,7 +143,7 @@ func cancelImageSpecJob(r *ImageReconciler, ctx context.Context, image *v1alpha1
 }
 
 func rebuildImageSpecJob(r *ImageReconciler, ctx context.Context, image *v1alpha1.Image, imageSpecJob *v1alpha1.ImageSpecJob) error {
-	if isImageCustomBuild(image) {
+	if !isImageCustomBuild(image) {
 		return fmt.Errorf("rebuildImageSpecJob do not provide correct image")
 	}
 
@@ -157,7 +159,7 @@ func rebuildImageSpecJob(r *ImageReconciler, ctx context.Context, image *v1alpha
 }
 
 func updateImageStatus(r *ImageReconciler, ctx context.Context, image *v1alpha1.Image, imageSpecJob *v1alpha1.ImageSpecJob) error {
-	if isImageCustomBuild(image) {
+	if !isImageCustomBuild(image) {
 		return fmt.Errorf("updateImage do not provide correct image")
 	}
 
@@ -169,6 +171,7 @@ func updateImageStatus(r *ImageReconciler, ctx context.Context, image *v1alpha1.
 			url := imageSpecJob.Spec.RepoPrefix + "/" + imageSpecJob.Spec.TargetImage
 			imageClone.Status.JobCondiction.Image = url
 			imageClone.Spec.Url = url
+			imageClone.Spec.PullSecret = imageSpecJob.Spec.PushSecret
 		}
 		if err := r.Update(ctx, imageClone); err != nil {
 			return err
