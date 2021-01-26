@@ -726,7 +726,7 @@ func Test_makeImageControllerAction(t *testing.T) {
 				image: rebuildCustomImage,
 			},
 			action:       rebuild,
-			imageSpecJob: nil,
+			imageSpecJob: mockRebuildImageSpecJob,
 		},
 		{
 			name: "Update Custom Image when ImageSpecJob Created",
