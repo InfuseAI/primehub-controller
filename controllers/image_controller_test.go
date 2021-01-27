@@ -429,7 +429,7 @@ func Test_updateImageStatus(t *testing.T) {
 				t.Errorf("updateImageStatus() phase = %v, wantPhase %v", updatedImage.Status.JobCondiction.Phase, tt.wantPhase)
 			}
 
-			if tt.wantURL != "" && tt.wantURL != updatedImage.Spec.Url {
+			if tt.wantURL != "" && tt.wantURL != updatedImage.Spec.Url && tt.wantURL != updatedImage.Spec.UrlForGpu {
 				t.Errorf("updateImageStatus() URL = %v, wantURL %v", updatedImage.Spec.Url, tt.wantURL)
 			}
 

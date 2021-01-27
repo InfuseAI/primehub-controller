@@ -94,9 +94,8 @@ func createImageSpecJob(r *ImageReconciler, ctx context.Context, image *v1alpha1
 			Namespace:   image.Namespace,
 			Annotations: map[string]string{"image.primehub.io/hash": hash},
 			Labels: map[string]string{
-				"image.primehub.io/name":  image.ObjectMeta.Name,
-				"image.primehub.io/group": image.Spec.GroupName,
-				"app":                     "primehub-custom-group-image",
+				"image.primehub.io/name": image.ObjectMeta.Name,
+				"app":                    "primehub-image",
 			},
 		},
 		Spec: v1alpha1.ImageSpecJobSpec{
@@ -171,6 +170,7 @@ func updateImageStatus(r *ImageReconciler, ctx context.Context, image *v1alpha1.
 			url := imageSpecJob.Spec.RepoPrefix + "/" + imageSpecJob.Spec.TargetImage
 			imageClone.Status.JobCondiction.Image = url
 			imageClone.Spec.Url = url
+			imageClone.Spec.UrlForGpu = url
 			imageClone.Spec.PullSecret = imageSpecJob.Spec.PushSecret
 		}
 		if err := r.Update(ctx, imageClone); err != nil {
