@@ -29,6 +29,7 @@ const (
 	cancel
 	rebuild
 	update
+	skip
 )
 
 func makeImageControllerAction(r *ImageReconciler, ctx context.Context, image *v1alpha1.Image) (ImageSpecJobAction, *v1alpha1.ImageSpecJob) {
@@ -39,8 +40,11 @@ func makeImageControllerAction(r *ImageReconciler, ctx context.Context, image *v
 		err := r.Get(ctx, client.ObjectKey{Namespace: image.Namespace, Name: imageSpecJobName}, imageSpecJob)
 
 		// Create if no ImageSpecJob found
-		if apierrors.IsNotFound(err) && image.Spec.ImageSpec.Cancel == false {
-			return create, nil
+		if apierrors.IsNotFound(err) {
+			if image.Spec.ImageSpec.Cancel == false {
+				return create, nil
+			}
+			return skip, nil
 		}
 
 		// Cancel if cancel flag is marked in Image
@@ -49,9 +53,7 @@ func makeImageControllerAction(r *ImageReconciler, ctx context.Context, image *v
 		}
 
 		// Rebuild if image phase was succeed or failed and image.updateTime after imageSpecJob.updateTime
-		phase := image.Status.JobCondiction.Phase
-		if (phase == CustomImageJobStatusSucceeded || phase == CustomImageJobStatusFailed) &&
-			image.Spec.ImageSpec.UpdateTime.After(imageSpecJob.Spec.UpdateTime.Time) {
+		if image.Spec.ImageSpec.UpdateTime.After(imageSpecJob.Spec.UpdateTime.Time) {
 			return rebuild, imageSpecJob
 		}
 
@@ -231,7 +233,7 @@ func (r *ImageReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			return ctrl.Result{}, err
 		}
 	default:
-		log.Info("Unknown action")
+		log.Info("Skip action")
 	}
 
 	return ctrl.Result{}, nil

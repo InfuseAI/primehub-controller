@@ -684,12 +684,43 @@ func Test_makeImageControllerAction(t *testing.T) {
 		},
 	}
 
+	// For Skip test case
+	name = "canceled-custom-image"
+	namespace = "hub"
+	canceledCustomImage := &v1alpha1.Image{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Spec: v1alpha1.ImageCrdSpec{
+			Url:         "",
+			UrlForGpu:   "",
+			Type:        "cpu",
+			DisplayName: name,
+			Description: name,
+			PullSecret:  "",
+			GroupName:   "",
+			ImageSpec: v1alpha1.ImageCrdSpecImageSpec{
+				BaseImage:  "unit-test/base-image",
+				PullSecret: "",
+				Packages:   v1alpha1.ImageSpecSpecPackages{},
+				UpdateTime: &metav1.Time{Time: imageCreateTime},
+				Cancel:     true,
+			},
+		},
+		Status: v1alpha1.ImageStatus{
+			JobCondiction: v1alpha1.ImageSpecStatus{
+				Phase:   CustomImageJobStatusCanceled,
+				JobName: name,
+				Image:   "unit-test/base-image:1234",
+			},
+		},
+	}
+
 	// For fake client
 	fakeClientForCreate := fake.NewFakeClientWithScheme(scheme)
 	fakeClientForCancel := fake.NewFakeClientWithScheme(scheme, []runtime.Object{mockCancelImageSpecJob}...)
 	fakeClientForRebuild := fake.NewFakeClientWithScheme(scheme, []runtime.Object{mockRebuildImageSpecJob}...)
 	fakeClientForUpdate := fake.NewFakeClientWithScheme(scheme, []runtime.Object{mockUpdateImageSpecJob}...)
 	fakeClientForUnknown := fake.NewFakeClientWithScheme(scheme)
+	fakeClientForSkip := fake.NewFakeClientWithScheme(scheme)
 
 	type args struct {
 		r     *ImageReconciler
@@ -744,6 +775,15 @@ func Test_makeImageControllerAction(t *testing.T) {
 				image: noCustomImage,
 			},
 			action:       unknown,
+			imageSpecJob: nil,
+		},
+		{
+			name: "Skip Action when image had been canceled",
+			args: args{
+				r:     &ImageReconciler{fakeClientForSkip, logger, scheme},
+				image: canceledCustomImage,
+			},
+			action:       skip,
 			imageSpecJob: nil,
 		},
 	}
@@ -910,6 +950,15 @@ func TestImageReconciler_Reconcile(t *testing.T) {
 		err = r.Get(ctx, client.ObjectKey{Name: updatedImage.Name, Namespace: updatedImage.Namespace}, canceledImageSpecJob)
 		if apierrors.IsNotFound(err) != true {
 			t.Errorf("ImageReconciler should delete ImageJobSpec")
+		}
+	})
+
+	// Skip
+	t.Run("Skip Image Build if Already cCanceled", func(t *testing.T) {
+		var err error
+		_, err = r.Reconcile(req)
+		if err != nil {
+			t.Errorf("ImageReconciler should do skip without error")
 		}
 	})
 }
