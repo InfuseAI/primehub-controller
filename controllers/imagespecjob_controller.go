@@ -30,7 +30,7 @@ type ImageSpecJobReconciler struct {
 
 const (
 	CustomImageJobStatusSucceeded = "Succeeded"
-	CustomImageJobStatusCanceled  = "Canceled"
+	CustomImageJobStatusCancelled = "Cancelled"
 	CustomImageJobStatusFailed    = "Failed"
 )
 

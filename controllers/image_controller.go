@@ -48,7 +48,7 @@ func makeImageControllerAction(r *ImageReconciler, ctx context.Context, image *v
 		}
 
 		// Cancel if cancel flag is marked in Image
-		if image.Spec.ImageSpec.Cancel == true && image.Status.JobCondiction.Phase != CustomImageJobStatusCanceled {
+		if image.Spec.ImageSpec.Cancel == true && image.Status.JobCondiction.Phase != CustomImageJobStatusCancelled {
 			return cancel, imageSpecJob
 		}
 
@@ -134,7 +134,7 @@ func cancelImageSpecJob(r *ImageReconciler, ctx context.Context, image *v1alpha1
 	}
 
 	imageClone := image.DeepCopy()
-	imageClone.Status.JobCondiction.Phase = CustomImageJobStatusCanceled
+	imageClone.Status.JobCondiction.Phase = CustomImageJobStatusCancelled
 
 	if err := r.Status().Update(ctx, imageClone); err != nil {
 		return err

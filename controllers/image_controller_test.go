@@ -685,9 +685,9 @@ func Test_makeImageControllerAction(t *testing.T) {
 	}
 
 	// For Skip test case
-	name = "canceled-custom-image"
+	name = "cancelled-custom-image"
 	namespace = "hub"
-	canceledCustomImage := &v1alpha1.Image{
+	cancelledCustomImage := &v1alpha1.Image{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 		Spec: v1alpha1.ImageCrdSpec{
 			Url:         "",
@@ -707,7 +707,7 @@ func Test_makeImageControllerAction(t *testing.T) {
 		},
 		Status: v1alpha1.ImageStatus{
 			JobCondiction: v1alpha1.ImageSpecStatus{
-				Phase:   CustomImageJobStatusCanceled,
+				Phase:   CustomImageJobStatusCancelled,
 				JobName: name,
 				Image:   "unit-test/base-image:1234",
 			},
@@ -778,10 +778,10 @@ func Test_makeImageControllerAction(t *testing.T) {
 			imageSpecJob: nil,
 		},
 		{
-			name: "Skip Action when image had been canceled",
+			name: "Skip Action when image had been cancelled",
 			args: args{
 				r:     &ImageReconciler{fakeClientForSkip, logger, scheme},
-				image: canceledCustomImage,
+				image: cancelledCustomImage,
 			},
 			action:       skip,
 			imageSpecJob: nil,
@@ -936,7 +936,7 @@ func TestImageReconciler_Reconcile(t *testing.T) {
 	})
 
 	// Cancel
-	canceledImageSpecJob := &v1alpha1.ImageSpecJob{}
+	cancelledImageSpecJob := &v1alpha1.ImageSpecJob{}
 	t.Run("Cancel Image Build", func(t *testing.T) {
 		var err error
 		updatedImage.Spec.ImageSpec.Cancel = true
@@ -947,14 +947,14 @@ func TestImageReconciler_Reconcile(t *testing.T) {
 			t.Errorf("ImageReconciler should cancel without error")
 		}
 
-		err = r.Get(ctx, client.ObjectKey{Name: updatedImage.Name, Namespace: updatedImage.Namespace}, canceledImageSpecJob)
+		err = r.Get(ctx, client.ObjectKey{Name: updatedImage.Name, Namespace: updatedImage.Namespace}, cancelledImageSpecJob)
 		if apierrors.IsNotFound(err) != true {
 			t.Errorf("ImageReconciler should delete ImageJobSpec")
 		}
 	})
 
 	// Skip
-	t.Run("Skip Image Build if Already cCanceled", func(t *testing.T) {
+	t.Run("Skip Image Build if Already Cancelled", func(t *testing.T) {
 		var err error
 		_, err = r.Reconcile(req)
 		if err != nil {
