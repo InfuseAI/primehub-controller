@@ -28,6 +28,12 @@ type ImageSpecJobReconciler struct {
 	EphemeralStorage resource.Quantity
 }
 
+const (
+	CustomImageJobStatusSucceeded = "Succeeded"
+	CustomImageJobStatusCanceled  = "Canceled"
+	CustomImageJobStatusFailed    = "Failed"
+)
+
 // +kubebuilder:rbac:groups=primehub.io,resources=imagespecjobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=primehub.io,resources=imagespecjobs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;create;update;delete
