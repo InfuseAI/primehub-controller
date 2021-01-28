@@ -3,15 +3,15 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"github.com/go-logr/logr"
 	"github.com/spf13/viper"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"primehub-controller/api/v1alpha1"
-
-	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
+	"primehub-controller/api/v1alpha1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"time"
 )
 
 // ImageReconciler reconciles a Image object
@@ -53,7 +53,10 @@ func makeImageControllerAction(r *ImageReconciler, ctx context.Context, image *v
 		}
 
 		// Rebuild if image phase was succeed or failed and image.updateTime after imageSpecJob.updateTime
-		if image.Spec.ImageSpec.UpdateTime.After(imageSpecJob.Spec.UpdateTime.Time) {
+		imageUpdateTime := image.Spec.ImageSpec.UpdateTime
+		imageSpecJobUpdateTime := imageSpecJob.Spec.UpdateTime
+		if imageUpdateTime != nil && imageSpecJobUpdateTime != nil &&
+			imageUpdateTime.After(imageSpecJob.Spec.UpdateTime.Time) {
 			return rebuild, imageSpecJob
 		}
 
@@ -90,6 +93,11 @@ func createImageSpecJob(r *ImageReconciler, ctx context.Context, image *v1alpha1
 
 	hash := computeHash(image.Spec.ImageSpec.BaseImage, image.Spec.ImageSpec.Packages)
 
+	updateTime := image.Spec.ImageSpec.UpdateTime
+	if updateTime == nil {
+		updateTime = &metav1.Time{Time: time.Now()}
+	}
+
 	imageSpecJob := &v1alpha1.ImageSpecJob{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        getImageSpecJobName(image),
@@ -107,7 +115,7 @@ func createImageSpecJob(r *ImageReconciler, ctx context.Context, image *v1alpha1
 			TargetImage: image.ObjectMeta.Name + ":" + hash,
 			PushSecret:  pushSecretName,
 			RepoPrefix:  repoPrefix,
-			UpdateTime:  image.Spec.ImageSpec.UpdateTime,
+			UpdateTime:  updateTime,
 		},
 	}
 
