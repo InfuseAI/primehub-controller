@@ -3,12 +3,13 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/spf13/viper"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"os"
 	primehubv1alpha1 "primehub-controller/api/v1alpha1"
 	"primehub-controller/controllers"
 	"strings"
+
+	"github.com/spf13/viper"
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -79,6 +80,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err = (&controllers.ImageReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("Image"),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Image")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	if err = (&controllers.ImageSpecReconciler{

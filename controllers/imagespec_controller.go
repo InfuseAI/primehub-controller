@@ -19,10 +19,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const (
-	CustomImageJobStatusSucceeded = "Succeeded"
-)
-
 // ImageSpecReconciler reconciles a ImageSpec object
 type ImageSpecReconciler struct {
 	client.Client
@@ -76,7 +72,7 @@ func (r *ImageSpecReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		}
 	}
 
-	hash := computeHash(imageSpec)
+	hash := computeHash(imageSpec.Spec.BaseImage, imageSpec.Spec.Packages)
 
 	log.Info("Computed hash:", "hash", hash)
 
@@ -179,17 +175,17 @@ func buildImageSpecJob(imageSpec v1alpha1.ImageSpec, hash string) *v1alpha1.Imag
 	return &imageSpecJob
 }
 
-func computeHash(imageSpec v1alpha1.ImageSpec) string {
+func computeHash(baseImage string, packages v1alpha1.ImageSpecSpecPackages) string {
 	var s []string
-	s = append(s, imageSpec.Spec.BaseImage)
-	if len(imageSpec.Spec.Packages.Apt) > 0 {
-		s = append(s, fmt.Sprintf("apt:[%s]", strings.Join(imageSpec.Spec.Packages.Apt, ",")))
+	s = append(s, baseImage)
+	if len(packages.Apt) > 0 {
+		s = append(s, fmt.Sprintf("apt:[%s]", strings.Join(packages.Apt, ",")))
 	}
-	if len(imageSpec.Spec.Packages.Pip) > 0 {
-		s = append(s, fmt.Sprintf("pip:[%s]", strings.Join(imageSpec.Spec.Packages.Pip, ",")))
+	if len(packages.Pip) > 0 {
+		s = append(s, fmt.Sprintf("pip:[%s]", strings.Join(packages.Pip, ",")))
 	}
-	if len(imageSpec.Spec.Packages.Conda) > 0 {
-		s = append(s, fmt.Sprintf("conda:[%s]", strings.Join(imageSpec.Spec.Packages.Conda, ",")))
+	if len(packages.Conda) > 0 {
+		s = append(s, fmt.Sprintf("conda:[%s]", strings.Join(packages.Conda, ",")))
 	}
 
 	h := sha1.New()

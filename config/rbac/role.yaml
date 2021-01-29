@@ -20,6 +20,26 @@ rules:
 - apiGroups:
   - primehub.io
   resources:
+  - images
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - primehub.io
+  resources:
+  - images/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - primehub.io
+  resources:
   - imagespecjobs
   verbs:
   - create

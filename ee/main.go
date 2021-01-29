@@ -91,6 +91,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err = (&controllers.ImageReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("Image"),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Image")
+		os.Exit(1)
+	}
 	if err = (&controllers.ImageSpecReconciler{
 		Client: mgr.GetClient(),
 		Log:    ctrl.Log.WithName("controllers").WithName("ImageSpec"),
