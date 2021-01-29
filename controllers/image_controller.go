@@ -144,7 +144,7 @@ func cancelImageSpecJob(r *ImageReconciler, ctx context.Context, image *v1alpha1
 	imageClone := image.DeepCopy()
 	imageClone.Status.JobCondiction.Phase = CustomImageJobStatusCancelled
 
-	if err := r.Status().Update(ctx, imageClone); err != nil {
+	if err := r.Update(ctx, imageClone); err != nil {
 		return err
 	}
 
@@ -172,7 +172,13 @@ func updateImageStatus(r *ImageReconciler, ctx context.Context, image *v1alpha1.
 		return fmt.Errorf("updateImage do not provide correct image")
 	}
 
-	if imageSpecJob != nil {
+	if image.Spec.ImageSpec.Cancel == true && image.Status.JobCondiction.Phase != CustomImageJobStatusCancelled {
+		imageClone := image.DeepCopy()
+		imageClone.Status.JobCondiction.Phase = CustomImageJobStatusCancelled
+		if err := r.Update(ctx, imageClone); err != nil {
+			return err
+		}
+	} else if imageSpecJob != nil {
 		imageClone := image.DeepCopy()
 		imageClone.Status.JobCondiction.JobName = imageSpecJob.Name
 		imageClone.Status.JobCondiction.Phase = imageSpecJob.Status.Phase
@@ -182,9 +188,6 @@ func updateImageStatus(r *ImageReconciler, ctx context.Context, image *v1alpha1.
 			imageClone.Spec.Url = url
 			imageClone.Spec.UrlForGpu = url
 			imageClone.Spec.PullSecret = imageSpecJob.Spec.PushSecret
-		}
-		if imageClone.Spec.ImageSpec.Cancel == true && imageClone.Status.JobCondiction.Phase != CustomImageJobStatusCancelled {
-			imageClone.Status.JobCondiction.Phase = CustomImageJobStatusCancelled
 		}
 		if err := r.Update(ctx, imageClone); err != nil {
 			return err
