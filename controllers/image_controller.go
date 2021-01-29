@@ -110,7 +110,7 @@ func createImageSpecJob(r *ImageReconciler, ctx context.Context, image *v1alpha1
 		},
 		Spec: v1alpha1.ImageSpecJobSpec{
 			BaseImage:   image.Spec.ImageSpec.BaseImage,
-			PullSecret:  image.Spec.PullSecret,
+			PullSecret:  image.Spec.ImageSpec.PullSecret,
 			Packages:    image.Spec.ImageSpec.Packages,
 			TargetImage: image.ObjectMeta.Name + ":" + hash,
 			PushSecret:  pushSecretName,
@@ -182,6 +182,9 @@ func updateImageStatus(r *ImageReconciler, ctx context.Context, image *v1alpha1.
 			imageClone.Spec.Url = url
 			imageClone.Spec.UrlForGpu = url
 			imageClone.Spec.PullSecret = imageSpecJob.Spec.PushSecret
+		}
+		if imageClone.Spec.ImageSpec.Cancel == true && imageClone.Status.JobCondiction.Phase != CustomImageJobStatusCancelled {
+			imageClone.Status.JobCondiction.Phase = CustomImageJobStatusCancelled
 		}
 		if err := r.Update(ctx, imageClone); err != nil {
 			return err
