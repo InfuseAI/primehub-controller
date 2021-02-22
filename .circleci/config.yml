@@ -101,13 +101,13 @@ jobs:
                 then
                     DOCKER_TAG=$(echo "${CIRCLE_SHA1:0:7}")
             fi
-            # If not set, define CONTAINER_NAME
-            if [[ ! -n "${CONTAINER_NAME:-}" ]]
+            # If not set, define CE_CONTAINER_NAME
+            if [[ ! -n "${CE_CONTAINER_NAME:-}" ]]
                 then
-                    CONTAINER_NAME="${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}"
+                    CE_CONTAINER_NAME="${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}-ce"
             fi
-            echo "Container name set to ${CONTAINER_NAME}:${DOCKER_TAG}"
-            make docker-build IMG=${CONTAINER_NAME}:${DOCKER_TAG}
+            echo "Container name set to ${CE_CONTAINER_NAME}:${DOCKER_TAG}"
+            make docker-build IMG=${CE_CONTAINER_NAME}:${DOCKER_TAG}
       # deploy the image
       - run:
           name: Deploy to Docker Hub
@@ -118,21 +118,21 @@ jobs:
                 then
                     DOCKER_TAG=$(echo "${CIRCLE_SHA1:0:7}")
             fi
-            # If not set, define CONTAINER_NAME
-            if [[ ! -n "${CONTAINER_NAME:-}" ]]
+            # If not set, define CE_CONTAINER_NAME
+            if [[ ! -n "${CE_CONTAINER_NAME:-}" ]]
                 then
-                    CONTAINER_NAME="${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}"
+                    CE_CONTAINER_NAME="${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}-ce"
             fi
-            echo "Container name set to ${CONTAINER_NAME}:${DOCKER_TAG}"
+            echo "Container name set to ${CE_CONTAINER_NAME}:${DOCKER_TAG}"
             if [[ -n "$DOCKER_PASS" ]]; then
                   docker login -u $DOCKER_USER -p $DOCKER_PASS
-                  docker push ${CONTAINER_NAME}:${DOCKER_TAG}
+                  docker push ${CE_CONTAINER_NAME}:${DOCKER_TAG}
                   if [[ -n "$CIRCLE_TAG" ]]; then
-                    docker tag ${CONTAINER_NAME}:${DOCKER_TAG} ${CONTAINER_NAME}:${CIRCLE_TAG}
-                    docker push ${CONTAINER_NAME}:${CIRCLE_TAG}
+                    docker tag ${CE_CONTAINER_NAME}:${DOCKER_TAG} ${CE_CONTAINER_NAME}:${CIRCLE_TAG}
+                    docker push ${CE_CONTAINER_NAME}:${CIRCLE_TAG}
                   else
-                    docker tag ${CONTAINER_NAME}:${DOCKER_TAG} ${CONTAINER_NAME}:latest
-                    docker push ${CONTAINER_NAME}:latest
+                    docker tag ${CE_CONTAINER_NAME}:${DOCKER_TAG} ${CE_CONTAINER_NAME}:latest
+                    docker push ${CE_CONTAINER_NAME}:latest
                   fi
             fi
 
@@ -172,12 +172,12 @@ jobs:
                     DOCKER_TAG=$(echo "${CIRCLE_SHA1:0:7}")
             fi
             # If not set, define CONTAINER_NAME
-            if [[ ! -n "${EE_CONTAINER_NAME:-}" ]]
+            if [[ ! -n "${CONTAINER_NAME:-}" ]]
                 then
-                    EE_CONTAINER_NAME="${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}"
+                    CONTAINER_NAME="${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}"
             fi
-            echo "Container name set to ${EE_CONTAINER_NAME}:${DOCKER_TAG}"
-            make docker-build-ee IMG=${EE_CONTAINER_NAME}:${DOCKER_TAG}
+            echo "Container name set to ${CONTAINER_NAME}:${DOCKER_TAG}"
+            make docker-build-ee IMG=${CONTAINER_NAME}:${DOCKER_TAG}
       # deploy the image
       - run:
           name: Deploy to Docker Hub
@@ -189,20 +189,32 @@ jobs:
                     DOCKER_TAG=$(echo "${CIRCLE_SHA1:0:7}")
             fi
             # If not set, define CONTAINER_NAME
-            if [[ ! -n "${EE_CONTAINER_NAME:-}" ]]
+            if [[ ! -n "${CONTAINER_NAME:-}" ]]
                 then
-                    CONTAINER_NAME="${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}-ee"
+                    CONTAINER_NAME="${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}"
             fi
-            echo "Container name set to ${EE_CONTAINER_NAME}:${DOCKER_TAG}"
+            echo "Container name set to ${CONTAINER_NAME}:${DOCKER_TAG}"
             if [[ -n "$DOCKER_PASS" ]]; then
                   docker login -u $DOCKER_USER -p $DOCKER_PASS
-                  docker push ${EE_CONTAINER_NAME}:${DOCKER_TAG}
+                  docker push ${CONTAINER_NAME}:${DOCKER_TAG}
+
+                  # Backward compatible
+                  COMPATIBLE_EE_CONTAINER_NAME="${CONTAINER_NAME}-ee"
+                  docker tag ${CONTAINER_NAME}:${DOCKER_TAG} ${COMPATIBLE_EE_CONTAINER_NAME}:${DOCKER_TAG}
+                  docker push ${COMPATIBLE_EE_CONTAINER_NAME}:${DOCKER_TAG}
+
                   if [[ -n "$CIRCLE_TAG" ]]; then
-                    docker tag ${EE_CONTAINER_NAME}:${DOCKER_TAG} ${EE_CONTAINER_NAME}:${CIRCLE_TAG}
-                    docker push ${EE_CONTAINER_NAME}:${CIRCLE_TAG}
+                    docker tag ${CONTAINER_NAME}:${DOCKER_TAG} ${CONTAINER_NAME}:${CIRCLE_TAG}
+                    docker push ${CONTAINER_NAME}:${CIRCLE_TAG}
+                    # Backward compatible
+                    docker tag ${CONTAINER_NAME}:${DOCKER_TAG} ${COMPATIBLE_EE_CONTAINER_NAME}:${CIRCLE_TAG}
+                    docker push ${COMPATIBLE_EE_CONTAINER_NAME}:${CIRCLE_TAG}
                   else
-                    docker tag ${EE_CONTAINER_NAME}:${DOCKER_TAG} ${EE_CONTAINER_NAME}:latest
-                    docker push ${EE_CONTAINER_NAME}:latest
+                    docker tag ${CONTAINER_NAME}:${DOCKER_TAG} ${CONTAINER_NAME}:latest
+                    docker push ${CONTAINER_NAME}:latest
+                    # Backward compatible
+                    docker tag ${CONTAINER_NAME}:${DOCKER_TAG} ${COMPATIBLE_EE_CONTAINER_NAME}:latest
+                    docker push ${COMPATIBLE_EE_CONTAINER_NAME}:latest
                   fi
             fi
 
