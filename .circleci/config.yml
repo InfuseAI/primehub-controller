@@ -101,11 +101,12 @@ jobs:
                 then
                     DOCKER_TAG=$(echo "${CIRCLE_SHA1:0:7}")
             fi
-            # If not set, define CE_CONTAINER_NAME
-            if [[ ! -n "${CE_CONTAINER_NAME:-}" ]]
+            # If not set, define CONTAINER_NAME
+            if [[ ! -n "${CONTAINER_NAME:-}" ]]
                 then
-                    CE_CONTAINER_NAME="${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}-ce"
+                    CONTAINER_NAME="${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}"
             fi
+            CE_CONTAINER_NAME=$(echo "${CONTAINER_NAME}-ce" | tr '[:upper:]' '[:lower:]')
             echo "Container name set to ${CE_CONTAINER_NAME}:${DOCKER_TAG}"
             make docker-build IMG=${CE_CONTAINER_NAME}:${DOCKER_TAG}
       # deploy the image
@@ -118,11 +119,12 @@ jobs:
                 then
                     DOCKER_TAG=$(echo "${CIRCLE_SHA1:0:7}")
             fi
-            # If not set, define CE_CONTAINER_NAME
-            if [[ ! -n "${CE_CONTAINER_NAME:-}" ]]
+            # If not set, define CONTAINER_NAME
+            if [[ ! -n "${CONTAINER_NAME:-}" ]]
                 then
-                    CE_CONTAINER_NAME="${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}-ce"
+                    CONTAINER_NAME="${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}"
             fi
+            CE_CONTAINER_NAME=$(echo "${CONTAINER_NAME}-ce" | tr '[:upper:]' '[:lower:]')
             echo "Container name set to ${CE_CONTAINER_NAME}:${DOCKER_TAG}"
             if [[ -n "$DOCKER_PASS" ]]; then
                   docker login -u $DOCKER_USER -p $DOCKER_PASS
