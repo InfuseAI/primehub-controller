@@ -13,11 +13,11 @@ jobs:
             arch=$(go env GOARCH)
 
             # download kubebuilder and extract it to tmp
-            curl -sL https://go.kubebuilder.io/dl/2.1.0/${os}/${arch} | tar -xz -C /tmp/
+            curl -sL https://go.kubebuilder.io/dl/2.2.0/${os}/${arch} | tar -xz -C /tmp/
 
             # move to a long-term location and put it on your path
             # (you'll need to set the KUBEBUILDER_ASSETS env var if you put it somewhere else)
-            sudo mv /tmp/kubebuilder_2.1.0_${os}_${arch} /usr/local/kubebuilder
+            sudo mv /tmp/kubebuilder_2.2.0_${os}_${arch} /usr/local/kubebuilder
             export PATH=$PATH:/usr/local/kubebuilder/bin
       - setup_remote_docker
       - run:
@@ -46,11 +46,11 @@ jobs:
             arch=$(go env GOARCH)
 
             # download kubebuilder and extract it to tmp
-            curl -sL https://go.kubebuilder.io/dl/2.1.0/${os}/${arch} | tar -xz -C /tmp/
+            curl -sL https://go.kubebuilder.io/dl/2.2.0/${os}/${arch} | tar -xz -C /tmp/
 
             # move to a long-term location and put it on your path
             # (you'll need to set the KUBEBUILDER_ASSETS env var if you put it somewhere else)
-            sudo mv /tmp/kubebuilder_2.1.0_${os}_${arch} /usr/local/kubebuilder
+            sudo mv /tmp/kubebuilder_2.2.0_${os}_${arch} /usr/local/kubebuilder
             export PATH=$PATH:/usr/local/kubebuilder/bin
       - setup_remote_docker
       - run:
@@ -80,11 +80,11 @@ jobs:
             arch=$(go env GOARCH)
 
             # download kubebuilder and extract it to tmp
-            curl -sL https://go.kubebuilder.io/dl/2.1.0/${os}/${arch} | tar -xz -C /tmp/
+            curl -sL https://go.kubebuilder.io/dl/2.2.0/${os}/${arch} | tar -xz -C /tmp/
 
             # move to a long-term location and put it on your path
             # (you'll need to set the KUBEBUILDER_ASSETS env var if you put it somewhere else)
-            sudo mv /tmp/kubebuilder_2.1.0_${os}_${arch} /usr/local/kubebuilder
+            sudo mv /tmp/kubebuilder_2.2.0_${os}_${arch} /usr/local/kubebuilder
             export PATH=$PATH:/usr/local/kubebuilder/bin
       - setup_remote_docker
       # build the application image
@@ -106,8 +106,80 @@ jobs:
                 then
                     CONTAINER_NAME="${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}"
             fi
+            CE_CONTAINER_NAME=$(echo "${CONTAINER_NAME}-ce" | tr '[:upper:]' '[:lower:]')
+            echo "Container name set to ${CE_CONTAINER_NAME}:${DOCKER_TAG}"
+            make docker-build IMG=${CE_CONTAINER_NAME}:${DOCKER_TAG}
+      # deploy the image
+      - run:
+          name: Deploy to Docker Hub
+          no_output_timeout: 40m
+          command: |
+            echo "Looking for Docker deployment options"
+            if [ ! -n "${DOCKER_TAG:-}" ]
+                then
+                    DOCKER_TAG=$(echo "${CIRCLE_SHA1:0:7}")
+            fi
+            # If not set, define CONTAINER_NAME
+            if [[ ! -n "${CONTAINER_NAME:-}" ]]
+                then
+                    CONTAINER_NAME="${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}"
+            fi
+            CE_CONTAINER_NAME=$(echo "${CONTAINER_NAME}-ce" | tr '[:upper:]' '[:lower:]')
+            echo "Container name set to ${CE_CONTAINER_NAME}:${DOCKER_TAG}"
+            if [[ -n "$DOCKER_PASS" ]]; then
+                  docker login -u $DOCKER_USER -p $DOCKER_PASS
+                  docker push ${CE_CONTAINER_NAME}:${DOCKER_TAG}
+                  if [[ -n "$CIRCLE_TAG" ]]; then
+                    docker tag ${CE_CONTAINER_NAME}:${DOCKER_TAG} ${CE_CONTAINER_NAME}:${CIRCLE_TAG}
+                    docker push ${CE_CONTAINER_NAME}:${CIRCLE_TAG}
+                  else
+                    docker tag ${CE_CONTAINER_NAME}:${DOCKER_TAG} ${CE_CONTAINER_NAME}:latest
+                    docker push ${CE_CONTAINER_NAME}:latest
+                  fi
+            fi
+
+  build_ee:
+    docker: # run the steps with Docker
+      # CircleCI Go images available at: https://hub.docker.com/r/circleci/golang/
+      - image: circleci/golang:1.12
+    steps:
+      - checkout:
+      - run:
+          name: Install kubebuilder
+          command: |
+            os=$(go env GOOS)
+            arch=$(go env GOARCH)
+
+            # download kubebuilder and extract it to tmp
+            curl -sL https://go.kubebuilder.io/dl/2.2.0/${os}/${arch} | tar -xz -C /tmp/
+
+            # move to a long-term location and put it on your path
+            # (you'll need to set the KUBEBUILDER_ASSETS env var if you put it somewhere else)
+            sudo mv /tmp/kubebuilder_2.2.0_${os}_${arch} /usr/local/kubebuilder
+            export PATH=$PATH:/usr/local/kubebuilder/bin
+      - setup_remote_docker
+      # build the application image
+      - run:
+          name: Code gen
+          command: |
+            make generate
+            cd ee && make generate
+      - run:
+          name: Build image
+          no_output_timeout: 40m
+          command: |
+            echo "Looking for Docker deployment options"
+            if [ ! -n "${DOCKER_TAG:-}" ]
+                then
+                    DOCKER_TAG=$(echo "${CIRCLE_SHA1:0:7}")
+            fi
+            # If not set, define CONTAINER_NAME
+            if [[ ! -n "${CONTAINER_NAME:-}" ]]
+                then
+                    CONTAINER_NAME="${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}"
+            fi
             echo "Container name set to ${CONTAINER_NAME}:${DOCKER_TAG}"
-            make docker-build IMG=${CONTAINER_NAME}:${DOCKER_TAG}
+            make docker-build-ee IMG=${CONTAINER_NAME}:${DOCKER_TAG}
       # deploy the image
       - run:
           name: Deploy to Docker Hub
@@ -127,82 +199,24 @@ jobs:
             if [[ -n "$DOCKER_PASS" ]]; then
                   docker login -u $DOCKER_USER -p $DOCKER_PASS
                   docker push ${CONTAINER_NAME}:${DOCKER_TAG}
+
+                  # Backward compatible
+                  COMPATIBLE_EE_CONTAINER_NAME="${CONTAINER_NAME}-ee"
+                  docker tag ${CONTAINER_NAME}:${DOCKER_TAG} ${COMPATIBLE_EE_CONTAINER_NAME}:${DOCKER_TAG}
+                  docker push ${COMPATIBLE_EE_CONTAINER_NAME}:${DOCKER_TAG}
+
                   if [[ -n "$CIRCLE_TAG" ]]; then
                     docker tag ${CONTAINER_NAME}:${DOCKER_TAG} ${CONTAINER_NAME}:${CIRCLE_TAG}
                     docker push ${CONTAINER_NAME}:${CIRCLE_TAG}
+                    # Backward compatible
+                    docker tag ${CONTAINER_NAME}:${DOCKER_TAG} ${COMPATIBLE_EE_CONTAINER_NAME}:${CIRCLE_TAG}
+                    docker push ${COMPATIBLE_EE_CONTAINER_NAME}:${CIRCLE_TAG}
                   else
                     docker tag ${CONTAINER_NAME}:${DOCKER_TAG} ${CONTAINER_NAME}:latest
                     docker push ${CONTAINER_NAME}:latest
-                  fi
-            fi
-
-  build_ee:
-    docker: # run the steps with Docker
-      # CircleCI Go images available at: https://hub.docker.com/r/circleci/golang/
-      - image: circleci/golang:1.12
-    steps:
-      - checkout:
-      - run:
-          name: Install kubebuilder
-          command: |
-            os=$(go env GOOS)
-            arch=$(go env GOARCH)
-
-            # download kubebuilder and extract it to tmp
-            curl -sL https://go.kubebuilder.io/dl/2.1.0/${os}/${arch} | tar -xz -C /tmp/
-
-            # move to a long-term location and put it on your path
-            # (you'll need to set the KUBEBUILDER_ASSETS env var if you put it somewhere else)
-            sudo mv /tmp/kubebuilder_2.1.0_${os}_${arch} /usr/local/kubebuilder
-            export PATH=$PATH:/usr/local/kubebuilder/bin
-      - setup_remote_docker
-      # build the application image
-      - run:
-          name: Code gen
-          command: |
-            make generate
-            cd ee && make generate
-      - run:
-          name: Build image
-          no_output_timeout: 40m
-          command: |
-            echo "Looking for Docker deployment options"
-            if [ ! -n "${DOCKER_TAG:-}" ]
-                then
-                    DOCKER_TAG=$(echo "${CIRCLE_SHA1:0:7}")
-            fi
-            # If not set, define CONTAINER_NAME
-            if [[ ! -n "${EE_CONTAINER_NAME:-}" ]]
-                then
-                    EE_CONTAINER_NAME="${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}"
-            fi
-            echo "Container name set to ${EE_CONTAINER_NAME}:${DOCKER_TAG}"
-            make docker-build-ee IMG=${EE_CONTAINER_NAME}:${DOCKER_TAG}
-      # deploy the image
-      - run:
-          name: Deploy to Docker Hub
-          no_output_timeout: 40m
-          command: |
-            echo "Looking for Docker deployment options"
-            if [ ! -n "${DOCKER_TAG:-}" ]
-                then
-                    DOCKER_TAG=$(echo "${CIRCLE_SHA1:0:7}")
-            fi
-            # If not set, define CONTAINER_NAME
-            if [[ ! -n "${EE_CONTAINER_NAME:-}" ]]
-                then
-                    CONTAINER_NAME="${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}-ee"
-            fi
-            echo "Container name set to ${EE_CONTAINER_NAME}:${DOCKER_TAG}"
-            if [[ -n "$DOCKER_PASS" ]]; then
-                  docker login -u $DOCKER_USER -p $DOCKER_PASS
-                  docker push ${EE_CONTAINER_NAME}:${DOCKER_TAG}
-                  if [[ -n "$CIRCLE_TAG" ]]; then
-                    docker tag ${EE_CONTAINER_NAME}:${DOCKER_TAG} ${EE_CONTAINER_NAME}:${CIRCLE_TAG}
-                    docker push ${EE_CONTAINER_NAME}:${CIRCLE_TAG}
-                  else
-                    docker tag ${EE_CONTAINER_NAME}:${DOCKER_TAG} ${EE_CONTAINER_NAME}:latest
-                    docker push ${EE_CONTAINER_NAME}:latest
+                    # Backward compatible
+                    docker tag ${CONTAINER_NAME}:${DOCKER_TAG} ${COMPATIBLE_EE_CONTAINER_NAME}:latest
+                    docker push ${COMPATIBLE_EE_CONTAINER_NAME}:latest
                   fi
             fi
 
