@@ -88,6 +88,14 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Image")
 		os.Exit(1)
 	}
+	if err = (&controllers.PhApplicationReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("PhApplication"),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "PhApplication")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	if err = (&controllers.ImageSpecReconciler{

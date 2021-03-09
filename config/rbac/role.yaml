@@ -77,3 +77,23 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - primehub.io
+  resources:
+  - phapplications
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - primehub.io
+  resources:
+  - phapplications/status
+  verbs:
+  - get
+  - patch
+  - update
