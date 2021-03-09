@@ -1,22 +1,25 @@
+version: "2"
 domain: io
 repo: primehub-controller
 resources:
 - group: primehub
+  version: v1alpha1
   kind: ImageSpec
-  version: v1alpha1
 - group: primehub
+  version: v1alpha1
   kind: ImageSpecJob
-  version: v1alpha1
 - group: primehub
+  version: v1alpha1
   kind: PhJob
-  version: v1alpha1
 - group: primehub
+  version: v1alpha1
   kind: PhSchedule
-  version: v1alpha1
 - group: primehub
+  version: v1alpha1
   kind: PhDeployment
-  version: v1alpha1
 - group: primehub
-  kind: Image
   version: v1alpha1
-version: "2"
+  kind: Image
+- group: primehub
+  version: v1alpha1
+  kind: PhAppTemplate
