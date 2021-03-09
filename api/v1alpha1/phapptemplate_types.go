@@ -1,7 +1,6 @@
 package v1alpha1
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -31,9 +30,7 @@ type PhAppTemplateDefaultEnv struct {
 
 // PhAppTemplateContent defines the PhApplication spec content
 type PhAppTemplateContent struct {
-	PodTemplate corev1.PodSpec     `json:"podTemplate"`
-	SvcTemplate corev1.ServiceSpec `json:"svcTemplate"`
-	HTTPPort    *int32             `json:"httpPort,omitempty"`
+	Spec PhApplicationSpec `json:"spec"`
 }
 
 // +kubebuilder:object:root=true
