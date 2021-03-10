@@ -6,6 +6,14 @@
 
 - Install kubebuilder 2.2.0, see [kubebuilder installation](https://book.kubebuilder.io/quick-start.html#installation)
 
+    * For Apple M1 Device, please replace the etcd binary after installing kubebuilder
+
+        ```bash
+        curl -L https://github.com/etcd-io/etcd/releases/download/v3.4.15/etcd-v3.4.15-darwin-amd64.zip | tar -xz -C /tmp/
+        sudo me etcd-v3.4.15-darwin-amd64/etcd /usr/local/kubebuilder
+        sudo chmod +x /usr/local/kubebuilder/etcd
+        ```
+
 - Install PrimeHub, see [PrimeHub INSTALL.md](https://github.com/InfuseAI/primehub/blob/master/INSTALL.md)
 
 ## Configuration
