@@ -10,8 +10,8 @@
 
         ```bash
         curl -L https://github.com/etcd-io/etcd/releases/download/v3.4.15/etcd-v3.4.15-darwin-amd64.zip | tar -xz -C /tmp/
-        sudo me etcd-v3.4.15-darwin-amd64/etcd /usr/local/kubebuilder
-        sudo chmod +x /usr/local/kubebuilder/etcd
+        sudo mv etcd-v3.4.15-darwin-amd64/etcd /usr/local/kubebuilder/bin
+        sudo chmod +x /usr/local/kubebuilder/bin/etcd
         ```
 
 - Install PrimeHub, see [PrimeHub INSTALL.md](https://github.com/InfuseAI/primehub/blob/master/INSTALL.md)
