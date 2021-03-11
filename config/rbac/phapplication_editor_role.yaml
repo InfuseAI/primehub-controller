@@ -1,0 +1,26 @@
+# permissions to do edit phapplications.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: phapplication-editor-role
+rules:
+- apiGroups:
+  - primehub.io
+  resources:
+  - phapplications
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - primehub.io
+  resources:
+  - phapplications/status
+  verbs:
+  - get
+  - patch
+  - update

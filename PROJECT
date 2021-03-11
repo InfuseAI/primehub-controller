@@ -19,4 +19,10 @@ resources:
 - group: primehub
   kind: Image
   version: v1alpha1
+- group: primehub
+  kind: PhAppTemplate
+  version: v1alpha1
+- group: primehub
+  kind: PhApplication
+  version: v1alpha1
 version: "2"
