@@ -6,7 +6,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"primehub-controller/pkg/escapism"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -108,6 +107,14 @@ func (r *PhApplicationReconciler) createNetworkPolicy(ctx context.Context, phApp
 	name := appID + "-" + npType
 	groupName := escapism.EscapeToPrimehubLabel(phApplication.Spec.GroupName)
 
+	var ingress []networkv1.NetworkPolicyIngressRule
+	switch npType {
+	case GroupNetworkPolicy:
+		ingress = phApplication.GroupNetworkPolicyIngressRule()
+	case ProxyNetwrokPolicy:
+		ingress = phApplication.ProxyNetworkPolicyIngressRule()
+	}
+
 	networkPolicy.Name = name
 	networkPolicy.Namespace = phApplication.ObjectMeta.Namespace
 	networkPolicy.ObjectMeta.Labels = map[string]string{
@@ -115,48 +122,14 @@ func (r *PhApplicationReconciler) createNetworkPolicy(ctx context.Context, phApp
 		"primehub.io/phapplication": appID,
 		"primehub.io/group":         groupName,
 	}
-
-	var fromPodSelector *metav1.LabelSelector
-	tcp := corev1.ProtocolTCP
-	switch npType {
-	case GroupNetworkPolicy:
-		fromPodSelector = &metav1.LabelSelector{
-			MatchLabels: map[string]string{
-				"primehub.io/group": groupName,
-			},
-		}
-	case ProxyNetwrokPolicy:
-		fromPodSelector = &metav1.LabelSelector{
-			MatchLabels: map[string]string{
-				"app.kubernetes.io/name": "primehub-console",
-			},
-		}
-	}
 	networkPolicy.Spec = networkv1.NetworkPolicySpec{
 		PodSelector: metav1.LabelSelector{
 			MatchLabels: map[string]string{
 				"primehub.io/phapplication": appID,
 			},
 		},
-		Ingress: []networkv1.NetworkPolicyIngressRule{
-			{
-				Ports: []networkv1.NetworkPolicyPort{
-					{
-						Protocol: &tcp,
-						Port: &intstr.IntOrString{
-							Type:   intstr.Int,
-							IntVal: 5000,
-						},
-					},
-				},
-				From: []networkv1.NetworkPolicyPeer{
-					{
-						PodSelector: fromPodSelector,
-					},
-				},
-			},
-		},
-		Egress: nil,
+		Ingress: ingress,
+		Egress:  nil,
 		PolicyTypes: []networkv1.PolicyType{
 			networkv1.PolicyTypeIngress,
 		},
@@ -165,10 +138,24 @@ func (r *PhApplicationReconciler) createNetworkPolicy(ctx context.Context, phApp
 	if err := ctrl.SetControllerReference(phApplication, networkPolicy, r.Scheme); err != nil {
 		return err
 	}
-	return r.Client.Create(ctx, networkPolicy)
+	if err := r.Client.Create(ctx, networkPolicy); err != nil {
+		return err
+	}
+	r.Log.Info("Created NetworkPolicy", "Name", networkPolicy.Name)
+	return nil
 }
 
 func (r *PhApplicationReconciler) updateNetworkPolicy(ctx context.Context, phApplication *v1alpha1.PhApplication, networkPolicy *networkv1.NetworkPolicy, npType string) error {
+	switch npType {
+	case GroupNetworkPolicy:
+		networkPolicy.Spec.Ingress = phApplication.GroupNetworkPolicyIngressRule()
+	case ProxyNetwrokPolicy:
+		networkPolicy.Spec.Ingress = phApplication.ProxyNetworkPolicyIngressRule()
+	}
+	if err := r.Client.Update(ctx, networkPolicy); err != nil {
+		return err
+	}
+	r.Log.Info("Updated NetworkPolicy", "Name", networkPolicy.Name)
 	return nil
 }
 
@@ -183,14 +170,12 @@ func (r *PhApplicationReconciler) reconcileNetworkPolicy(ctx context.Context, ph
 	groupNetworkPolicyExist, err := r.getPhApplicationObject(ctx, namespace, name, groupNetworkPolicy)
 	if err != nil {
 		return err
-
 	}
 
 	name = "app-" + appID + "-" + ProxyNetwrokPolicy
 	proxyNetworkPolicyExist, err := r.getPhApplicationObject(ctx, namespace, name, proxyNetworkPolicy)
 	if err != nil {
 		return err
-
 	}
 
 	if groupNetworkPolicyExist {
@@ -236,17 +221,17 @@ func (r *PhApplicationReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 
 	// Reconcile Deployment
 	if err = r.reconcileDeployment(ctx, &phApplication); err != nil {
-		log.Error(err, "reconcile Deployment failed")
+		log.Error(err, "Reconcile Deployment failed")
 	}
 
 	// Reconcile Service
 	if err = r.reconcileService(ctx, &phApplication); err != nil {
-		log.Error(err, "reconcile Service failed")
+		log.Error(err, "Reconcile Service failed")
 	}
 
 	// Reconcile Network-policy
 	if err = r.reconcileNetworkPolicy(ctx, &phApplication); err != nil {
-		log.Error(err, "reconcile NetworkPolicy failed")
+		log.Error(err, "Reconcile NetworkPolicy failed")
 	}
 
 	// Update status

@@ -2,7 +2,10 @@ package v1alpha1
 
 import (
 	corev1 "k8s.io/api/core/v1"
+	networkv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	"primehub-controller/pkg/escapism"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -25,19 +28,27 @@ const (
 	ApplicationGroupScope    string = "group"
 )
 
+type PhApplicationPodTemplate struct {
+	Spec corev1.PodSpec `json:"spec"`
+}
+
+type PhApplicationSvcTemplate struct {
+	Spec corev1.ServiceSpec `json:"spec"`
+}
+
 // PhApplicationSpec defines the desired state of PhApplication
 type PhApplicationSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	DisplayName  string             `json:"displayName"`
-	GroupName    string             `json:"groupName"`
-	InstanceType string             `json:"instanceType"`
-	Scope        string             `json:"scope"`
-	Stop         bool               `json:"stop,omitempty"`
-	PodTemplate  corev1.PodSpec     `json:"podTemplate"`
-	SvcTemplate  corev1.ServiceSpec `json:"svcTemplate"`
-	HTTPPort     *int32             `json:"httpPort,omitempty"`
+	DisplayName  string                   `json:"displayName"`
+	GroupName    string                   `json:"groupName"`
+	InstanceType string                   `json:"instanceType"`
+	Scope        string                   `json:"scope"`
+	Stop         bool                     `json:"stop,omitempty"`
+	PodTemplate  PhApplicationPodTemplate `json:"podTemplate"`
+	SvcTemplate  PhApplicationSvcTemplate `json:"svcTemplate"`
+	HTTPPort     *int32                   `json:"httpPort,omitempty"`
 }
 
 // PhApplicationStatus defines the observed state of PhApplication
@@ -72,4 +83,52 @@ type PhApplicationList struct {
 
 func init() {
 	SchemeBuilder.Register(&PhApplication{}, &PhApplicationList{})
+}
+
+func (in *PhApplication) GroupNetworkPolicyIngressRule() []networkv1.NetworkPolicyIngressRule {
+	var ports []networkv1.NetworkPolicyPort
+	groupName := escapism.EscapeToPrimehubLabel(in.Spec.GroupName)
+	for _, p := range in.Spec.SvcTemplate.Spec.Ports {
+		ports = append(ports, networkv1.NetworkPolicyPort{
+			Protocol: &p.Protocol,
+			Port: &p.TargetPort,
+		})
+	}
+	return []networkv1.NetworkPolicyIngressRule{
+		{
+			Ports: ports,
+			From: []networkv1.NetworkPolicyPeer{{
+				PodSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{"primehub.io/group": groupName},
+				},
+			}},
+		},
+	}
+}
+
+func (in *PhApplication) ProxyNetworkPolicyIngressRule() []networkv1.NetworkPolicyIngressRule {
+	tcp := corev1.ProtocolTCP
+	appID := in.ObjectMeta.Name
+	return []networkv1.NetworkPolicyIngressRule{
+		{
+			Ports: []networkv1.NetworkPolicyPort{
+				{
+					Protocol: &tcp,
+					Port: &intstr.IntOrString{
+						Type:   intstr.Int,
+						IntVal: *in.Spec.HTTPPort,
+					},
+				},
+			},
+			From: []networkv1.NetworkPolicyPeer{
+				{
+					PodSelector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							"primehub.io/phapplication": appID,
+						},
+					},
+				},
+			},
+		},
+	}
 }
