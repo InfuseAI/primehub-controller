@@ -91,7 +91,7 @@ func (in *PhApplication) GroupNetworkPolicyIngressRule() []networkv1.NetworkPoli
 	for _, p := range in.Spec.SvcTemplate.Spec.Ports {
 		ports = append(ports, networkv1.NetworkPolicyPort{
 			Protocol: &p.Protocol,
-			Port: &p.TargetPort,
+			Port:     &p.TargetPort,
 		})
 	}
 	return []networkv1.NetworkPolicyIngressRule{
@@ -131,4 +131,16 @@ func (in *PhApplication) ProxyNetworkPolicyIngressRule() []networkv1.NetworkPoli
 			},
 		},
 	}
+}
+
+func (in *PhApplication) App() string {
+	return "primehub-app"
+}
+
+func (in *PhApplication) AppID() string {
+	return "app-" + in.ObjectMeta.Name
+}
+
+func (in *PhApplication) GroupName() string {
+	return escapism.EscapeToPrimehubLabel(in.Spec.GroupName)
 }
