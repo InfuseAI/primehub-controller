@@ -6,7 +6,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
 	"k8s.io/apimachinery/pkg/runtime"
-	"primehub-controller/pkg/escapism"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -25,9 +24,9 @@ type PhApplicationReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-func (r *PhApplicationReconciler) getPhApplicationObject(ctx context.Context, namespace string, name string, obj runtime.Object) (bool, error) {
+func (r *PhApplicationReconciler) getPhApplicationObject(namespace string, name string, obj runtime.Object) (bool, error) {
 	exist := true
-	err := r.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, obj)
+	err := r.Get(context.Background(), client.ObjectKey{Namespace: namespace, Name: name}, obj)
 	if err != nil {
 		if !apierrors.IsNotFound(err) {
 			return false, err
@@ -37,57 +36,102 @@ func (r *PhApplicationReconciler) getPhApplicationObject(ctx context.Context, na
 	return exist, nil
 }
 
-func (r *PhApplicationReconciler) createDeployment(ctx context.Context, phApplication *v1alpha1.PhApplication) error {
+func (r *PhApplicationReconciler) createDeployment(phApplication *v1alpha1.PhApplication) error {
 	return nil
 }
 
-func (r *PhApplicationReconciler) updateDeployment(ctx context.Context, phApplication *v1alpha1.PhApplication) error {
+func (r *PhApplicationReconciler) updateDeployment(phApplication *v1alpha1.PhApplication) error {
 	return nil
 }
 
-func (r *PhApplicationReconciler) reconcileDeployment(ctx context.Context, phApplication *v1alpha1.PhApplication) error {
+func (r *PhApplicationReconciler) reconcileDeployment(phApplication *v1alpha1.PhApplication) error {
 	// Check if deployment exist
 	namespace := phApplication.ObjectMeta.Namespace
 	appID := phApplication.ObjectMeta.Name
 	deployment := &appv1.Deployment{}
-	deploymentExist, err := r.getPhApplicationObject(ctx, namespace, "app-"+appID, deployment)
+	deploymentExist, err := r.getPhApplicationObject(namespace, "app-"+appID, deployment)
 	if err != nil {
 		return err
 	}
 
 	if deploymentExist {
 		// Update deployment data
-		return r.updateDeployment(ctx, phApplication)
+		err = r.updateDeployment(phApplication)
 	} else {
 		// Create deployment
-		return r.createDeployment(ctx, phApplication)
+		err = r.createDeployment(phApplication)
 	}
+	return err
 }
 
-func (r *PhApplicationReconciler) createService(ctx context.Context, phApplication *v1alpha1.PhApplication) error {
+func (r *PhApplicationReconciler) createService(phApplication *v1alpha1.PhApplication, service *corev1.Service) error {
+	if phApplication == nil {
+		return apierrors.NewBadRequest("phApplication not provided")
+	}
+	if service == nil {
+		return apierrors.NewBadRequest("service not provided")
+	}
+
+	service.Name = phApplication.AppID()
+	service.Namespace = phApplication.ObjectMeta.Namespace
+	service.ObjectMeta.Labels = map[string]string{
+		"app":                       phApplication.App(),
+		"primehub.io/phapplication": phApplication.AppID(),
+		"primehub.io/group":         phApplication.GroupName(),
+	}
+	service.Spec.Type = corev1.ServiceTypeClusterIP
+	service.Spec.Selector = map[string]string{
+		"primehub.io/phapplication": phApplication.AppID(),
+	}
+	service.Spec.Ports = phApplication.Spec.SvcTemplate.Spec.Ports
+
+	if err := ctrl.SetControllerReference(phApplication, service, r.Scheme); err != nil {
+		return err
+	}
+	if err := r.Client.Create(context.Background(), service); err != nil {
+		return err
+	}
+
+	r.Log.Info("Create Service", "Name", service.Name)
 	return nil
 }
 
-func (r *PhApplicationReconciler) updateService(ctx context.Context, phApplication *v1alpha1.PhApplication) error {
+func (r *PhApplicationReconciler) updateService(phApplication *v1alpha1.PhApplication, service *corev1.Service) error {
+	if phApplication == nil {
+		return apierrors.NewBadRequest("phApplication not provided")
+	}
+	if service == nil {
+		return apierrors.NewBadRequest("service not provided")
+	}
+
+	service.ObjectMeta.Labels["primehub.io/group"] = phApplication.GroupName()
+	service.Spec.Ports = phApplication.Spec.SvcTemplate.Spec.Ports
+
+	if err := r.Client.Update(context.Background(), service); err != nil {
+		return err
+	}
+
+	r.Log.Info("Updated Service", "Name", service.Name)
 	return nil
 }
 
-func (r *PhApplicationReconciler) reconcileService(ctx context.Context, phApplication *v1alpha1.PhApplication) error {
+func (r *PhApplicationReconciler) reconcileService(phApplication *v1alpha1.PhApplication) error {
 	namespace := phApplication.ObjectMeta.Namespace
 	appID := phApplication.ObjectMeta.Name
 	service := &corev1.Service{}
-	serviceExist, err := r.getPhApplicationObject(ctx, namespace, "app-"+appID, service)
+	serviceExist, err := r.getPhApplicationObject(namespace, "app-"+appID, service)
 	if err != nil {
 		return err
 	}
 
 	if serviceExist {
 		// Update Service
-		return r.updateService(ctx, phApplication)
+		err = r.updateService(phApplication, service)
 	} else {
 		// Create Service
-		return r.createService(ctx, phApplication)
+		err = r.createService(phApplication, service)
 	}
+	return err
 }
 
 const (
@@ -95,17 +139,13 @@ const (
 	ProxyNetwrokPolicy string = "proxy"
 )
 
-func (r *PhApplicationReconciler) createNetworkPolicy(ctx context.Context, phApplication *v1alpha1.PhApplication, networkPolicy *networkv1.NetworkPolicy, npType string) error {
+func (r *PhApplicationReconciler) createNetworkPolicy(phApplication *v1alpha1.PhApplication, networkPolicy *networkv1.NetworkPolicy, npType string) error {
 	if phApplication == nil {
 		return apierrors.NewBadRequest("phApplication not provided")
 	}
 	if networkPolicy == nil {
 		return apierrors.NewBadRequest("networkPolicy not provided")
 	}
-
-	appID := "app-" + phApplication.Name
-	name := appID + "-" + npType
-	groupName := escapism.EscapeToPrimehubLabel(phApplication.Spec.GroupName)
 
 	var ingress []networkv1.NetworkPolicyIngressRule
 	switch npType {
@@ -115,17 +155,17 @@ func (r *PhApplicationReconciler) createNetworkPolicy(ctx context.Context, phApp
 		ingress = phApplication.ProxyNetworkPolicyIngressRule()
 	}
 
-	networkPolicy.Name = name
+	networkPolicy.Name = phApplication.AppID() + "-" + npType
 	networkPolicy.Namespace = phApplication.ObjectMeta.Namespace
 	networkPolicy.ObjectMeta.Labels = map[string]string{
-		"app":                       "primehub-app",
-		"primehub.io/phapplication": appID,
-		"primehub.io/group":         groupName,
+		"app":                       phApplication.App(),
+		"primehub.io/phapplication": phApplication.AppID(),
+		"primehub.io/group":         phApplication.GroupName(),
 	}
 	networkPolicy.Spec = networkv1.NetworkPolicySpec{
 		PodSelector: metav1.LabelSelector{
 			MatchLabels: map[string]string{
-				"primehub.io/phapplication": appID,
+				"primehub.io/phapplication": phApplication.AppID(),
 			},
 		},
 		Ingress: ingress,
@@ -138,28 +178,36 @@ func (r *PhApplicationReconciler) createNetworkPolicy(ctx context.Context, phApp
 	if err := ctrl.SetControllerReference(phApplication, networkPolicy, r.Scheme); err != nil {
 		return err
 	}
-	if err := r.Client.Create(ctx, networkPolicy); err != nil {
+	if err := r.Client.Create(context.Background(), networkPolicy); err != nil {
 		return err
 	}
 	r.Log.Info("Created NetworkPolicy", "Name", networkPolicy.Name)
 	return nil
 }
 
-func (r *PhApplicationReconciler) updateNetworkPolicy(ctx context.Context, phApplication *v1alpha1.PhApplication, networkPolicy *networkv1.NetworkPolicy, npType string) error {
+func (r *PhApplicationReconciler) updateNetworkPolicy(phApplication *v1alpha1.PhApplication, networkPolicy *networkv1.NetworkPolicy, npType string) error {
+	if phApplication == nil {
+		return apierrors.NewBadRequest("phApplication not provided")
+	}
+	if networkPolicy == nil {
+		return apierrors.NewBadRequest("networkPolicy not provided")
+	}
+
+	networkPolicy.ObjectMeta.Labels["primehub.io/group"] = phApplication.GroupName()
 	switch npType {
 	case GroupNetworkPolicy:
 		networkPolicy.Spec.Ingress = phApplication.GroupNetworkPolicyIngressRule()
 	case ProxyNetwrokPolicy:
 		networkPolicy.Spec.Ingress = phApplication.ProxyNetworkPolicyIngressRule()
 	}
-	if err := r.Client.Update(ctx, networkPolicy); err != nil {
+	if err := r.Client.Update(context.Background(), networkPolicy); err != nil {
 		return err
 	}
 	r.Log.Info("Updated NetworkPolicy", "Name", networkPolicy.Name)
 	return nil
 }
 
-func (r *PhApplicationReconciler) reconcileNetworkPolicy(ctx context.Context, phApplication *v1alpha1.PhApplication) error {
+func (r *PhApplicationReconciler) reconcileNetworkPolicy(phApplication *v1alpha1.PhApplication) error {
 	var name string
 	namespace := phApplication.ObjectMeta.Namespace
 	appID := phApplication.ObjectMeta.Name
@@ -167,37 +215,37 @@ func (r *PhApplicationReconciler) reconcileNetworkPolicy(ctx context.Context, ph
 	proxyNetworkPolicy := &networkv1.NetworkPolicy{}
 
 	name = "app-" + appID + "-" + GroupNetworkPolicy
-	groupNetworkPolicyExist, err := r.getPhApplicationObject(ctx, namespace, name, groupNetworkPolicy)
+	groupNetworkPolicyExist, err := r.getPhApplicationObject(namespace, name, groupNetworkPolicy)
 	if err != nil {
 		return err
 	}
 
 	name = "app-" + appID + "-" + ProxyNetwrokPolicy
-	proxyNetworkPolicyExist, err := r.getPhApplicationObject(ctx, namespace, name, proxyNetworkPolicy)
+	proxyNetworkPolicyExist, err := r.getPhApplicationObject(namespace, name, proxyNetworkPolicy)
 	if err != nil {
 		return err
 	}
 
 	if groupNetworkPolicyExist {
 		// Update NetworkPolicy
-		err = r.updateNetworkPolicy(ctx, phApplication, groupNetworkPolicy, GroupNetworkPolicy)
+		err = r.updateNetworkPolicy(phApplication, groupNetworkPolicy, GroupNetworkPolicy)
 	} else {
 		// Create NetworkPolicy
-		err = r.createNetworkPolicy(ctx, phApplication, groupNetworkPolicy, GroupNetworkPolicy)
+		err = r.createNetworkPolicy(phApplication, groupNetworkPolicy, GroupNetworkPolicy)
 	}
 
 	if proxyNetworkPolicyExist {
 		// Update NetworkPolicy
-		err = r.updateNetworkPolicy(ctx, phApplication, proxyNetworkPolicy, ProxyNetwrokPolicy)
+		err = r.updateNetworkPolicy(phApplication, proxyNetworkPolicy, ProxyNetwrokPolicy)
 	} else {
 		// Create NetworkPolicy
-		err = r.createNetworkPolicy(ctx, phApplication, proxyNetworkPolicy, ProxyNetwrokPolicy)
+		err = r.createNetworkPolicy(phApplication, proxyNetworkPolicy, ProxyNetwrokPolicy)
 	}
 
 	return err
 }
 
-func (r *PhApplicationReconciler) updatePhApplicationStatus(ctx context.Context, phApplication *v1alpha1.PhApplication) {
+func (r *PhApplicationReconciler) updatePhApplicationStatus(phApplication *v1alpha1.PhApplication) {
 	return
 }
 
@@ -207,11 +255,10 @@ func (r *PhApplicationReconciler) updatePhApplicationStatus(ctx context.Context,
 func (r *PhApplicationReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	var err error
 	var phApplication v1alpha1.PhApplication
-	ctx := context.Background()
 	log := r.Log.WithValues("phapplication", req.NamespacedName)
 
 	// Fetch phApplication object
-	if err = r.Get(ctx, req.NamespacedName, &phApplication); err != nil {
+	if err = r.Get(context.Background(), req.NamespacedName, &phApplication); err != nil {
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
@@ -220,22 +267,22 @@ func (r *PhApplicationReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 	}
 
 	// Reconcile Deployment
-	if err = r.reconcileDeployment(ctx, &phApplication); err != nil {
+	if err = r.reconcileDeployment(&phApplication); err != nil {
 		log.Error(err, "Reconcile Deployment failed")
 	}
 
 	// Reconcile Service
-	if err = r.reconcileService(ctx, &phApplication); err != nil {
+	if err = r.reconcileService(&phApplication); err != nil {
 		log.Error(err, "Reconcile Service failed")
 	}
 
 	// Reconcile Network-policy
-	if err = r.reconcileNetworkPolicy(ctx, &phApplication); err != nil {
+	if err = r.reconcileNetworkPolicy(&phApplication); err != nil {
 		log.Error(err, "Reconcile NetworkPolicy failed")
 	}
 
 	// Update status
-	r.updatePhApplicationStatus(ctx, &phApplication)
+	r.updatePhApplicationStatus(&phApplication)
 
 	return ctrl.Result{}, nil
 }
