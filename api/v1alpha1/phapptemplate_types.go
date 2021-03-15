@@ -28,9 +28,15 @@ type PhAppTemplateDefaultEnv struct {
 	Optional     bool   `json:"optional,omitempty"`
 }
 
+type PhAppTemplateContentSpec struct {
+	PodTemplate PhApplicationPodTemplate `json:"podTemplate"`
+	SvcTemplate PhApplicationSvcTemplate `json:"svcTemplate"`
+	HTTPPort    *int32                   `json:"httpPort,omitempty"`
+}
+
 // PhAppTemplateContent defines the PhApplication spec content
 type PhAppTemplateContent struct {
-	Spec PhApplicationSpec `json:"spec"`
+	Spec PhAppTemplateContentSpec `json:"spec"`
 }
 
 // +kubebuilder:object:root=true

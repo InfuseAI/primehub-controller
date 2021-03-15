@@ -65,17 +65,10 @@ spec:
               description: PhAppTemplateContent defines the PhApplication spec content
               properties:
                 spec:
-                  description: PhApplicationSpec defines the desired state of PhApplication
                   properties:
-                    displayName:
-                      type: string
-                    groupName:
-                      type: string
                     httpPort:
                       format: int32
                       type: integer
-                    instanceType:
-                      type: string
                     podTemplate:
                       properties:
                         spec:
@@ -4640,10 +4633,6 @@ spec:
                       required:
                       - spec
                       type: object
-                    scope:
-                      type: string
-                    stop:
-                      type: boolean
                     svcTemplate:
                       properties:
                         spec:
@@ -4838,11 +4827,7 @@ spec:
                       - spec
                       type: object
                   required:
-                  - displayName
-                  - groupName
-                  - instanceType
                   - podTemplate
-                  - scope
                   - svcTemplate
                   type: object
               required:
