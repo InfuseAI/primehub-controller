@@ -60,7 +60,10 @@ type PhApplicationStatus struct {
 	ServiceName string `json:"serviceName,omitempty"`
 }
 
+// +kubebuilder:subresource:status
 // +kubebuilder:object:root=true
+// +kubebuilder:printcolumn:name="Group",type="string",JSONPath=".spec.groupName"
+// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.phase",description="Status of the deployment"
 
 // PhApplication is the Schema for the phapplications API
 type PhApplication struct {
@@ -109,7 +112,6 @@ func (in *PhApplication) GroupNetworkPolicyIngressRule() []networkv1.NetworkPoli
 
 func (in *PhApplication) ProxyNetworkPolicyIngressRule() []networkv1.NetworkPolicyIngressRule {
 	var ports []networkv1.NetworkPolicyPort
-	appID := in.ObjectMeta.Name
 	for _, p := range in.Spec.SvcTemplate.Spec.Ports {
 		ports = append(ports, networkv1.NetworkPolicyPort{
 			Protocol: &p.Protocol,
@@ -122,7 +124,7 @@ func (in *PhApplication) ProxyNetworkPolicyIngressRule() []networkv1.NetworkPoli
 			From: []networkv1.NetworkPolicyPeer{
 				{
 					PodSelector: &metav1.LabelSelector{
-						MatchLabels: map[string]string{"primehub.io/phapplication": appID},
+						MatchLabels: map[string]string{"primehub.io/phapplication": in.AppName()},
 					},
 				},
 			},
@@ -135,6 +137,10 @@ func (in *PhApplication) App() string {
 }
 
 func (in *PhApplication) AppID() string {
+	return in.ObjectMeta.Name
+}
+
+func (in *PhApplication) AppName() string {
 	return "app-" + in.ObjectMeta.Name
 }
 

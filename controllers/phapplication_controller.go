@@ -50,7 +50,7 @@ func (r *PhApplicationReconciler) generateDeploymentSpec(phApplication *v1alpha1
 	podSpec := phApplication.Spec.PodTemplate.Spec.DeepCopy()
 	labels := map[string]string{
 		"app":                       phApplication.App(),
-		"primehub.io/phapplication": phApplication.AppID(),
+		"primehub.io/phapplication": phApplication.AppName(),
 		"primehub.io/group":         phApplication.GroupName(),
 	}
 
@@ -66,13 +66,13 @@ func (r *PhApplicationReconciler) generateDeploymentSpec(phApplication *v1alpha1
 		return err
 	}
 
-	deployment.Name = phApplication.AppID()
+	deployment.Name = phApplication.AppName()
 	deployment.Namespace = phApplication.ObjectMeta.Namespace
 	deployment.ObjectMeta.Labels = labels
 	deployment.Spec.Replicas = &replicas
 	deployment.Spec.Selector = &metav1.LabelSelector{
 		MatchLabels: map[string]string{
-			"primehub.io/phapplication": phApplication.AppID(),
+			"primehub.io/phapplication": phApplication.AppName(),
 		},
 	}
 	deployment.Spec.Template.ObjectMeta.Labels = labels
@@ -146,9 +146,8 @@ func (r *PhApplicationReconciler) updateDeployment(phApplication *v1alpha1.PhApp
 func (r *PhApplicationReconciler) reconcileDeployment(phApplication *v1alpha1.PhApplication) error {
 	// Check if deployment exist
 	namespace := phApplication.ObjectMeta.Namespace
-	appID := phApplication.ObjectMeta.Name
 	deployment := &appv1.Deployment{}
-	deploymentExist, err := r.getPhApplicationObject(namespace, "app-"+appID, deployment)
+	deploymentExist, err := r.getPhApplicationObject(namespace, phApplication.AppName(), deployment)
 	if err != nil {
 		return err
 	}
@@ -171,16 +170,16 @@ func (r *PhApplicationReconciler) createService(phApplication *v1alpha1.PhApplic
 		return apierrors.NewBadRequest("service not provided")
 	}
 
-	service.Name = phApplication.AppID()
+	service.Name = phApplication.AppName()
 	service.Namespace = phApplication.ObjectMeta.Namespace
 	service.ObjectMeta.Labels = map[string]string{
 		"app":                       phApplication.App(),
-		"primehub.io/phapplication": phApplication.AppID(),
+		"primehub.io/phapplication": phApplication.AppName(),
 		"primehub.io/group":         phApplication.GroupName(),
 	}
 	service.Spec.Type = corev1.ServiceTypeClusterIP
 	service.Spec.Selector = map[string]string{
-		"primehub.io/phapplication": phApplication.AppID(),
+		"primehub.io/phapplication": phApplication.AppName(),
 	}
 	service.Spec.Ports = phApplication.Spec.SvcTemplate.Spec.Ports
 
@@ -216,9 +215,8 @@ func (r *PhApplicationReconciler) updateService(phApplication *v1alpha1.PhApplic
 
 func (r *PhApplicationReconciler) reconcileService(phApplication *v1alpha1.PhApplication) error {
 	namespace := phApplication.ObjectMeta.Namespace
-	appID := phApplication.ObjectMeta.Name
 	service := &corev1.Service{}
-	serviceExist, err := r.getPhApplicationObject(namespace, "app-"+appID, service)
+	serviceExist, err := r.getPhApplicationObject(namespace, phApplication.AppName(), service)
 	if err != nil {
 		return err
 	}
@@ -254,17 +252,17 @@ func (r *PhApplicationReconciler) createNetworkPolicy(phApplication *v1alpha1.Ph
 		ingress = phApplication.ProxyNetworkPolicyIngressRule()
 	}
 
-	networkPolicy.Name = phApplication.AppID() + "-" + npType
+	networkPolicy.Name = phApplication.AppName() + "-" + npType
 	networkPolicy.Namespace = phApplication.ObjectMeta.Namespace
 	networkPolicy.ObjectMeta.Labels = map[string]string{
 		"app":                       phApplication.App(),
-		"primehub.io/phapplication": phApplication.AppID(),
+		"primehub.io/phapplication": phApplication.AppName(),
 		"primehub.io/group":         phApplication.GroupName(),
 	}
 	networkPolicy.Spec = networkv1.NetworkPolicySpec{
 		PodSelector: metav1.LabelSelector{
 			MatchLabels: map[string]string{
-				"primehub.io/phapplication": phApplication.AppID(),
+				"primehub.io/phapplication": phApplication.AppName(),
 			},
 		},
 		Ingress: ingress,
@@ -310,17 +308,16 @@ func (r *PhApplicationReconciler) updateNetworkPolicy(phApplication *v1alpha1.Ph
 func (r *PhApplicationReconciler) reconcileNetworkPolicy(phApplication *v1alpha1.PhApplication) error {
 	var name string
 	namespace := phApplication.ObjectMeta.Namespace
-	appID := phApplication.ObjectMeta.Name
 	groupNetworkPolicy := &networkv1.NetworkPolicy{}
 	proxyNetworkPolicy := &networkv1.NetworkPolicy{}
 
-	name = "app-" + appID + "-" + GroupNetworkPolicy
+	name = phApplication.AppName() + "-" + GroupNetworkPolicy
 	groupNetworkPolicyExist, err := r.getPhApplicationObject(namespace, name, groupNetworkPolicy)
 	if err != nil {
 		return err
 	}
 
-	name = "app-" + appID + "-" + ProxyNetwrokPolicy
+	name = phApplication.AppName() + "-" + ProxyNetwrokPolicy
 	proxyNetworkPolicyExist, err := r.getPhApplicationObject(namespace, name, proxyNetworkPolicy)
 	if err != nil {
 		return err
@@ -345,8 +342,42 @@ func (r *PhApplicationReconciler) reconcileNetworkPolicy(phApplication *v1alpha1
 	return err
 }
 
-func (r *PhApplicationReconciler) updatePhApplicationStatus(phApplication *v1alpha1.PhApplication) {
-	return
+func (r *PhApplicationReconciler) updatePhApplicationStatus(phApplication *v1alpha1.PhApplication) error {
+	phase := v1alpha1.ApplicationError
+	namespace := phApplication.ObjectMeta.Namespace
+	deployment := &appv1.Deployment{}
+	deploymentExist, err := r.getPhApplicationObject(namespace, phApplication.AppName(), deployment)
+	if err != nil || deploymentExist == false {
+		phase = v1alpha1.ApplicationError
+	} else if phApplication.Spec.Stop {
+		// Deployment Stop
+		if deployment.Status.Replicas == 0 {
+			phase = v1alpha1.ApplicationStopped
+		} else {
+			phase = v1alpha1.ApplicationStopping
+		}
+	} else {
+		// Deployment Start
+		if deployment.Status.ReadyReplicas == 0 {
+			phase = v1alpha1.ApplicationStarting
+		} else if deployment.Status.ReadyReplicas == deployment.Status.Replicas {
+			phase = v1alpha1.ApplicationReady
+		} else {
+			phase = v1alpha1.ApplicationUpdating
+		}
+	}
+	phApplicationClone := phApplication.DeepCopy()
+	phApplicationClone.Status.Phase = phase
+	phApplicationClone.Status.ServiceName = phApplication.AppName()
+	if err := r.Status().Update(context.Background(), phApplicationClone); err != nil {
+
+		return err
+	}
+	r.Log.Info("Updated Status",
+		"Phase", phase,
+		"Replicas", deployment.Status.Replicas,
+		"ReadyReplicas", deployment.Status.ReadyReplicas)
+	return nil
 }
 
 // +kubebuilder:rbac:groups=primehub.io,resources=phapplications,verbs=get;list;watch;create;update;patch;delete
@@ -360,6 +391,7 @@ func (r *PhApplicationReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 	// Fetch phApplication object
 	if err = r.Get(context.Background(), req.NamespacedName, &phApplication); err != nil {
 		if apierrors.IsNotFound(err) {
+			log.Info("Deleted phApplication")
 			return ctrl.Result{}, nil
 		}
 		log.Error(err, "Unable to fetch phApplication")
@@ -368,21 +400,23 @@ func (r *PhApplicationReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 
 	// Reconcile Deployment
 	if err = r.reconcileDeployment(&phApplication); err != nil {
-		log.Error(err, "Reconcile Deployment failed")
+		log.Info("Reconcile Deployment failed", "error", err)
 	}
 
 	// Reconcile Service
 	if err = r.reconcileService(&phApplication); err != nil {
-		log.Error(err, "Reconcile Service failed")
+		log.Info("Reconcile Service failed", "error", err)
 	}
 
 	// Reconcile Network-policy
 	if err = r.reconcileNetworkPolicy(&phApplication); err != nil {
-		log.Error(err, "Reconcile NetworkPolicy failed")
+		log.Info("Reconcile NetworkPolicy failed", "error", err)
 	}
 
 	// Update status
-	r.updatePhApplicationStatus(&phApplication)
+	if err = r.updatePhApplicationStatus(&phApplication); err != nil {
+		log.Info("Update status failed", "error", err)
+	}
 
 	return ctrl.Result{}, nil
 }
