@@ -3,15 +3,13 @@ module primehub-controller
 go 1.13
 
 require (
-	github.com/fatih/structtag v1.2.0 // indirect
 	github.com/go-logr/logr v0.1.0
-	github.com/karlseguin/ccache v2.0.3+incompatible // indirect
+	github.com/karlseguin/ccache v2.0.3+incompatible
 	github.com/karlseguin/expect v1.0.7 // indirect
 	github.com/magiconair/properties v1.8.1 // indirect
 	github.com/onsi/ginkgo v1.6.0
 	github.com/onsi/gomega v1.4.2
 	github.com/pelletier/go-toml v1.6.0 // indirect
-	github.com/robfig/cron/v3 v3.0.0 // indirect
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
 	github.com/spf13/viper v1.4.0
 	github.com/stretchr/testify v1.3.0

@@ -6,6 +6,8 @@ import (
 	"os"
 	primehubv1alpha1 "primehub-controller/api/v1alpha1"
 	"primehub-controller/controllers"
+	"primehub-controller/pkg/cache"
+	"primehub-controller/pkg/graphql"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -80,6 +82,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	graphqlClient := graphql.NewGraphqlClient(
+		viper.GetString("jobSubmission.graphqlEndpoint"),
+		viper.GetString("jobSubmission.graphqlSecret"))
+
+	primehubCache := phcache.NewPrimeHubCache(graphqlClient)
+
 	if err = (&controllers.ImageReconciler{
 		Client: mgr.GetClient(),
 		Log:    ctrl.Log.WithName("controllers").WithName("Image"),
@@ -89,9 +97,10 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controllers.PhApplicationReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("PhApplication"),
-		Scheme: mgr.GetScheme(),
+		Client:        mgr.GetClient(),
+		Log:           ctrl.Log.WithName("controllers").WithName("PhApplication"),
+		Scheme:        mgr.GetScheme(),
+		PrimeHubCache: primehubCache,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PhApplication")
 		os.Exit(1)

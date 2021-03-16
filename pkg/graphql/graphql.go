@@ -152,6 +152,7 @@ type AbstractGraphqlClient interface {
 	QueryServer(map[string]interface{}) ([]byte, error)
 	FetchGroupEnableModelDeployment(string) (bool, error)
 	FetchGroupInfo(string) (*DtoGroup, error)
+	FetchGroupInfoByName(string) (*DtoGroup, error)
 	FetchInstanceTypeInfo(string) (*DtoInstanceType, error)
 	FetchTimeZone() (string, error)
 	NotifyPhJobEvent(id string, eventType string) (float64, error)
@@ -313,6 +314,64 @@ func (c GraphqlClient) FetchGroupEnableModelDeployment(groupId string) (bool, er
 	}
 
 	return group.EnabledDeployment, nil
+}
+
+func (c GraphqlClient) FetchGroupInfoByName(groupName string) (*DtoGroup, error) {
+	query := `
+	query ($id: ID!) {
+		group(where: {name: $id}) { 
+					name
+					id
+					quotaCpu
+					quotaGpu
+					quotaMemory
+					projectQuotaCpu
+					projectQuotaGpu
+					projectQuotaMemory
+					jobDefaultActiveDeadlineSeconds
+	  }
+	}
+	`
+	requestData := map[string]interface{}{
+		"query": query,
+		"variables": map[string]interface{}{
+			"name": groupName,
+		},
+	}
+	body, err := c.QueryServer(requestData)
+	if err != nil {
+		return nil, err
+	}
+	data := map[string]interface{}{}
+	json.Unmarshal(body, &data)
+
+	data, ok := data["data"].(map[string]interface{})
+	if !ok {
+		return nil, errors.New("can not find data in response")
+	}
+	_group, ok := data["group"].(map[string]interface{})
+	if !ok {
+		return nil, errors.New("can not find group in response")
+	}
+
+	var group DtoGroup
+	jsonObj, _ := json.Marshal(_group)
+	json.Unmarshal(jsonObj, &group)
+
+	if _group["quotaCpu"] == nil {
+		group.QuotaCpu = -1
+	}
+	if _group["quotaGpu"] == nil {
+		group.QuotaGpu = -1
+	}
+	if _group["projectQuotaCpu"] == nil {
+		group.ProjectQuotaCpu = -1
+	}
+	if _group["projectQuotaGpu"] == nil {
+		group.ProjectQuotaGpu = -1
+	}
+
+	return &group, nil
 }
 
 func (c GraphqlClient) FetchGroupInfo(groupId string) (*DtoGroup, error) {
