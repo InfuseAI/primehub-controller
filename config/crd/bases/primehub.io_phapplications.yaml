@@ -8,6 +8,14 @@ metadata:
   creationTimestamp: null
   name: phapplications.primehub.io
 spec:
+  additionalPrinterColumns:
+  - JSONPath: .spec.groupName
+    name: Group
+    type: string
+  - JSONPath: .status.phase
+    description: Status of the deployment
+    name: Status
+    type: string
   group: primehub.io
   names:
     kind: PhApplication
@@ -15,6 +23,8 @@ spec:
     plural: phapplications
     singular: phapplication
   scope: ""
+  subresources:
+    status: {}
   validation:
     openAPIV3Schema:
       description: PhApplication is the Schema for the phapplications API
