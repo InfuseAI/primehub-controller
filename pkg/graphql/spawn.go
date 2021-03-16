@@ -38,11 +38,13 @@ type Spawner struct {
 	volumes         []corev1.Volume      // pod: volumes
 	volumeMounts    []corev1.VolumeMount // main container: volume mounts
 	env             []corev1.EnvVar
+	prependEnv      []corev1.EnvVar
 	workingDir      string   // main container: working directory
 	symlinks        []string // main container: symbolic links commands
 	image           string   // main container: image
 	imagePullSecret string   // main container: imagePullSecret
 	command         []string // main container: command
+	args            []string // main container: args
 
 	PodSecurityContext corev1.PodSecurityContext
 	NodeSelector       map[string]string
@@ -124,7 +126,7 @@ func NewSpawnerForJob(data DtoData, groupName string, instanceTypeName string, i
 	spawner.applyUserAndGroupEnv(data.User.Username, groupName)
 
 	// Mount `scripts`
-	spawner.applyScripts()
+	spawner.applyScripts("primehub-controller-job-scripts")
 
 	// Apply artifacts relative
 	if options.ArtifactEnabled && options.PhfsEnabled {
@@ -165,6 +167,60 @@ func NewSpawnerForModelDeployment(data DtoData, groupName string, instanceTypeNa
 	spawner.image = imageUrl
 
 	spawner.containerName = "model"
+
+	return spawner, nil
+}
+
+func NewSpawnerForPhApplication(appID string, group DtoGroup, instanceType DtoInstanceType, spec corev1.PodSpec) (*Spawner, error) {
+	//var err error
+	spawner := &Spawner{}
+	var primeHubAppRoot string
+
+	// Apply Group volume
+	if group.EnabledSharedVolume {
+		primeHubAppRoot = "/project/phusers/phapplications/" + appID
+		spawner.applyVolumeForGroup(group.Name, group)
+	} else {
+		primeHubAppRoot = "/phapplications/" + appID
+		spawner.applyVolumeForWorkingDir(primeHubAppRoot, resource.MustParse("5Gi"))
+	}
+
+	// Apply Dataset
+	for _, d := range group.Datasets {
+		spawner.applyDataset(d)
+	}
+
+	// Apply Resource
+	spawner.applyResourceForInstanceType(instanceType)
+
+	// Apply Node Selector
+	spawner.ApplyNodeSelectorForOperator(instanceType.Spec.NodeSelector)
+
+	// Apply Toleration
+	spawner.ApplyTolerationsForOperator(instanceType.Spec.Tolerations)
+
+	// Apply Container
+	container := spec.Containers[0] // According the spec, we only keep the first container
+	spawner.command = append([]string{"/script/run-app"}, container.Command...)
+	spawner.args = container.Args
+
+	// Mount `scripts`
+	spawner.applyScripts("primehub-controller-phapplication-scripts")
+
+	// Prepend Env
+	spawner.prependEnv = append(spawner.env, []corev1.EnvVar{
+		{
+			Name:  "PRIMEHUB_APP_ID",
+			Value: appID,
+		},
+		{
+			Name:  "PRIMEHUB_APP_ROOT",
+			Value: primeHubAppRoot,
+		},
+		{
+			Name:  "PRIMEHUB_APP_BASE_URL",
+			Value: "/console/apps/" + appID,
+		}}...)
 
 	return spawner, nil
 }
@@ -700,7 +756,7 @@ func (spawner *Spawner) applyUserAndGroupEnv(userName string, groupName string) 
 	spawner.env = append(spawner.env, user, group)
 }
 
-func (spawner *Spawner) applyScripts() {
+func (spawner *Spawner) applyScripts(name string) {
 	volumeName := "scripts"
 	defaultMode := int32(0777)
 	volume := corev1.Volume{
@@ -708,7 +764,7 @@ func (spawner *Spawner) applyScripts() {
 		VolumeSource: corev1.VolumeSource{
 			ConfigMap: &corev1.ConfigMapVolumeSource{
 				LocalObjectReference: corev1.LocalObjectReference{
-					Name: "primehub-controller-job-scripts",
+					Name: name,
 				},
 				DefaultMode: &defaultMode,
 			},
@@ -771,6 +827,100 @@ func (spawner *Spawner) applyGrantSudo(grantSudo bool) {
 		Value: strconv.FormatBool(grantSudo),
 	})
 	spawner.PodSecurityContext = securityContext
+}
+
+func (spawner *Spawner) PatchPodSpec(podSpec *corev1.PodSpec) {
+	var container corev1.Container
+	if len(podSpec.Containers) == 0 {
+		spawner.BuildPodSpec(podSpec)
+		return
+	}
+
+	container = podSpec.Containers[0]
+	container.TerminationMessagePolicy = corev1.TerminationMessageFallbackToLogsOnError
+	container.ImagePullPolicy = corev1.PullIfNotPresent
+	container.VolumeMounts = append(container.VolumeMounts, spawner.volumeMounts...)
+
+	if spawner.containerName != "" {
+		container.Name = spawner.containerName
+	}
+	if spawner.image != "" {
+		container.Image = spawner.image
+	}
+	if len(spawner.command) > 0 {
+		container.Command = spawner.command
+	}
+	if spawner.workingDir != "" {
+		container.WorkingDir = spawner.workingDir
+	}
+	if len(spawner.env) > 0 {
+		container.Env = spawner.env
+	}
+	if len(spawner.prependEnv) > 0 {
+		container.Env = append(spawner.prependEnv, container.Env...)
+	}
+
+	// Resource Limit
+	container.Resources.Requests = map[corev1.ResourceName]resource.Quantity{}
+	container.Resources.Limits = map[corev1.ResourceName]resource.Quantity{}
+	if !spawner.requestsCpu.IsZero() {
+		container.Resources.Requests["cpu"] = spawner.requestsCpu
+	}
+
+	if !spawner.requestsMemory.IsZero() {
+		container.Resources.Requests["memory"] = spawner.requestsMemory
+	}
+
+	if !spawner.requestsGpu.IsZero() {
+		container.Resources.Requests["nvidia.com/gpu"] = spawner.requestsGpu
+	}
+
+	if !spawner.limitsCpu.IsZero() {
+		container.Resources.Limits["cpu"] = spawner.limitsCpu
+	}
+
+	if !spawner.limitsMemory.IsZero() {
+		container.Resources.Limits["memory"] = spawner.limitsMemory
+	}
+
+	if !spawner.limitsGpu.IsZero() {
+		container.Resources.Limits["nvidia.com/gpu"] = spawner.limitsGpu
+	}
+
+	if spawner.symlinks != nil {
+		container.Lifecycle = &corev1.Lifecycle{
+			PostStart: &corev1.Handler{
+				Exec: &corev1.ExecAction{
+					Command: []string{
+						"sh",
+						"-c",
+						strings.Join(spawner.symlinks, ";"),
+					},
+				},
+			},
+		}
+	}
+
+	// Pod
+	podSpec.Volumes = append(podSpec.Volumes, spawner.volumes...)
+	if spawner.imagePullSecret != "" {
+		podSpec.ImagePullSecrets = append(podSpec.ImagePullSecrets, corev1.LocalObjectReference{
+			Name: spawner.imagePullSecret,
+		})
+	}
+	if podSpec.SecurityContext == nil {
+		podSpec.SecurityContext = &spawner.PodSecurityContext
+	}
+	if podSpec.Affinity == nil {
+		podSpec.Affinity = &spawner.Affinity
+	}
+	if podSpec.NodeSelector == nil {
+		podSpec.NodeSelector = make(map[string]string)
+	}
+	for k, v := range spawner.NodeSelector {
+		podSpec.NodeSelector[k] = v
+	}
+	podSpec.Tolerations = append(podSpec.Tolerations, spawner.Tolerations...)
 }
 
 func (spawner *Spawner) BuildPodSpec(podSpec *corev1.PodSpec) {

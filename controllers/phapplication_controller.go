@@ -4,8 +4,9 @@ import (
 	"context"
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-
 	"k8s.io/apimachinery/pkg/runtime"
+	phcache "primehub-controller/pkg/cache"
+	"primehub-controller/pkg/graphql"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -20,8 +21,9 @@ import (
 // PhApplicationReconciler reconciles a PhApplication object
 type PhApplicationReconciler struct {
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
+	Log           logr.Logger
+	Scheme        *runtime.Scheme
+	PrimeHubCache *phcache.PrimeHubCache
 }
 
 func (r *PhApplicationReconciler) getPhApplicationObject(namespace string, name string, obj runtime.Object) (bool, error) {
@@ -36,11 +38,93 @@ func (r *PhApplicationReconciler) getPhApplicationObject(namespace string, name 
 	return exist, nil
 }
 
-func (r *PhApplicationReconciler) createDeployment(phApplication *v1alpha1.PhApplication) error {
+func (r *PhApplicationReconciler) generateDeploymentCRD(phApplication *v1alpha1.PhApplication, deployment *appv1.Deployment) error {
+	var replicas int32
+	var err error
+
+	if phApplication.Spec.Stop == true {
+		replicas = 0
+	} else {
+		replicas = 1
+	}
+	podSpec := phApplication.Spec.PodTemplate.Spec.DeepCopy()
+	labels := map[string]string{
+		"app":                       phApplication.App(),
+		"primehub.io/phapplication": phApplication.AppID(),
+		"primehub.io/group":         phApplication.GroupName(),
+	}
+
+	// Fetch InstanceType data from graphql
+	instanceTypeInfo, err := r.PrimeHubCache.FetchInstanceType(phApplication.Spec.InstanceType)
+	if err != nil {
+		return err
+	}
+
+	// Fetch Group data from graphql
+	groupInfo, err := r.PrimeHubCache.FetchGroupByName(phApplication.Spec.GroupName)
+	if err != nil {
+		return err
+	}
+
+	deployment.Name = phApplication.AppID()
+	deployment.Namespace = phApplication.ObjectMeta.Namespace
+	deployment.ObjectMeta.Labels = labels
+	deployment.Spec.Replicas = &replicas
+	deployment.Spec.Selector.MatchLabels = map[string]string{
+		"primehub.io/phapplication": phApplication.AppID(),
+	}
+	deployment.Spec.Template.ObjectMeta.Labels = labels
+	spawner, err := graphql.NewSpawnerForPhApplication(phApplication.AppID(), *groupInfo, *instanceTypeInfo, *podSpec)
+	if err != nil {
+		return err
+	}
+
+	spawner.PatchPodSpec(&deployment.Spec.Template.Spec)
+
 	return nil
 }
 
-func (r *PhApplicationReconciler) updateDeployment(phApplication *v1alpha1.PhApplication) error {
+func (r *PhApplicationReconciler) createDeployment(phApplication *v1alpha1.PhApplication, deployment *appv1.Deployment) error {
+	if phApplication == nil {
+		return apierrors.NewBadRequest("phApplication not provided")
+	}
+	if deployment == nil {
+		return apierrors.NewBadRequest("deployment not provided")
+	}
+
+	if err := r.generateDeploymentCRD(phApplication, deployment); err != nil {
+		return err
+	}
+
+	if err := ctrl.SetControllerReference(phApplication, deployment, r.Scheme); err != nil {
+		return err
+	}
+	if err := r.Client.Create(context.Background(), deployment); err != nil {
+		return err
+	}
+
+	r.Log.Info("Create Deployment", "Name", deployment.Name, "Replica", deployment.Spec.Replicas)
+	return nil
+}
+
+func (r *PhApplicationReconciler) updateDeployment(phApplication *v1alpha1.PhApplication, deployment *appv1.Deployment) error {
+	if phApplication == nil {
+		return apierrors.NewBadRequest("phApplication not provided")
+	}
+	if deployment == nil {
+		return apierrors.NewBadRequest("deployment not provided")
+	}
+
+	newDeployment := deployment.DeepCopy()
+	if err := r.generateDeploymentCRD(phApplication, newDeployment); err != nil {
+		return err
+	}
+
+	if err := r.Client.Update(context.Background(), newDeployment); err != nil {
+		return err
+	}
+	r.Log.Info("Update Deployment", "Name", newDeployment.Name, "Replica", newDeployment.Spec.Replicas)
+
 	return nil
 }
 
@@ -56,10 +140,10 @@ func (r *PhApplicationReconciler) reconcileDeployment(phApplication *v1alpha1.Ph
 
 	if deploymentExist {
 		// Update deployment data
-		err = r.updateDeployment(phApplication)
+		err = r.updateDeployment(phApplication, deployment)
 	} else {
 		// Create deployment
-		err = r.createDeployment(phApplication)
+		err = r.createDeployment(phApplication, deployment)
 	}
 	return err
 }
@@ -104,14 +188,14 @@ func (r *PhApplicationReconciler) updateService(phApplication *v1alpha1.PhApplic
 		return apierrors.NewBadRequest("service not provided")
 	}
 
-	service.ObjectMeta.Labels["primehub.io/group"] = phApplication.GroupName()
-	service.Spec.Ports = phApplication.Spec.SvcTemplate.Spec.Ports
+	newService := service.DeepCopy()
+	newService.ObjectMeta.Labels["primehub.io/group"] = phApplication.GroupName()
+	newService.Spec.Ports = phApplication.Spec.SvcTemplate.Spec.Ports
 
-	if err := r.Client.Update(context.Background(), service); err != nil {
+	if err := r.Client.Update(context.Background(), newService); err != nil {
 		return err
 	}
-
-	r.Log.Info("Updated Service", "Name", service.Name)
+	r.Log.Info("Updated Service", "Name", newService.Name)
 	return nil
 }
 
@@ -193,17 +277,18 @@ func (r *PhApplicationReconciler) updateNetworkPolicy(phApplication *v1alpha1.Ph
 		return apierrors.NewBadRequest("networkPolicy not provided")
 	}
 
-	networkPolicy.ObjectMeta.Labels["primehub.io/group"] = phApplication.GroupName()
+	newNetworkPolicy := networkPolicy.DeepCopy()
+	newNetworkPolicy.ObjectMeta.Labels["primehub.io/group"] = phApplication.GroupName()
 	switch npType {
 	case GroupNetworkPolicy:
-		networkPolicy.Spec.Ingress = phApplication.GroupNetworkPolicyIngressRule()
+		newNetworkPolicy.Spec.Ingress = phApplication.GroupNetworkPolicyIngressRule()
 	case ProxyNetwrokPolicy:
-		networkPolicy.Spec.Ingress = phApplication.ProxyNetworkPolicyIngressRule()
+		newNetworkPolicy.Spec.Ingress = phApplication.ProxyNetworkPolicyIngressRule()
 	}
-	if err := r.Client.Update(context.Background(), networkPolicy); err != nil {
+	if err := r.Client.Update(context.Background(), newNetworkPolicy); err != nil {
 		return err
 	}
-	r.Log.Info("Updated NetworkPolicy", "Name", networkPolicy.Name)
+	r.Log.Info("Updated NetworkPolicy", "Name", newNetworkPolicy.Name)
 	return nil
 }
 
