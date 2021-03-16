@@ -38,7 +38,7 @@ func (r *PhApplicationReconciler) getPhApplicationObject(namespace string, name 
 	return exist, nil
 }
 
-func (r *PhApplicationReconciler) generateDeploymentCRD(phApplication *v1alpha1.PhApplication, deployment *appv1.Deployment) error {
+func (r *PhApplicationReconciler) generateDeploymentSpec(phApplication *v1alpha1.PhApplication, deployment *appv1.Deployment) error {
 	var replicas int32
 	var err error
 
@@ -70,10 +70,13 @@ func (r *PhApplicationReconciler) generateDeploymentCRD(phApplication *v1alpha1.
 	deployment.Namespace = phApplication.ObjectMeta.Namespace
 	deployment.ObjectMeta.Labels = labels
 	deployment.Spec.Replicas = &replicas
-	deployment.Spec.Selector.MatchLabels = map[string]string{
-		"primehub.io/phapplication": phApplication.AppID(),
+	deployment.Spec.Selector = &metav1.LabelSelector{
+		MatchLabels: map[string]string{
+			"primehub.io/phapplication": phApplication.AppID(),
+		},
 	}
 	deployment.Spec.Template.ObjectMeta.Labels = labels
+	deployment.Spec.Template.Spec = *podSpec
 	spawner, err := graphql.NewSpawnerForPhApplication(phApplication.AppID(), *groupInfo, *instanceTypeInfo, *podSpec)
 	if err != nil {
 		return err
@@ -92,7 +95,7 @@ func (r *PhApplicationReconciler) createDeployment(phApplication *v1alpha1.PhApp
 		return apierrors.NewBadRequest("deployment not provided")
 	}
 
-	if err := r.generateDeploymentCRD(phApplication, deployment); err != nil {
+	if err := r.generateDeploymentSpec(phApplication, deployment); err != nil {
 		return err
 	}
 
@@ -103,7 +106,13 @@ func (r *PhApplicationReconciler) createDeployment(phApplication *v1alpha1.PhApp
 		return err
 	}
 
-	r.Log.Info("Create Deployment", "Name", deployment.Name, "Replica", deployment.Spec.Replicas)
+	image := deployment.Spec.Template.Spec.Containers[0].Image
+	group := phApplication.GroupName()
+	instanceType := phApplication.Spec.InstanceType
+	r.Log.Info(
+		"Create Deployment",
+		"Name", deployment.Name, "Replica", deployment.Spec.Replicas,
+		"Image", image, "Group", group, "InstanceType", instanceType)
 	return nil
 }
 
@@ -116,14 +125,20 @@ func (r *PhApplicationReconciler) updateDeployment(phApplication *v1alpha1.PhApp
 	}
 
 	newDeployment := deployment.DeepCopy()
-	if err := r.generateDeploymentCRD(phApplication, newDeployment); err != nil {
+	if err := r.generateDeploymentSpec(phApplication, newDeployment); err != nil {
 		return err
 	}
 
 	if err := r.Client.Update(context.Background(), newDeployment); err != nil {
 		return err
 	}
-	r.Log.Info("Update Deployment", "Name", newDeployment.Name, "Replica", newDeployment.Spec.Replicas)
+
+	image := deployment.Spec.Template.Spec.Containers[0].Image
+	group := phApplication.GroupName()
+	instanceType := phApplication.Spec.InstanceType
+	r.Log.Info("Update Deployment",
+		"Name", newDeployment.Name, "Replica", newDeployment.Spec.Replicas,
+		"Image", image, "Group", group, "InstanceType", instanceType)
 
 	return nil
 }

@@ -201,7 +201,9 @@ func NewSpawnerForPhApplication(appID string, group DtoGroup, instanceType DtoIn
 
 	// Apply Container
 	container := spec.Containers[0] // According the spec, we only keep the first container
-	spawner.command = append([]string{"/script/run-app"}, container.Command...)
+	spawner.containerName = container.Name
+	spawner.image = container.Image
+	spawner.command = append([]string{"/scripts/run-app"}, container.Command...)
 	spawner.args = container.Args
 
 	// Mount `scripts`
@@ -902,6 +904,7 @@ func (spawner *Spawner) PatchPodSpec(podSpec *corev1.PodSpec) {
 	}
 
 	// Pod
+	podSpec.Containers = []corev1.Container{container}
 	podSpec.Volumes = append(podSpec.Volumes, spawner.volumes...)
 	if spawner.imagePullSecret != "" {
 		podSpec.ImagePullSecrets = append(podSpec.ImagePullSecrets, corev1.LocalObjectReference{

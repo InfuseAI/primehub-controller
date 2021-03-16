@@ -4,7 +4,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	networkv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"primehub-controller/pkg/escapism"
 )
 
@@ -97,35 +96,33 @@ func (in *PhApplication) GroupNetworkPolicyIngressRule() []networkv1.NetworkPoli
 	return []networkv1.NetworkPolicyIngressRule{
 		{
 			Ports: ports,
-			From: []networkv1.NetworkPolicyPeer{{
-				PodSelector: &metav1.LabelSelector{
-					MatchLabels: map[string]string{"primehub.io/group": groupName},
+			From: []networkv1.NetworkPolicyPeer{
+				{
+					PodSelector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{"primehub.io/group": groupName},
+					},
 				},
-			}},
+			},
 		},
 	}
 }
 
 func (in *PhApplication) ProxyNetworkPolicyIngressRule() []networkv1.NetworkPolicyIngressRule {
-	tcp := corev1.ProtocolTCP
+	var ports []networkv1.NetworkPolicyPort
 	appID := in.ObjectMeta.Name
+	for _, p := range in.Spec.SvcTemplate.Spec.Ports {
+		ports = append(ports, networkv1.NetworkPolicyPort{
+			Protocol: &p.Protocol,
+			Port:     &p.TargetPort,
+		})
+	}
 	return []networkv1.NetworkPolicyIngressRule{
 		{
-			Ports: []networkv1.NetworkPolicyPort{
-				{
-					Protocol: &tcp,
-					Port: &intstr.IntOrString{
-						Type:   intstr.Int,
-						IntVal: *in.Spec.HTTPPort,
-					},
-				},
-			},
+			Ports: ports,
 			From: []networkv1.NetworkPolicyPeer{
 				{
 					PodSelector: &metav1.LabelSelector{
-						MatchLabels: map[string]string{
-							"primehub.io/phapplication": appID,
-						},
+						MatchLabels: map[string]string{"primehub.io/phapplication": appID},
 					},
 				},
 			},

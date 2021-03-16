@@ -318,17 +318,22 @@ func (c GraphqlClient) FetchGroupEnableModelDeployment(groupId string) (bool, er
 
 func (c GraphqlClient) FetchGroupInfoByName(groupName string) (*DtoGroup, error) {
 	query := `
-	query ($id: ID!) {
-		group(where: {name: $id}) { 
-					name
-					id
-					quotaCpu
-					quotaGpu
-					quotaMemory
-					projectQuotaCpu
-					projectQuotaGpu
-					projectQuotaMemory
-					jobDefaultActiveDeadlineSeconds
+	query ($name: String!) {
+		groups(where: {name_contains: $name}) { 
+			id
+			name
+			quotaCpu
+			quotaGpu
+			quotaMemory
+			projectQuotaCpu
+			projectQuotaGpu
+			projectQuotaMemory
+			jobDefaultActiveDeadlineSeconds
+			enabledSharedVolume
+			sharedVolumeCapacity
+			homeSymlink
+			launchGroupOnly
+			datasets { name displayName description spec global writable mountRoot homeSymlink launchGroupOnly }
 	  }
 	}
 	`
@@ -349,12 +354,26 @@ func (c GraphqlClient) FetchGroupInfoByName(groupName string) (*DtoGroup, error)
 	if !ok {
 		return nil, errors.New("can not find data in response")
 	}
-	_group, ok := data["group"].(map[string]interface{})
+	_groups, ok := data["groups"].([]interface{})
 	if !ok {
-		return nil, errors.New("can not find group in response")
+		return nil, errors.New("can not find groups in response")
 	}
 
 	var group DtoGroup
+	var _group map[string]interface{}
+	ok = false
+	// Match group name
+	for _, g := range _groups {
+		if groupName == g.(map[string]interface{})["name"].(string) {
+			_group = g.(map[string]interface{})
+			ok = true
+			break
+		}
+	}
+	if !ok {
+		return nil, errors.New("can not find group (" + groupName + ") in response")
+	}
+
 	jsonObj, _ := json.Marshal(_group)
 	json.Unmarshal(jsonObj, &group)
 
