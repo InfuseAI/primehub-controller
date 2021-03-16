@@ -1121,6 +1121,7 @@ func (r PhDeploymentReconciler) buildModelContainer(phDeployment *primehubv1alph
 	envs := []corev1.EnvVar{
 		{Name: "PREDICTIVE_UNIT_SERVICE_PORT", Value: "9000"},
 		{Name: "PREDICTIVE_UNIT_ID", Value: "model"},
+		{Name: "PREDICTIVE_UNIT_IMAGE", Value: predictorImage},
 		{Name: "PREDICTOR_ID", Value: "deploy"},
 		{Name: "SELDON_DEPLOYMENT_ID", Value: "deploy-" + phDeployment.Name},
 	}
