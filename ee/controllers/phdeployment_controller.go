@@ -1066,6 +1066,9 @@ func (r *PhDeploymentReconciler) buildEngineContainer(phDeployment *primehubv1al
 		Ports: []corev1.ContainerPort{
 			{ContainerPort: int32(8000), Name: "rest", Protocol: corev1.ProtocolTCP},
 			{ContainerPort: int32(5001), Name: "grpc", Protocol: corev1.ProtocolTCP},
+			// export custom metrics port
+			// https://docs.seldon.io/projects/seldon-core/en/latest/analytics/analytics.html#metrics-endpoints
+			{ContainerPort: int32(6000), Name: "metrics", Protocol: corev1.ProtocolTCP},
 			//{ContainerPort: int32(8082), Name: "admin", Protocol: corev1.ProtocolTCP},
 			//{ContainerPort: int32(9090), Name: "jmx", Protocol: corev1.ProtocolTCP},
 		},
@@ -1118,6 +1121,7 @@ func (r PhDeploymentReconciler) buildModelContainer(phDeployment *primehubv1alph
 	envs := []corev1.EnvVar{
 		{Name: "PREDICTIVE_UNIT_SERVICE_PORT", Value: "9000"},
 		{Name: "PREDICTIVE_UNIT_ID", Value: "model"},
+		{Name: "PREDICTIVE_UNIT_IMAGE", Value: predictorImage},
 		{Name: "PREDICTOR_ID", Value: "deploy"},
 		{Name: "SELDON_DEPLOYMENT_ID", Value: "deploy-" + phDeployment.Name},
 	}
