@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	phcache "primehub-controller/pkg/cache"
 	"testing"
 	"time"
 
@@ -147,6 +148,7 @@ func TestCreationTimestampSort(t *testing.T) {
 
 func TestScheduleByStrictOrder1(t *testing.T) {
 	phJobScheduler := PHJobScheduler{}
+	phJobScheduler.PrimeHubCache = phcache.NewPrimeHubCache(nil)
 	phJobs := []*primehubv1alpha1.PhJob{}
 
 	phJobs = append(phJobs, createPhJob("userA", "groupA", "typeA"))
@@ -161,7 +163,7 @@ func TestScheduleByStrictOrder1(t *testing.T) {
 	groupRemainingQuota := getConvertedResourceQuota(8, -1, "")
 
 	instanceTypeInfo := createInstanceTypeInfo("typeA", 4, 0, "")
-	InstanceTypeCache.Set("instanceType:typeA", instanceTypeInfo, time.Hour*1)
+	phJobScheduler.PrimeHubCache.InstanceType.Set("instanceType:typeA", instanceTypeInfo, time.Hour*1)
 
 	phJobScheduler.scheduleByStrictOrder(&phJobs, &usersRemainingQuota, groupRemainingQuota)
 
@@ -172,6 +174,7 @@ func TestScheduleByStrictOrder1(t *testing.T) {
 
 func TestScheduleByStrictOrder2(t *testing.T) {
 	phJobScheduler := PHJobScheduler{}
+	phJobScheduler.PrimeHubCache = phcache.NewPrimeHubCache(nil)
 	phJobs := []*primehubv1alpha1.PhJob{}
 
 	phJobs = append(phJobs, createPhJob("userA", "groupA", "typeA"))
@@ -186,11 +189,11 @@ func TestScheduleByStrictOrder2(t *testing.T) {
 	groupRemainingQuota := getConvertedResourceQuota(8, -1, "")
 
 	typeAInfo := createInstanceTypeInfo("typeA", 4, 0, "")
-	InstanceTypeCache.Set("instanceType:typeA", typeAInfo, time.Hour*1)
+	phJobScheduler.PrimeHubCache.InstanceType.Set("instanceType:typeA", typeAInfo, time.Hour*1)
 	typeBInfo := createInstanceTypeInfo("typeB", 6, 0, "")
-	InstanceTypeCache.Set("instanceType:typeB", typeBInfo, time.Hour*1)
+	phJobScheduler.PrimeHubCache.InstanceType.Set("instanceType:typeB", typeBInfo, time.Hour*1)
 	typeCInfo := createInstanceTypeInfo("typeB", 2, 0, "")
-	InstanceTypeCache.Set("instanceType:typeC", typeCInfo, time.Hour*1)
+	phJobScheduler.PrimeHubCache.InstanceType.Set("instanceType:typeC", typeCInfo, time.Hour*1)
 
 	phJobScheduler.scheduleByStrictOrder(&phJobs, &usersRemainingQuota, groupRemainingQuota)
 
@@ -201,6 +204,7 @@ func TestScheduleByStrictOrder2(t *testing.T) {
 
 func TestScheduleByStrictOrder3(t *testing.T) {
 	phJobScheduler := PHJobScheduler{}
+	phJobScheduler.PrimeHubCache = phcache.NewPrimeHubCache(nil)
 	phJobs := []*primehubv1alpha1.PhJob{}
 
 	phJobs = append(phJobs, createPhJob("userA", "groupA", "typeA"))
@@ -215,11 +219,11 @@ func TestScheduleByStrictOrder3(t *testing.T) {
 	groupRemainingQuota := getConvertedResourceQuota(8, -1, "")
 
 	typeAInfo := createInstanceTypeInfo("typeA", 4, 0, "")
-	InstanceTypeCache.Set("instanceType:typeA", typeAInfo, time.Hour*1)
+	phJobScheduler.PrimeHubCache.InstanceType.Set("instanceType:typeA", typeAInfo, time.Hour*1)
 	typeBInfo := createInstanceTypeInfo("typeB", 6, 0, "")
-	InstanceTypeCache.Set("instanceType:typeB", typeBInfo, time.Hour*1)
+	phJobScheduler.PrimeHubCache.InstanceType.Set("instanceType:typeB", typeBInfo, time.Hour*1)
 	typeCInfo := createInstanceTypeInfo("typeB", 2, 0, "")
-	InstanceTypeCache.Set("instanceType:typeC", typeCInfo, time.Hour*1)
+	phJobScheduler.PrimeHubCache.InstanceType.Set("instanceType:typeC", typeCInfo, time.Hour*1)
 
 	phJobScheduler.scheduleByStrictOrder(&phJobs, &usersRemainingQuota, groupRemainingQuota)
 
