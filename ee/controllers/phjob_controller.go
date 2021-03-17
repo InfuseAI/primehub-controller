@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	phcache "primehub-controller/pkg/cache"
 	"primehub-controller/pkg/graphql"
 	"strings"
 	"time"
@@ -12,7 +13,6 @@ import (
 	"primehub-controller/pkg/escapism"
 
 	"github.com/go-logr/logr"
-	"github.com/karlseguin/ccache"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -28,9 +28,6 @@ import (
 var (
 	// DefaultJobPreparingTimeout is the phJob preparing state timeout value
 	DefaultJobPreparingTimeout = time.Duration(180) * time.Second
-
-	TimezoneCache            = ccache.New(ccache.Configure().MaxSize(1).ItemsToPrune(1))
-	TimezoneCacheExpiredTime = time.Minute
 )
 
 // PhJobReconciler reconciles a PhJob object
@@ -55,35 +52,12 @@ type PhJobReconciler struct {
 	MonitoringAgentImageRepository string
 	MonitoringAgentImageTag        string
 	MonitoringAgentImagePullPolicy corev1.PullPolicy
-	GroupCache                     *ccache.Cache
+	PrimeHubCache                  *phcache.PrimeHubCache
 }
 
-func (r *PhJobReconciler) getTimeZone() (timezone string, err error) {
-	cacheKey := "timezone"
-	cacheItem := TimezoneCache.Get(cacheKey)
-	if cacheItem == nil || cacheItem.Expired() {
-		location, err := r.GraphqlClient.FetchTimeZone()
-		if err != nil {
-			return "", err
-		}
-		TimezoneCache.Set(cacheKey, location, TimezoneCacheExpiredTime)
-		r.Log.Info("fetch", "timezone", location)
-	}
-	return TimezoneCache.Get(cacheKey).Value().(string), nil
-}
-
-func (r *PhJobReconciler) getGroupInfo(groupId string) (*graphql.DtoGroup, error) {
-	cacheKey := "group:" + groupId
-	cacheItem := r.GroupCache.Get(cacheKey)
-	if cacheItem == nil || cacheItem.Expired() {
-		groupInfo, err := r.GraphqlClient.FetchGroupInfo(groupId)
-		if err != nil {
-			return nil, err
-		}
-		r.GroupCache.Set(cacheKey, groupInfo, time.Minute)
-	}
-	return r.GroupCache.Get(cacheKey).Value().(*graphql.DtoGroup), nil
-}
+// +kubebuilder:rbac:groups=primehub.io,resources=phjobs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=primehub.io,resources=phjobs/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups="",resources=jobs,verbs=get;list;watch;create;update;delete
 
 func (r *PhJobReconciler) buildAnnotationsWithUsageMetadata(phJob *primehubv1alpha1.PhJob) map[string]string {
 	annotations := make(map[string]string)
@@ -157,7 +131,7 @@ func (r *PhJobReconciler) buildPod(phJob *primehubv1alpha1.PhJob) (*corev1.Pod, 
 		"primehub.io/group": escapism.EscapeToPrimehubLabel(phJob.Spec.GroupName),
 		"primehub.io/user":  escapism.EscapeToPrimehubLabel(phJob.Spec.UserName),
 	}
-	location, err := r.getTimeZone()
+	location, err := r.PrimeHubCache.FetchTimeZone()
 	if err == nil {
 		for idx, _ := range pod.Spec.Containers {
 			pod.Spec.Containers[idx].Env = append(pod.Spec.Containers[idx].Env, corev1.EnvVar{Name: "TZ", Value: location})
@@ -260,9 +234,6 @@ func (r *PhJobReconciler) attachMonitoringAgent(phJob *primehubv1alpha1.PhJob, p
 	})
 }
 
-// +kubebuilder:rbac:groups=primehub.io,resources=phjobs,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=primehub.io,resources=phjobs/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups="",resources=jobs,verbs=get;list;watch;create;update;delete
 func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
 	log := r.Log.WithValues("phjob", req.NamespacedName)
@@ -294,7 +265,7 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	// if user didn't set ActiveDeadlineSeconds, use default value which is 1 day (86400)
 	if phJob.Spec.ActiveDeadlineSeconds == nil {
-		groupInfo, err := r.getGroupInfo(phJob.Spec.GroupId)
+		groupInfo, err := r.PrimeHubCache.FetchGroup(phJob.Spec.GroupId)
 		if err != nil {
 			log.Error(err, "Failed to get group info")
 		}

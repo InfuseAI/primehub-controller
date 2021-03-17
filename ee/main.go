@@ -6,6 +6,7 @@ import (
 	"os"
 	primehubv1alpha1 "primehub-controller/api/v1alpha1"
 	"primehub-controller/controllers"
+	phcache "primehub-controller/pkg/cache"
 	"strings"
 
 	eeprimehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
@@ -29,7 +30,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	// +kubebuilder:scaffold:imports
-	"github.com/karlseguin/ccache"
 	"github.com/spf13/viper"
 )
 
@@ -121,6 +121,8 @@ func main() {
 		viper.GetString("jobSubmission.graphqlEndpoint"),
 		viper.GetString("jobSubmission.graphqlSecret"))
 
+	primehubCache := phcache.NewPrimeHubCache(graphqlClient)
+
 	nodeSelector := viper.GetStringMapString("jobSubmission.nodeSelector")
 
 	var tolerationsSlice []corev1.Toleration
@@ -136,14 +138,22 @@ func main() {
 		panic(err.Error() + " cannot UnmarshalKey affinity")
 	}
 
-	groupCache := ccache.New(ccache.Configure().MaxSize(1000).ItemsToPrune(100))
-
 	phfsEnabled := viper.GetBool("phfsEnabled")
 	phfsPVC := viper.GetString("phfsPVC")
 	// older settings compatibility
 	if len(phfsPVC) <= 0 {
 		phfsEnabled = viper.GetBool("jobSubmission.phfsEnabled")
 		phfsPVC = viper.GetString("jobSubmission.phfsPVC")
+	}
+
+	if err = (&controllers.PhApplicationReconciler{
+		Client:        mgr.GetClient(),
+		Log:           ctrl.Log.WithName("controllers").WithName("PhApplication"),
+		Scheme:        mgr.GetScheme(),
+		PrimeHubCache: primehubCache,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "PhApplication")
+		os.Exit(1)
 	}
 
 	if err = (&eecontrollers.PhJobReconciler{
@@ -167,7 +177,7 @@ func main() {
 		MonitoringAgentImageRepository: viper.GetString("monitoringAgent.image.repository"),
 		MonitoringAgentImageTag:        viper.GetString("monitoringAgent.image.tag"),
 		MonitoringAgentImagePullPolicy: corev1.PullPolicy(viper.GetString("monitoringAgent.image.pullPolicy")),
-		GroupCache:                     groupCache,
+		PrimeHubCache:                  primehubCache,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PhJob")
 		os.Exit(1)
@@ -264,7 +274,7 @@ func main() {
 		Client:        mgr.GetClient(),
 		Log:           ctrl.Log.WithName("scheduler").WithName("PhJob"),
 		GraphqlClient: graphqlClient,
-		GroupCache:    groupCache,
+		PrimeHubCache: primehubCache,
 	}
 	go wait.Until(phJobScheduler.Schedule, time.Second*1, stopChan)
 

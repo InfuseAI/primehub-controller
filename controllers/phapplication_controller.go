@@ -124,12 +124,12 @@ func (r *PhApplicationReconciler) updateDeployment(phApplication *v1alpha1.PhApp
 		return apierrors.NewBadRequest("deployment not provided")
 	}
 
-	newDeployment := deployment.DeepCopy()
-	if err := r.generateDeploymentSpec(phApplication, newDeployment); err != nil {
+	deploymentClone := deployment.DeepCopy()
+	if err := r.generateDeploymentSpec(phApplication, deploymentClone); err != nil {
 		return err
 	}
 
-	if err := r.Client.Update(context.Background(), newDeployment); err != nil {
+	if err := r.Client.Update(context.Background(), deploymentClone); err != nil {
 		return err
 	}
 
@@ -137,7 +137,7 @@ func (r *PhApplicationReconciler) updateDeployment(phApplication *v1alpha1.PhApp
 	group := phApplication.GroupName()
 	instanceType := phApplication.Spec.InstanceType
 	r.Log.Info("Update Deployment",
-		"Name", newDeployment.Name, "Replica", newDeployment.Spec.Replicas,
+		"Name", deploymentClone.Name, "Replica", deploymentClone.Spec.Replicas,
 		"Image", image, "Group", group, "InstanceType", instanceType)
 
 	return nil
@@ -202,14 +202,14 @@ func (r *PhApplicationReconciler) updateService(phApplication *v1alpha1.PhApplic
 		return apierrors.NewBadRequest("service not provided")
 	}
 
-	newService := service.DeepCopy()
-	newService.ObjectMeta.Labels["primehub.io/group"] = phApplication.GroupName()
-	newService.Spec.Ports = phApplication.Spec.SvcTemplate.Spec.Ports
+	serviceClone := service.DeepCopy()
+	serviceClone.ObjectMeta.Labels["primehub.io/group"] = phApplication.GroupName()
+	serviceClone.Spec.Ports = phApplication.Spec.SvcTemplate.Spec.Ports
 
-	if err := r.Client.Update(context.Background(), newService); err != nil {
+	if err := r.Client.Update(context.Background(), serviceClone); err != nil {
 		return err
 	}
-	r.Log.Info("Updated Service", "Name", newService.Name)
+	r.Log.Info("Updated Service", "Name", serviceClone.Name)
 	return nil
 }
 
@@ -290,18 +290,18 @@ func (r *PhApplicationReconciler) updateNetworkPolicy(phApplication *v1alpha1.Ph
 		return apierrors.NewBadRequest("networkPolicy not provided")
 	}
 
-	newNetworkPolicy := networkPolicy.DeepCopy()
-	newNetworkPolicy.ObjectMeta.Labels["primehub.io/group"] = phApplication.GroupName()
+	networkPolicyClone := networkPolicy.DeepCopy()
+	networkPolicyClone.ObjectMeta.Labels["primehub.io/group"] = phApplication.GroupName()
 	switch npType {
 	case GroupNetworkPolicy:
-		newNetworkPolicy.Spec.Ingress = phApplication.GroupNetworkPolicyIngressRule()
+		networkPolicyClone.Spec.Ingress = phApplication.GroupNetworkPolicyIngressRule()
 	case ProxyNetwrokPolicy:
-		newNetworkPolicy.Spec.Ingress = phApplication.ProxyNetworkPolicyIngressRule()
+		networkPolicyClone.Spec.Ingress = phApplication.ProxyNetworkPolicyIngressRule()
 	}
-	if err := r.Client.Update(context.Background(), newNetworkPolicy); err != nil {
+	if err := r.Client.Update(context.Background(), networkPolicyClone); err != nil {
 		return err
 	}
-	r.Log.Info("Updated NetworkPolicy", "Name", newNetworkPolicy.Name)
+	r.Log.Info("Updated NetworkPolicy", "Name", networkPolicyClone.Name)
 	return nil
 }
 

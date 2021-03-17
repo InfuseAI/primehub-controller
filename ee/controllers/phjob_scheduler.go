@@ -3,15 +3,13 @@ package controllers
 import (
 	"context"
 	"errors"
-	"sort"
-	"time"
-
 	primehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
+	phcache "primehub-controller/pkg/cache"
 	"primehub-controller/pkg/escapism"
 	"primehub-controller/pkg/graphql"
+	"sort"
 
 	"github.com/go-logr/logr"
-	"github.com/karlseguin/ccache"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -20,11 +18,8 @@ import (
 )
 
 var (
-	InstanceTypeCache = ccache.New(ccache.Configure().MaxSize(1000).ItemsToPrune(100))
-
 	groupAggregationKey = "primehub.io/group"
 	userAggregationKey  = "primehub.io/user"
-	cacheExpiredTime    = time.Minute
 )
 
 // nil means it doesn't limit the quota
@@ -79,33 +74,7 @@ type PHJobScheduler struct {
 	client.Client
 	Log           logr.Logger
 	GraphqlClient graphql.AbstractGraphqlClient
-	GroupCache    *ccache.Cache
-}
-
-func (r *PHJobScheduler) getGroupInfo(groupId string) (*graphql.DtoGroup, error) {
-	cacheKey := "group:" + groupId
-	cacheItem := r.GroupCache.Get(cacheKey)
-	if cacheItem == nil || cacheItem.Expired() {
-		groupInfo, err := r.GraphqlClient.FetchGroupInfo(groupId)
-		if err != nil {
-			return nil, err
-		}
-		r.GroupCache.Set(cacheKey, groupInfo, cacheExpiredTime)
-	}
-	return r.GroupCache.Get(cacheKey).Value().(*graphql.DtoGroup), nil
-}
-
-func (r *PHJobScheduler) getInstanceTypeInfo(instanceTypeId string) (*graphql.DtoInstanceType, error) {
-	cacheKey := "instanceType:" + instanceTypeId
-	cacheItem := InstanceTypeCache.Get(cacheKey)
-	if cacheItem == nil || cacheItem.Expired() {
-		instanceTypeInfo, err := r.GraphqlClient.FetchInstanceTypeInfo(instanceTypeId)
-		if err != nil {
-			return nil, err
-		}
-		InstanceTypeCache.Set(cacheKey, instanceTypeInfo, cacheExpiredTime)
-	}
-	return InstanceTypeCache.Get(cacheKey).Value().(*graphql.DtoInstanceType), nil
+	PrimeHubCache *phcache.PrimeHubCache
 }
 
 func (r *PHJobScheduler) getCurrentUsage(namespace string, aggregationKeys []string, aggregationValues []string) (*ResourceQuota, error) {
@@ -141,7 +110,7 @@ func (r *PHJobScheduler) getCurrentUsage(namespace string, aggregationKeys []str
 }
 
 func (r *PHJobScheduler) getGroupRemainingQuota(phJob *primehubv1alpha1.PhJob) (*ResourceQuota, error) {
-	groupInfo, err := r.getGroupInfo(phJob.Spec.GroupId)
+	groupInfo, err := r.PrimeHubCache.FetchGroup(phJob.Spec.GroupId)
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +135,7 @@ func (r *PHJobScheduler) getGroupRemainingQuota(phJob *primehubv1alpha1.PhJob) (
 }
 
 func (r *PHJobScheduler) getUserRemainingQuotaInGroup(phJob *primehubv1alpha1.PhJob) (*ResourceQuota, error) {
-	groupInfo, err := r.getGroupInfo(phJob.Spec.GroupId)
+	groupInfo, err := r.PrimeHubCache.FetchGroup(phJob.Spec.GroupId)
 	if err != nil {
 		return nil, err
 	}
@@ -288,7 +257,7 @@ func (r *PHJobScheduler) scheduleByStrictOrder(phJobsRef *[]*primehubv1alpha1.Ph
 	usersRemainingQuota := *usersRemainingQuotaRef
 
 	for _, phJob := range phJobs {
-		instanceInfo, err := r.getInstanceTypeInfo(phJob.Spec.InstanceType)
+		instanceInfo, err := r.PrimeHubCache.FetchInstanceType(phJob.Spec.InstanceType)
 		if err != nil {
 			return err
 		}
@@ -353,7 +322,7 @@ func (r *PHJobScheduler) Schedule() {
 
 	i := 0
 	for _, phJob := range phJobList.Items {
-		groupInfo, err := r.getGroupInfo(phJob.Spec.GroupId)
+		groupInfo, err := r.PrimeHubCache.FetchGroup(phJob.Spec.GroupId)
 		if err != nil {
 			r.Log.Error(err, "cannot get group info")
 
@@ -369,7 +338,7 @@ func (r *PHJobScheduler) Schedule() {
 			}
 			continue
 		}
-		instanceInfo, err := r.getInstanceTypeInfo(phJob.Spec.InstanceType)
+		instanceInfo, err := r.PrimeHubCache.FetchInstanceType(phJob.Spec.InstanceType)
 		if err != nil {
 			r.Log.Error(err, "cannot get instance type info")
 			continue
