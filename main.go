@@ -83,8 +83,8 @@ func main() {
 	}
 
 	graphqlClient := graphql.NewGraphqlClient(
-		viper.GetString("jobSubmission.graphqlEndpoint"),
-		viper.GetString("jobSubmission.graphqlSecret"))
+		viper.GetString("graphqlEndpoint"),
+		viper.GetString("graphqlSecret"))
 
 	primehubCache := phcache.NewPrimeHubCache(graphqlClient)
 
