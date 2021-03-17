@@ -695,10 +695,12 @@ func (spawner *Spawner) applyResourceForInstanceType(instanceType DtoInstanceTyp
 
 	if instanceType.Spec.RequestsCpu > 0 {
 		spawner.requestsCpu.SetMilli(int64(instanceType.Spec.RequestsCpu * 1000))
+		spawner.requestsCpu.Format = resource.DecimalSI
 	}
 
 	if instanceType.Spec.LimitsCpu > 0 {
 		spawner.limitsCpu.SetMilli(int64(instanceType.Spec.LimitsCpu * 1000))
+		spawner.limitsCpu.Format = resource.DecimalSI
 	}
 
 	if instanceType.Spec.RequestsGpu > 0 {
@@ -713,6 +715,7 @@ func (spawner *Spawner) applyResourceForInstanceType(instanceType DtoInstanceTyp
 		quantity, e := resource.ParseQuantity(ConvertMemoryUnit(instanceType.Spec.RequestsMemory))
 		if e == nil {
 			spawner.requestsMemory = quantity
+			spawner.requestsMemory.Format = resource.DecimalSI
 		}
 	}
 
@@ -720,6 +723,7 @@ func (spawner *Spawner) applyResourceForInstanceType(instanceType DtoInstanceTyp
 		quantity, e := resource.ParseQuantity(ConvertMemoryUnit(instanceType.Spec.LimitsMemory))
 		if e == nil {
 			spawner.limitsMemory = quantity
+			spawner.limitsMemory.Format = resource.DecimalSI
 		}
 	}
 

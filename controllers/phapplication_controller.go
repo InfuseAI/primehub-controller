@@ -390,6 +390,9 @@ func (r *PhApplicationReconciler) updatePhApplicationStatus(phApplication *v1alp
 
 // +kubebuilder:rbac:groups=primehub.io,resources=phapplications,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=primehub.io,resources=phapplications/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups="",resources=service,verbs=get;list;watch;create;update;delete;patch
+// +kubebuilder:rbac:groups="",resources=deployment,verbs=get;list;watch;create;update;delete;patch
+// +kubebuilder:rbac:groups="",resources=networkpolicy,verbs=get;list;watch;create;update;delete;patch
 
 func (r *PhApplicationReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	var err error
