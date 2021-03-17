@@ -343,31 +343,39 @@ func (r *PhApplicationReconciler) reconcileNetworkPolicy(phApplication *v1alpha1
 }
 
 func (r *PhApplicationReconciler) updatePhApplicationStatus(phApplication *v1alpha1.PhApplication) error {
+	var message string
 	phase := v1alpha1.ApplicationError
 	namespace := phApplication.ObjectMeta.Namespace
 	deployment := &appv1.Deployment{}
-	deploymentExist, err := r.getPhApplicationObject(namespace, phApplication.AppName(), deployment)
-	if err != nil || deploymentExist == false {
+	err := r.Get(context.Background(), client.ObjectKey{Namespace: namespace, Name: phApplication.AppName()}, deployment)
+	if err != nil {
 		phase = v1alpha1.ApplicationError
+		message = err.Error()
 	} else if phApplication.Spec.Stop {
 		// Deployment Stop
 		if deployment.Status.Replicas == 0 {
 			phase = v1alpha1.ApplicationStopped
+			message = "Deployment had stopped"
 		} else {
 			phase = v1alpha1.ApplicationStopping
+			message = "Deployment is stopping"
 		}
 	} else {
 		// Deployment Start
 		if deployment.Status.ReadyReplicas == 0 {
 			phase = v1alpha1.ApplicationStarting
+			message = "Deployment is starting"
 		} else if deployment.Status.ReadyReplicas == deployment.Status.Replicas {
 			phase = v1alpha1.ApplicationReady
+			message = "Deployment is ready"
 		} else {
 			phase = v1alpha1.ApplicationUpdating
+			message = "Deployment is updating"
 		}
 	}
 	phApplicationClone := phApplication.DeepCopy()
 	phApplicationClone.Status.Phase = phase
+	phApplicationClone.Status.Message = message
 	phApplicationClone.Status.ServiceName = phApplication.AppName()
 	if err := r.Status().Update(context.Background(), phApplicationClone); err != nil {
 

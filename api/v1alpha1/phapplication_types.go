@@ -64,6 +64,7 @@ type PhApplicationStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:printcolumn:name="Group",type="string",JSONPath=".spec.groupName"
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.phase",description="Status of the deployment"
+// +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.message",description="Message of the deployment"
 
 // PhApplication is the Schema for the phapplications API
 type PhApplication struct {
