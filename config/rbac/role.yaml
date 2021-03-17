@@ -9,12 +9,48 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - deployment
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - networkpolicy
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
   - pods
   verbs:
   - create
   - delete
   - get
   - list
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - service
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
   - update
   - watch
 - apiGroups:
