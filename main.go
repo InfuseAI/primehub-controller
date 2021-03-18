@@ -145,6 +145,8 @@ func loadConfig() {
 	}
 
 	configs := []string{
+		"graphqlEndpoint",
+		"graphqlSecret",
 		"customImage.pushSecretName",
 	}
 	for _, config := range configs {

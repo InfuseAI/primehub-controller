@@ -90,7 +90,6 @@ func init() {
 
 func (in *PhApplication) GroupNetworkPolicyIngressRule() []networkv1.NetworkPolicyIngressRule {
 	var ports []networkv1.NetworkPolicyPort
-	groupName := escapism.EscapeToPrimehubLabel(in.Spec.GroupName)
 	for _, p := range in.Spec.SvcTemplate.Spec.Ports {
 		ports = append(ports, networkv1.NetworkPolicyPort{
 			Protocol: &p.Protocol,
@@ -103,7 +102,7 @@ func (in *PhApplication) GroupNetworkPolicyIngressRule() []networkv1.NetworkPoli
 			From: []networkv1.NetworkPolicyPeer{
 				{
 					PodSelector: &metav1.LabelSelector{
-						MatchLabels: map[string]string{"primehub.io/group": groupName},
+						MatchLabels: map[string]string{"primehub.io/group": in.GroupName()},
 					},
 				},
 			},
