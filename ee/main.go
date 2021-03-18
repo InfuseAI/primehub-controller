@@ -312,9 +312,9 @@ func loadConfig() {
 	}
 
 	configs := []string{
+		"graphqlEndpoint",
+		"graphqlSecret",
 		"customImage.pushSecretName",
-		"jobSubmission.graphqlEndpoint",
-		"jobSubmission.graphqlSecret",
 		"jobSubmission.workingDirSize",
 		"jobSubmission.defaultActiveDeadlineSeconds",
 		"jobSubmission.defaultTTLSecondsAfterFinished",
