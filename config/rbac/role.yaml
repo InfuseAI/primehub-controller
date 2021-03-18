@@ -9,30 +9,6 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - deployment
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - networkpolicy
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
   - pods
   verbs:
   - create
@@ -44,7 +20,32 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - service
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps
+  - extensions
+  resources:
+  - deployments
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - networkpolices
   verbs:
   - create
   - delete
