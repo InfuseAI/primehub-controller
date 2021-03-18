@@ -230,7 +230,7 @@ func main() {
 		if engineContainerRepository != "" && engineContainerTag != "" {
 			engineContainerImage = fmt.Sprintf("%s:%s", engineContainerRepository, engineContainerTag)
 		} else {
-			engineContainerImage = "seldonio/seldon-core-executor:1.1.0"
+			engineContainerImage = "seldonio/seldon-core-executor:1.4.0"
 		}
 		if engineContainerPullPolicy == "" {
 			engineContainerPullPolicy = corev1.PullIfNotPresent
