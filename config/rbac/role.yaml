@@ -45,7 +45,7 @@ rules:
 - apiGroups:
   - networking.k8s.io
   resources:
-  - networkpolices
+  - networkpolicies
   verbs:
   - create
   - delete
