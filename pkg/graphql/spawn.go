@@ -860,7 +860,7 @@ func (spawner *Spawner) PatchPodSpec(podSpec *corev1.PodSpec) {
 		container.WorkingDir = spawner.workingDir
 	}
 	if len(spawner.env) > 0 {
-		container.Env = spawner.env
+		container.Env = append(container.Env, spawner.env...)
 	}
 	if len(spawner.prependEnv) > 0 {
 		container.Env = append(spawner.prependEnv, container.Env...)
