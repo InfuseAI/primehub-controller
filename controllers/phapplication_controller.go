@@ -9,6 +9,7 @@ import (
 	"primehub-controller/pkg/graphql"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"time"
 
 	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -342,11 +343,34 @@ func (r *PhApplicationReconciler) reconcileNetworkPolicy(phApplication *v1alpha1
 	return err
 }
 
-func (r *PhApplicationReconciler) updatePhApplicationStatus(phApplication *v1alpha1.PhApplication) error {
+func (r *PhApplicationReconciler) getPodStatus(phApplication *v1alpha1.PhApplication) *corev1.PodList {
+	pods := &corev1.PodList{}
+	err := r.Client.List(context.Background(),
+		pods,
+		client.InNamespace(phApplication.Namespace),
+		client.MatchingLabels(map[string]string{"primehub.io/phapplication": phApplication.AppName()}))
+	if err != nil {
+		return nil
+	}
+	return pods
+}
+
+func (r *PhApplicationReconciler) diagnosisPodStatus(pods *corev1.PodList, phase *string, message *string) {
+	for _, p := range pods.Items {
+		if p.Status.Phase == corev1.PodPending || p.Status.Phase == corev1.PodUnknown || p.Status.Phase == corev1.PodFailed {
+			*phase = v1alpha1.ApplicationError
+			*message = p.Status.ContainerStatuses[0].State.Waiting.Message
+		}
+	}
+}
+
+func (r *PhApplicationReconciler) updatePhApplicationStatus(phApplication *v1alpha1.PhApplication) (error, time.Duration) {
 	var message string
+	requeueAfter := 0 * time.Second
 	phase := v1alpha1.ApplicationError
 	namespace := phApplication.ObjectMeta.Namespace
 	deployment := &appv1.Deployment{}
+	podStatus := r.getPodStatus(phApplication)
 	err := r.Get(context.Background(), client.ObjectKey{Namespace: namespace, Name: phApplication.AppName()}, deployment)
 	if err != nil {
 		phase = v1alpha1.ApplicationError
@@ -365,12 +389,16 @@ func (r *PhApplicationReconciler) updatePhApplicationStatus(phApplication *v1alp
 		if deployment.Status.ReadyReplicas == 0 {
 			phase = v1alpha1.ApplicationStarting
 			message = "Deployment is starting"
+			requeueAfter = 10 * time.Second
+			r.diagnosisPodStatus(podStatus, &phase, &message)
 		} else if deployment.Status.ReadyReplicas == deployment.Status.Replicas {
 			phase = v1alpha1.ApplicationReady
 			message = "Deployment is ready"
 		} else {
 			phase = v1alpha1.ApplicationUpdating
 			message = "Deployment is updating"
+			requeueAfter = 10 * time.Second
+			r.diagnosisPodStatus(podStatus, &phase, &message)
 		}
 	}
 	phApplicationClone := phApplication.DeepCopy()
@@ -378,14 +406,13 @@ func (r *PhApplicationReconciler) updatePhApplicationStatus(phApplication *v1alp
 	phApplicationClone.Status.Message = message
 	phApplicationClone.Status.ServiceName = phApplication.AppName()
 	if err := r.Status().Update(context.Background(), phApplicationClone); err != nil {
-
-		return err
+		return err, 0
 	}
 	r.Log.Info("Updated Status",
 		"Phase", phase,
 		"Replicas", deployment.Status.Replicas,
 		"ReadyReplicas", deployment.Status.ReadyReplicas)
-	return nil
+	return nil, requeueAfter
 }
 
 // +kubebuilder:rbac:groups=primehub.io,resources=phapplications,verbs=get;list;watch;create;update;patch;delete
@@ -424,12 +451,13 @@ func (r *PhApplicationReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 		log.Info("Reconcile NetworkPolicy failed", "error", err)
 	}
 
+	err, requeueAfter := r.updatePhApplicationStatus(&phApplication)
 	// Update status
-	if err = r.updatePhApplicationStatus(&phApplication); err != nil {
+	if err != nil {
 		log.Info("Update status failed", "error", err)
 	}
 
-	return ctrl.Result{}, nil
+	return ctrl.Result{RequeueAfter: requeueAfter}, nil
 }
 
 func (r *PhApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
