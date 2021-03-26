@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -67,6 +68,9 @@ func (r *PhApplicationReconciler) generateDeploymentSpec(phApplication *v1alpha1
 		return err
 	}
 
+	// Verify resource quota
+	//instanceRequestedQuota, err := ConvertToResourceQuota(instanceTypeInfo.Spec.LimitsCpu, (float32)(instanceTypeInfo.Spec.LimitsGpu), instanceTypeInfo.Spec.LimitsMemory)
+
 	deployment.Name = phApplication.AppName()
 	deployment.Namespace = phApplication.ObjectMeta.Namespace
 	deployment.ObjectMeta.Labels = labels
@@ -99,7 +103,6 @@ func (r *PhApplicationReconciler) createDeployment(phApplication *v1alpha1.PhApp
 	if err := r.generateDeploymentSpec(phApplication, deployment); err != nil {
 		return err
 	}
-
 	if err := ctrl.SetControllerReference(phApplication, deployment, r.Scheme); err != nil {
 		return err
 	}
@@ -355,16 +358,31 @@ func (r *PhApplicationReconciler) getPodStatus(phApplication *v1alpha1.PhApplica
 	return pods
 }
 
-func (r *PhApplicationReconciler) diagnosisPodStatus(pods *corev1.PodList, phase *string, message *string) {
+func (r *PhApplicationReconciler) diagnosisPodStatus(pods *corev1.PodList) (phase string, message string) {
 	for _, p := range pods.Items {
-		if p.Status.Phase == corev1.PodPending || p.Status.Phase == corev1.PodUnknown || p.Status.Phase == corev1.PodFailed {
-			*phase = v1alpha1.ApplicationError
-			*message = p.Status.ContainerStatuses[0].State.Waiting.Message
+		if len(p.Status.Conditions) > 0 {
+			for _, c := range p.Status.Conditions {
+				if c.Reason == corev1.PodReasonUnschedulable {
+					phase = v1alpha1.ApplicationError
+					message = fmt.Sprintf("%s: %s", c.Reason, c.Message)
+				}
+			}
+		}
+		if len(p.Status.ContainerStatuses) > 0 {
+			firstContainer := p.Status.ContainerStatuses[0]
+			if firstContainer.State.Waiting != nil {
+				phase = v1alpha1.ApplicationError
+				message = fmt.Sprintf("%s: %s", firstContainer.State.Waiting.Reason, firstContainer.State.Waiting.Message)
+			} else if firstContainer.State.Terminated != nil {
+				phase = v1alpha1.ApplicationError
+				message = fmt.Sprintf("%s: %s", firstContainer.State.Terminated.Reason, firstContainer.State.Terminated.Message)
+			}
 		}
 	}
+	return
 }
 
-func (r *PhApplicationReconciler) updatePhApplicationStatus(phApplication *v1alpha1.PhApplication) (error, time.Duration) {
+func (r *PhApplicationReconciler) updatePhApplicationStatus(phApplication *v1alpha1.PhApplication, reconcileError error) (error, time.Duration) {
 	var message string
 	requeueAfter := 0 * time.Second
 	phase := v1alpha1.ApplicationError
@@ -375,6 +393,9 @@ func (r *PhApplicationReconciler) updatePhApplicationStatus(phApplication *v1alp
 	if err != nil {
 		phase = v1alpha1.ApplicationError
 		message = err.Error()
+	} else if reconcileError != nil {
+		phase = v1alpha1.ApplicationError
+		message = reconcileError.Error()
 	} else if phApplication.Spec.Stop {
 		// Deployment Stop
 		if deployment.Status.Replicas == 0 {
@@ -387,18 +408,24 @@ func (r *PhApplicationReconciler) updatePhApplicationStatus(phApplication *v1alp
 	} else {
 		// Deployment Start
 		if deployment.Status.ReadyReplicas == 0 {
-			phase = v1alpha1.ApplicationStarting
-			message = "Deployment is starting"
-			requeueAfter = 10 * time.Second
-			r.diagnosisPodStatus(podStatus, &phase, &message)
+			phase, message = r.diagnosisPodStatus(podStatus)
+			requeueAfter = 30 * time.Second
+			if phase == "" {
+				phase = v1alpha1.ApplicationStarting
+				message = "Deployment is starting"
+				requeueAfter = 10 * time.Second
+			}
 		} else if deployment.Status.ReadyReplicas == deployment.Status.Replicas {
 			phase = v1alpha1.ApplicationReady
 			message = "Deployment is ready"
 		} else {
-			phase = v1alpha1.ApplicationUpdating
-			message = "Deployment is updating"
-			requeueAfter = 10 * time.Second
-			r.diagnosisPodStatus(podStatus, &phase, &message)
+			phase, message = r.diagnosisPodStatus(podStatus)
+			if phase == "" {
+				phase = v1alpha1.ApplicationUpdating
+				message = "Deployment is updating"
+				requeueAfter = 10 * time.Second
+			}
+			requeueAfter = 30 * time.Second
 		}
 	}
 	phApplicationClone := phApplication.DeepCopy()
@@ -411,7 +438,9 @@ func (r *PhApplicationReconciler) updatePhApplicationStatus(phApplication *v1alp
 	r.Log.Info("Updated Status",
 		"Phase", phase,
 		"Replicas", deployment.Status.Replicas,
-		"ReadyReplicas", deployment.Status.ReadyReplicas)
+		"ReadyReplicas", deployment.Status.ReadyReplicas,
+		"Message", message,
+	)
 	return nil, requeueAfter
 }
 
@@ -424,6 +453,7 @@ func (r *PhApplicationReconciler) updatePhApplicationStatus(phApplication *v1alp
 func (r *PhApplicationReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	var err error
 	var phApplication v1alpha1.PhApplication
+	var reconcileError error
 	log := r.Log.WithValues("phapplication", req.NamespacedName)
 
 	// Fetch phApplication object
@@ -439,19 +469,22 @@ func (r *PhApplicationReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 	// Reconcile Deployment
 	if err = r.reconcileDeployment(&phApplication); err != nil {
 		log.Info("Reconcile Deployment failed", "error", err)
+		reconcileError = err
 	}
 
 	// Reconcile Service
 	if err = r.reconcileService(&phApplication); err != nil {
 		log.Info("Reconcile Service failed", "error", err)
+		reconcileError = err
 	}
 
 	// Reconcile Network-policy
 	if err = r.reconcileNetworkPolicy(&phApplication); err != nil {
 		log.Info("Reconcile NetworkPolicy failed", "error", err)
+		reconcileError = err
 	}
 
-	err, requeueAfter := r.updatePhApplicationStatus(&phApplication)
+	err, requeueAfter := r.updatePhApplicationStatus(&phApplication, reconcileError)
 	// Update status
 	if err != nil {
 		log.Info("Update status failed", "error", err)

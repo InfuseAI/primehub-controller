@@ -2,6 +2,7 @@ package controllers
 
 import (
 	phcache "primehub-controller/pkg/cache"
+	"primehub-controller/pkg/quota"
 	"testing"
 	"time"
 
@@ -12,8 +13,8 @@ import (
 	"primehub-controller/pkg/graphql"
 )
 
-func getConvertedResourceQuota(cpu float32, gpu float32, memory string) *ResourceQuota {
-	resourceQuota, _ := ConvertToResourceQuota(cpu, gpu, memory)
+func getConvertedResourceQuota(cpu float32, gpu float32, memory string) *quota.ResourceQuota {
+	resourceQuota, _ := quota.ConvertToResourceQuota(cpu, gpu, memory)
 	return resourceQuota
 }
 
@@ -64,37 +65,37 @@ func TestValidate(t *testing.T) {
 	phJobScheduler := PHJobScheduler{}
 
 	groupInfo := createGroupInfo("groupA", 3, -1, "", 5, -1, "")
-	requestedQuota, _ := ConvertToResourceQuota(4, 1, "1Gi")
+	requestedQuota, _ := quota.ConvertToResourceQuota(4, 1, "1Gi")
 	valid, _ := phJobScheduler.validate(requestedQuota, groupInfo)
 	if valid != false {
 		t.Error("Wrong Validate of Group Quota Test 1")
 	}
-	requestedQuota, _ = ConvertToResourceQuota(3, 1, "1Gi")
+	requestedQuota, _ = quota.ConvertToResourceQuota(3, 1, "1Gi")
 	valid, _ = phJobScheduler.validate(requestedQuota, groupInfo)
 	if valid != true {
 		t.Error("Wrong Validate of Group Quota Test 2")
 	}
 
 	groupInfo = createGroupInfo("groupA", 5, -1, "", 3, -1, "")
-	requestedQuota, _ = ConvertToResourceQuota(4, 1, "1Gi")
+	requestedQuota, _ = quota.ConvertToResourceQuota(4, 1, "1Gi")
 	valid, _ = phJobScheduler.validate(requestedQuota, groupInfo)
 	if valid != false {
 		t.Error("Wrong Validate of User Quota Test 1")
 	}
-	requestedQuota, _ = ConvertToResourceQuota(3, 1, "1Gi")
+	requestedQuota, _ = quota.ConvertToResourceQuota(3, 1, "1Gi")
 	valid, _ = phJobScheduler.validate(requestedQuota, groupInfo)
 	if valid != true {
 		t.Error("Wrong Validate of User Quota Test 2")
 	}
 
 	groupInfo = createGroupInfo("groupA", -1, -1, "0.5Gi", 3, -1, "")
-	requestedQuota, _ = ConvertToResourceQuota(1, 1, "1Gi")
+	requestedQuota, _ = quota.ConvertToResourceQuota(1, 1, "1Gi")
 	valid, _ = phJobScheduler.validate(requestedQuota, groupInfo)
 	if valid != false {
 		t.Error("Wrong Validate of Memory Quota Test 1")
 	}
 	groupInfo = createGroupInfo("groupA", -1, -1, "1Gi", 3, -1, "")
-	requestedQuota, _ = ConvertToResourceQuota(1, 1, "1Gi")
+	requestedQuota, _ = quota.ConvertToResourceQuota(1, 1, "1Gi")
 	valid, _ = phJobScheduler.validate(requestedQuota, groupInfo)
 	if valid != true {
 		t.Error("Wrong Validate of Memory Quota Test 2")
@@ -155,7 +156,7 @@ func TestScheduleByStrictOrder1(t *testing.T) {
 	phJobs = append(phJobs, createPhJob("userB", "groupA", "typeA"))
 	phJobs = append(phJobs, createPhJob("userC", "groupA", "typeA"))
 
-	usersRemainingQuota := make(map[string]ResourceQuota)
+	usersRemainingQuota := make(map[string]quota.ResourceQuota)
 	usersRemainingQuota["userA"] = *getConvertedResourceQuota(8, -1, "")
 	usersRemainingQuota["userB"] = *getConvertedResourceQuota(8, -1, "")
 	usersRemainingQuota["userC"] = *getConvertedResourceQuota(8, -1, "")
@@ -181,7 +182,7 @@ func TestScheduleByStrictOrder2(t *testing.T) {
 	phJobs = append(phJobs, createPhJob("userB", "groupA", "typeB"))
 	phJobs = append(phJobs, createPhJob("userC", "groupA", "typeC"))
 
-	usersRemainingQuota := make(map[string]ResourceQuota)
+	usersRemainingQuota := make(map[string]quota.ResourceQuota)
 	usersRemainingQuota["userA"] = *getConvertedResourceQuota(8, -1, "")
 	usersRemainingQuota["userB"] = *getConvertedResourceQuota(8, -1, "")
 	usersRemainingQuota["userC"] = *getConvertedResourceQuota(8, -1, "")
@@ -211,7 +212,7 @@ func TestScheduleByStrictOrder3(t *testing.T) {
 	phJobs = append(phJobs, createPhJob("userB", "groupA", "typeB"))
 	phJobs = append(phJobs, createPhJob("userC", "groupA", "typeC"))
 
-	usersRemainingQuota := make(map[string]ResourceQuota)
+	usersRemainingQuota := make(map[string]quota.ResourceQuota)
 	usersRemainingQuota["userA"] = *getConvertedResourceQuota(4, -1, "")
 	usersRemainingQuota["userB"] = *getConvertedResourceQuota(4, -1, "")
 	usersRemainingQuota["userC"] = *getConvertedResourceQuota(4, -1, "")
