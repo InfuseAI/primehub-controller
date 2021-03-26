@@ -7,10 +7,10 @@ import (
 	phcache "primehub-controller/pkg/cache"
 	"primehub-controller/pkg/escapism"
 	"primehub-controller/pkg/graphql"
+	"primehub-controller/pkg/quota"
 	"sort"
 
 	"github.com/go-logr/logr"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -21,48 +21,6 @@ var (
 	groupAggregationKey = "primehub.io/group"
 	userAggregationKey  = "primehub.io/user"
 )
-
-// nil means it doesn't limit the quota
-type ResourceQuota struct {
-	cpu    *resource.Quantity
-	gpu    *resource.Quantity
-	memory *resource.Quantity
-}
-
-func NewResourceQuota() *ResourceQuota {
-	return &ResourceQuota{
-		cpu:    &resource.Quantity{},
-		gpu:    &resource.Quantity{},
-		memory: &resource.Quantity{},
-	}
-}
-
-func ConvertToResourceQuota(cpu float32, gpu float32, memory string) (*ResourceQuota, error) {
-	var resourceQuota ResourceQuota = *NewResourceQuota()
-	if cpu < 0 {
-		resourceQuota.cpu = nil
-	} else {
-		resourceQuota.cpu.SetMilli(int64(cpu*1000 + 0.5))
-	}
-
-	if gpu < 0 {
-		resourceQuota.gpu = nil
-	} else {
-		resourceQuota.gpu.Set(int64(gpu + 0.5))
-	}
-
-	if memory == "" {
-		resourceQuota.memory = nil
-	} else {
-		memoryLimit, err := resource.ParseQuantity(memory)
-		if err != nil {
-			return nil, err
-		}
-		resourceQuota.memory = &memoryLimit
-	}
-
-	return &resourceQuota, nil
-}
 
 type PhjobCompareFunc func(*primehubv1alpha1.PhJob, *primehubv1alpha1.PhJob) bool
 
@@ -77,7 +35,7 @@ type PHJobScheduler struct {
 	PrimeHubCache *phcache.PrimeHubCache
 }
 
-func (r *PHJobScheduler) getCurrentUsage(namespace string, aggregationKeys []string, aggregationValues []string) (*ResourceQuota, error) {
+func (r *PHJobScheduler) getCurrentUsage(namespace string, aggregationKeys []string, aggregationValues []string) (*quota.ResourceQuota, error) {
 	if len(aggregationKeys) != len(aggregationValues) {
 		return nil, errors.New("length of key and value must be the same")
 	}
@@ -94,93 +52,35 @@ func (r *PHJobScheduler) getCurrentUsage(namespace string, aggregationKeys []str
 		return nil, err
 	}
 
-	var resourceUsage ResourceQuota = *NewResourceQuota()
+	resourceUsage := *quota.NewResourceQuota()
 	for _, pod := range pods.Items {
 		if pod.Status.Phase == corev1.PodPending || pod.Status.Phase == corev1.PodRunning {
 			for _, container := range pod.Spec.Containers {
-				resourceUsage.cpu.Add(*container.Resources.Limits.Cpu())
+				resourceUsage.Cpu.Add(*container.Resources.Limits.Cpu())
 				if _, ok := container.Resources.Limits["nvidia.com/gpu"]; ok {
-					resourceUsage.gpu.Add(container.Resources.Limits["nvidia.com/gpu"])
+					resourceUsage.Gpu.Add(container.Resources.Limits["nvidia.com/gpu"])
 				}
-				resourceUsage.memory.Add(*container.Resources.Limits.Memory())
+				resourceUsage.Memory.Add(*container.Resources.Limits.Memory())
 			}
 		}
 	}
 	return &resourceUsage, nil
 }
 
-func (r *PHJobScheduler) getGroupRemainingQuota(phJob *primehubv1alpha1.PhJob) (*ResourceQuota, error) {
+func (r *PHJobScheduler) getGroupRemainingQuota(phJob *primehubv1alpha1.PhJob) (*quota.ResourceQuota, error) {
 	groupInfo, err := r.PrimeHubCache.FetchGroup(phJob.Spec.GroupId)
 	if err != nil {
 		return nil, err
 	}
-	groupUsage, err := r.getCurrentUsage(phJob.Namespace, []string{groupAggregationKey}, []string{phJob.Spec.GroupName})
-	if err != nil {
-		return nil, err
-	}
-	groupRemainingQuota, err := ConvertToResourceQuota(groupInfo.ProjectQuotaCpu, groupInfo.ProjectQuotaGpu, groupInfo.ProjectQuotaMemory)
-	if err != nil {
-		return nil, err
-	}
-	if groupRemainingQuota.cpu != nil {
-		groupRemainingQuota.cpu.Sub(*groupUsage.cpu)
-	}
-	if groupRemainingQuota.gpu != nil {
-		groupRemainingQuota.gpu.Sub(*groupUsage.gpu)
-	}
-	if groupRemainingQuota.memory != nil {
-		groupRemainingQuota.memory.Sub(*groupUsage.memory)
-	}
-	return groupRemainingQuota, nil
+	return quota.CalculateGroupRemainingResourceQuota(r.Client, phJob.Namespace, groupInfo)
 }
 
-func (r *PHJobScheduler) getUserRemainingQuotaInGroup(phJob *primehubv1alpha1.PhJob) (*ResourceQuota, error) {
+func (r *PHJobScheduler) getUserRemainingQuotaInGroup(phJob *primehubv1alpha1.PhJob) (*quota.ResourceQuota, error) {
 	groupInfo, err := r.PrimeHubCache.FetchGroup(phJob.Spec.GroupId)
 	if err != nil {
 		return nil, err
 	}
-	userUsage, err := r.getCurrentUsage(phJob.Namespace, []string{groupAggregationKey, userAggregationKey}, []string{phJob.Spec.GroupName, phJob.Spec.UserName})
-	if err != nil {
-		return nil, err
-	}
-	userRemainingQuota, err := ConvertToResourceQuota(groupInfo.QuotaCpu, groupInfo.QuotaGpu, groupInfo.QuotaMemory)
-	if err != nil {
-		return nil, err
-	}
-	if userRemainingQuota.cpu != nil {
-		userRemainingQuota.cpu.Sub(*userUsage.cpu)
-	}
-	if userRemainingQuota.gpu != nil {
-		userRemainingQuota.gpu.Sub(*userUsage.gpu)
-	}
-	if userRemainingQuota.memory != nil {
-		userRemainingQuota.memory.Sub(*userUsage.memory)
-	}
-	return userRemainingQuota, nil
-}
-
-func (r *PHJobScheduler) validateResource(requestedQuota *ResourceQuota, resourceQuota *ResourceQuota) (bool, error) {
-	if (resourceQuota.cpu != nil && requestedQuota.cpu != nil && resourceQuota.cpu.Cmp(*requestedQuota.cpu) == -1) ||
-		(resourceQuota.gpu != nil && requestedQuota.gpu != nil && resourceQuota.gpu.Cmp(*requestedQuota.gpu) == -1) ||
-		(resourceQuota.memory != nil && requestedQuota.memory != nil && resourceQuota.memory.Cmp(*requestedQuota.memory) == -1) {
-		return false, nil
-	}
-
-	return true, nil
-}
-
-func (r *PHJobScheduler) validateUserAndGroupQuota(requestedQuota *ResourceQuota, userQuota *ResourceQuota, groupQuota *ResourceQuota) (bool, bool, error) {
-	userValid, err := r.validateResource(requestedQuota, userQuota)
-	if err != nil {
-		return false, false, err
-	}
-
-	groupValid, err := r.validateResource(requestedQuota, groupQuota)
-	if err != nil {
-		return false, false, err
-	}
-
-	return userValid, groupValid, nil
+	return quota.CalculateUserRemainingResourceQuota(r.Client, phJob.Namespace, groupInfo, phJob.Spec.UserName)
 }
 
 func (r *PHJobScheduler) list() (*primehubv1alpha1.PhJobList, error) {
@@ -205,19 +105,17 @@ func (r *PHJobScheduler) list() (*primehubv1alpha1.PhJobList, error) {
 	return &phJobList, nil
 }
 
-func (r *PHJobScheduler) validate(requestedQuota *ResourceQuota, groupInfo *graphql.DtoGroup) (bool, error) {
-	groupQuota, err := ConvertToResourceQuota(groupInfo.ProjectQuotaCpu, groupInfo.ProjectQuotaGpu, groupInfo.ProjectQuotaMemory)
+func (r *PHJobScheduler) validate(requestedQuota *quota.ResourceQuota, groupInfo *graphql.DtoGroup) (bool, error) {
+	groupQuota, err := quota.ConvertToResourceQuota(groupInfo.ProjectQuotaCpu, groupInfo.ProjectQuotaGpu, groupInfo.ProjectQuotaMemory)
 	if err != nil {
 		return false, err
 	}
-	userQuota, err := ConvertToResourceQuota(groupInfo.QuotaCpu, groupInfo.QuotaGpu, groupInfo.QuotaMemory)
+	userQuota, err := quota.ConvertToResourceQuota(groupInfo.QuotaCpu, groupInfo.QuotaGpu, groupInfo.QuotaMemory)
 	if err != nil {
 		return false, err
 	}
-	userValid, groupValid, err := r.validateUserAndGroupQuota(requestedQuota, userQuota, groupQuota)
-	if err != nil {
-		return false, err
-	}
+	userValid := quota.ValidateResource(requestedQuota, userQuota)
+	groupValid := quota.ValidateResource(requestedQuota, groupQuota)
 
 	if userValid == false || groupValid == false {
 		return false, nil
@@ -252,7 +150,7 @@ func (r *PHJobScheduler) sort(phJobs *[]*primehubv1alpha1.PhJob, cmpFunc PhjobCo
 	})
 }
 
-func (r *PHJobScheduler) scheduleByStrictOrder(phJobsRef *[]*primehubv1alpha1.PhJob, usersRemainingQuotaRef *map[string]ResourceQuota, groupRemainingQuota *ResourceQuota) error {
+func (r *PHJobScheduler) scheduleByStrictOrder(phJobsRef *[]*primehubv1alpha1.PhJob, usersRemainingQuotaRef *map[string]quota.ResourceQuota, groupRemainingQuota *quota.ResourceQuota) error {
 	phJobs := *phJobsRef
 	usersRemainingQuota := *usersRemainingQuotaRef
 
@@ -261,7 +159,7 @@ func (r *PHJobScheduler) scheduleByStrictOrder(phJobsRef *[]*primehubv1alpha1.Ph
 		if err != nil {
 			return err
 		}
-		instanceRequestedQuota, err := ConvertToResourceQuota(instanceInfo.Spec.LimitsCpu, (float32)(instanceInfo.Spec.LimitsGpu), instanceInfo.Spec.LimitsMemory)
+		instanceRequestedQuota, err := quota.InstanceTypeRequestedQuota(instanceInfo)
 		if err != nil {
 			return err
 		}
@@ -276,7 +174,8 @@ func (r *PHJobScheduler) scheduleByStrictOrder(phJobsRef *[]*primehubv1alpha1.Ph
 		}
 		userRemainingQuota := usersRemainingQuota[phJob.Spec.UserName]
 
-		userValid, groupValid, err := r.validateUserAndGroupQuota(instanceRequestedQuota, &userRemainingQuota, groupRemainingQuota)
+		userValid := quota.ValidateResource(instanceRequestedQuota, &userRemainingQuota)
+		groupValid := quota.ValidateResource(instanceRequestedQuota, groupRemainingQuota)
 		if userValid == false {
 			continue
 		}
@@ -286,23 +185,23 @@ func (r *PHJobScheduler) scheduleByStrictOrder(phJobsRef *[]*primehubv1alpha1.Ph
 
 		phJob.Status.Phase = primehubv1alpha1.JobPreparing
 
-		if groupRemainingQuota.cpu != nil {
-			groupRemainingQuota.cpu.Sub(*instanceRequestedQuota.cpu)
+		if groupRemainingQuota.Cpu != nil {
+			groupRemainingQuota.Cpu.Sub(*instanceRequestedQuota.Cpu)
 		}
-		if groupRemainingQuota.gpu != nil {
-			groupRemainingQuota.gpu.Sub(*instanceRequestedQuota.gpu)
+		if groupRemainingQuota.Gpu != nil {
+			groupRemainingQuota.Gpu.Sub(*instanceRequestedQuota.Gpu)
 		}
-		if groupRemainingQuota.memory != nil {
-			groupRemainingQuota.memory.Sub(*instanceRequestedQuota.memory)
+		if groupRemainingQuota.Memory != nil {
+			groupRemainingQuota.Memory.Sub(*instanceRequestedQuota.Memory)
 		}
-		if usersRemainingQuota[phJob.Spec.UserName].cpu != nil {
-			usersRemainingQuota[phJob.Spec.UserName].cpu.Sub(*instanceRequestedQuota.cpu)
+		if usersRemainingQuota[phJob.Spec.UserName].Cpu != nil {
+			usersRemainingQuota[phJob.Spec.UserName].Cpu.Sub(*instanceRequestedQuota.Cpu)
 		}
-		if usersRemainingQuota[phJob.Spec.UserName].gpu != nil {
-			usersRemainingQuota[phJob.Spec.UserName].gpu.Sub(*instanceRequestedQuota.gpu)
+		if usersRemainingQuota[phJob.Spec.UserName].Gpu != nil {
+			usersRemainingQuota[phJob.Spec.UserName].Gpu.Sub(*instanceRequestedQuota.Gpu)
 		}
-		if usersRemainingQuota[phJob.Spec.UserName].memory != nil {
-			usersRemainingQuota[phJob.Spec.UserName].memory.Sub(*instanceRequestedQuota.memory)
+		if usersRemainingQuota[phJob.Spec.UserName].Memory != nil {
+			usersRemainingQuota[phJob.Spec.UserName].Memory.Sub(*instanceRequestedQuota.Memory)
 		}
 	}
 	return nil
@@ -343,7 +242,7 @@ func (r *PHJobScheduler) Schedule() {
 			r.Log.Error(err, "cannot get instance type info")
 			continue
 		}
-		instanceRequestedQuota, err := ConvertToResourceQuota(instanceInfo.Spec.LimitsCpu, (float32)(instanceInfo.Spec.LimitsGpu), instanceInfo.Spec.LimitsMemory)
+		instanceRequestedQuota, err := quota.InstanceTypeRequestedQuota(instanceInfo)
 		if err != nil {
 			r.Log.Error(err, "cannot get convert instance type resource quota")
 			continue
@@ -398,7 +297,7 @@ func (r *PHJobScheduler) Schedule() {
 			r.Log.Error(err, "cannot get group remaining quota")
 			continue
 		}
-		usersRemainingQuota := make(map[string]ResourceQuota)
+		usersRemainingQuota := make(map[string]quota.ResourceQuota)
 		err = r.scheduleByStrictOrder(&phJobs, &usersRemainingQuota, groupRemainingQuota)
 		if err != nil {
 			r.Log.Error(err, "schedule by strict order failed")
