@@ -2,7 +2,6 @@ package quota
 
 import (
 	"context"
-	"fmt"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -133,33 +132,13 @@ func ConvertToResourceQuota(cpu float32, gpu float32, memory string) (*ResourceQ
 }
 
 func ValidateResource(requestedQuota *ResourceQuota, resourceQuota *ResourceQuota) bool {
-	//if (resourceQuota.Cpu != nil && requestedQuota.Cpu != nil && resourceQuota.Cpu.Cmp(*requestedQuota.Cpu) == -1) ||
-	//	(resourceQuota.Gpu != nil && requestedQuota.Gpu != nil && resourceQuota.Gpu.Cmp(*requestedQuota.Gpu) == -1) ||
-	//	(resourceQuota.Memory != nil && requestedQuota.Memory != nil && resourceQuota.Memory.Cmp(*requestedQuota.Memory) == -1) {
-	//	return false
-	//}
-	if resourceQuota.Cpu != nil && requestedQuota.Cpu != nil && resourceQuota.Cpu.Cmp(*requestedQuota.Cpu) == -1 {
-		fmt.Printf("Reqest CPU: %d > Remain CPU: %d\n", requestedQuota.Cpu.Value(), resourceQuota.Cpu.Value())
-		return false
-	} else if resourceQuota.Gpu != nil && requestedQuota.Gpu != nil && resourceQuota.Gpu.Cmp(*requestedQuota.Gpu) == -1 {
-		fmt.Printf("Reqest GPU: %d > Remain GPU: %d\n", requestedQuota.Gpu.Value(), resourceQuota.Gpu.Value())
-		return false
-	} else if resourceQuota.Memory != nil && requestedQuota.Memory != nil && resourceQuota.Memory.Cmp(*requestedQuota.Memory) == -1 {
-		fmt.Printf("Reqest Men: %d > Remain Men: %d\n", requestedQuota.Memory.Value(), resourceQuota.Memory.Value())
+	if (resourceQuota.Cpu != nil && requestedQuota.Cpu != nil && resourceQuota.Cpu.Cmp(*requestedQuota.Cpu) == -1) ||
+		(resourceQuota.Gpu != nil && requestedQuota.Gpu != nil && resourceQuota.Gpu.Cmp(*requestedQuota.Gpu) == -1) ||
+		(resourceQuota.Memory != nil && requestedQuota.Memory != nil && resourceQuota.Memory.Cmp(*requestedQuota.Memory) == -1) {
 		return false
 	}
 	return true
 }
-
-//func ValidateRequestedResource(requestedQuota *ResourceQuota, groupQuota *ResourceQuota, userQuota *ResourceQuota) bool {
-//	userValid := ValidateResource(requestedQuota, userQuota)
-//	groupValid := ValidateResource(requestedQuota, groupQuota)
-//
-//	if !userValid || !groupValid {
-//		return false
-//	}
-//	return true
-//}
 
 func CalculateGroupRemainingResourceQuota(cgo client.Client, namespace string, groupInfo *graphql.DtoGroup) (*ResourceQuota, error) {
 	if groupInfo == nil {
