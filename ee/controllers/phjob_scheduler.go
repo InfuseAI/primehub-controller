@@ -2,10 +2,8 @@ package controllers
 
 import (
 	"context"
-	"errors"
 	primehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
 	phcache "primehub-controller/pkg/cache"
-	"primehub-controller/pkg/escapism"
 	"primehub-controller/pkg/graphql"
 	"primehub-controller/pkg/quota"
 	"sort"
@@ -13,8 +11,6 @@ import (
 	"github.com/go-logr/logr"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	corev1 "k8s.io/api/core/v1"
 )
 
 var (
@@ -33,38 +29,6 @@ type PHJobScheduler struct {
 	Log           logr.Logger
 	GraphqlClient graphql.AbstractGraphqlClient
 	PrimeHubCache *phcache.PrimeHubCache
-}
-
-func (r *PHJobScheduler) getCurrentUsage(namespace string, aggregationKeys []string, aggregationValues []string) (*quota.ResourceQuota, error) {
-	if len(aggregationKeys) != len(aggregationValues) {
-		return nil, errors.New("length of key and value must be the same")
-	}
-
-	ctx := context.Background()
-
-	pods := corev1.PodList{}
-	labels := make(map[string]string)
-	for idx, aggregationKey := range aggregationKeys {
-		labels[aggregationKey] = escapism.EscapeToPrimehubLabel(aggregationValues[idx])
-	}
-	err := r.Client.List(ctx, &pods, client.InNamespace(namespace), client.MatchingLabels(labels))
-	if err != nil {
-		return nil, err
-	}
-
-	resourceUsage := *quota.NewResourceQuota()
-	for _, pod := range pods.Items {
-		if pod.Status.Phase == corev1.PodPending || pod.Status.Phase == corev1.PodRunning {
-			for _, container := range pod.Spec.Containers {
-				resourceUsage.Cpu.Add(*container.Resources.Limits.Cpu())
-				if _, ok := container.Resources.Limits["nvidia.com/gpu"]; ok {
-					resourceUsage.Gpu.Add(container.Resources.Limits["nvidia.com/gpu"])
-				}
-				resourceUsage.Memory.Add(*container.Resources.Limits.Memory())
-			}
-		}
-	}
-	return &resourceUsage, nil
 }
 
 func (r *PHJobScheduler) getGroupRemainingQuota(phJob *primehubv1alpha1.PhJob) (*quota.ResourceQuota, error) {

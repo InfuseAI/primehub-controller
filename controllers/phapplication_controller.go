@@ -68,9 +68,6 @@ func (r *PhApplicationReconciler) generateDeploymentSpec(phApplication *v1alpha1
 		return err
 	}
 
-	// Verify resource quota
-	//instanceRequestedQuota, err := ConvertToResourceQuota(instanceTypeInfo.Spec.LimitsCpu, (float32)(instanceTypeInfo.Spec.LimitsGpu), instanceTypeInfo.Spec.LimitsMemory)
-
 	deployment.Name = phApplication.AppName()
 	deployment.Namespace = phApplication.ObjectMeta.Namespace
 	deployment.ObjectMeta.Labels = labels
@@ -137,7 +134,7 @@ func (r *PhApplicationReconciler) updateDeployment(phApplication *v1alpha1.PhApp
 		return err
 	}
 
-	image := deployment.Spec.Template.Spec.Containers[0].Image
+	image := deploymentClone.Spec.Template.Spec.Containers[0].Image
 	group := phApplication.GroupName()
 	instanceType := phApplication.Spec.InstanceType
 	r.Log.Info("Update Deployment",
@@ -346,7 +343,7 @@ func (r *PhApplicationReconciler) reconcileNetworkPolicy(phApplication *v1alpha1
 	return err
 }
 
-func (r *PhApplicationReconciler) getPodStatus(phApplication *v1alpha1.PhApplication) *corev1.PodList {
+func (r *PhApplicationReconciler) getDeploymentPods(phApplication *v1alpha1.PhApplication) *corev1.PodList {
 	pods := &corev1.PodList{}
 	err := r.Client.List(context.Background(),
 		pods,
@@ -358,11 +355,20 @@ func (r *PhApplicationReconciler) getPodStatus(phApplication *v1alpha1.PhApplica
 	return pods
 }
 
-func (r *PhApplicationReconciler) diagnosisPodStatus(pods *corev1.PodList) (phase string, message string) {
+func (r *PhApplicationReconciler) diagnosisStatus(deploymentStatus *appv1.DeploymentStatus, pods *corev1.PodList) (phase string, message string) {
+
+	for _, c := range deploymentStatus.Conditions {
+		if c.Reason == "FailedCreate" {
+			// Group resource not enough
+			phase = v1alpha1.ApplicationError
+			message = fmt.Sprintf("%s: %s", c.Reason, c.Message)
+		}
+	}
 	for _, p := range pods.Items {
 		if len(p.Status.Conditions) > 0 {
 			for _, c := range p.Status.Conditions {
 				if c.Reason == corev1.PodReasonUnschedulable {
+					// Pod pending
 					phase = v1alpha1.ApplicationError
 					message = fmt.Sprintf("%s: %s", c.Reason, c.Message)
 				}
@@ -370,10 +376,12 @@ func (r *PhApplicationReconciler) diagnosisPodStatus(pods *corev1.PodList) (phas
 		}
 		if len(p.Status.ContainerStatuses) > 0 {
 			firstContainer := p.Status.ContainerStatuses[0]
-			if firstContainer.State.Waiting != nil {
+			if firstContainer.State.Waiting != nil && firstContainer.State.Waiting.Message != "" {
+				// Failed to pull image
 				phase = v1alpha1.ApplicationError
 				message = fmt.Sprintf("%s: %s", firstContainer.State.Waiting.Reason, firstContainer.State.Waiting.Message)
 			} else if firstContainer.State.Terminated != nil {
+				// Container runtime error
 				phase = v1alpha1.ApplicationError
 				message = fmt.Sprintf("%s: %s", firstContainer.State.Terminated.Reason, firstContainer.State.Terminated.Message)
 			}
@@ -388,14 +396,14 @@ func (r *PhApplicationReconciler) updatePhApplicationStatus(phApplication *v1alp
 	phase := v1alpha1.ApplicationError
 	namespace := phApplication.ObjectMeta.Namespace
 	deployment := &appv1.Deployment{}
-	podStatus := r.getPodStatus(phApplication)
+	pods := r.getDeploymentPods(phApplication)
 	err := r.Get(context.Background(), client.ObjectKey{Namespace: namespace, Name: phApplication.AppName()}, deployment)
-	if err != nil {
-		phase = v1alpha1.ApplicationError
-		message = err.Error()
-	} else if reconcileError != nil {
+	if reconcileError != nil {
 		phase = v1alpha1.ApplicationError
 		message = reconcileError.Error()
+	} else if err != nil {
+		phase = v1alpha1.ApplicationError
+		message = err.Error()
 	} else if phApplication.Spec.Stop {
 		// Deployment Stop
 		if deployment.Status.Replicas == 0 {
@@ -407,25 +415,22 @@ func (r *PhApplicationReconciler) updatePhApplicationStatus(phApplication *v1alp
 		}
 	} else {
 		// Deployment Start
-		if deployment.Status.ReadyReplicas == 0 {
-			phase, message = r.diagnosisPodStatus(podStatus)
-			requeueAfter = 30 * time.Second
-			if phase == "" {
+		phase, message = r.diagnosisStatus(&deployment.Status, pods)
+		requeueAfter = 30 * time.Second
+		if phase == "" {
+			if deployment.Status.ReadyReplicas == 0 {
 				phase = v1alpha1.ApplicationStarting
 				message = "Deployment is starting"
 				requeueAfter = 10 * time.Second
-			}
-		} else if deployment.Status.ReadyReplicas == deployment.Status.Replicas {
-			phase = v1alpha1.ApplicationReady
-			message = "Deployment is ready"
-		} else {
-			phase, message = r.diagnosisPodStatus(podStatus)
-			if phase == "" {
+			} else if deployment.Status.ReadyReplicas == deployment.Status.Replicas {
+				phase = v1alpha1.ApplicationReady
+				message = "Deployment is ready"
+				requeueAfter = 0
+			} else {
 				phase = v1alpha1.ApplicationUpdating
 				message = "Deployment is updating"
 				requeueAfter = 10 * time.Second
 			}
-			requeueAfter = 30 * time.Second
 		}
 	}
 	phApplicationClone := phApplication.DeepCopy()

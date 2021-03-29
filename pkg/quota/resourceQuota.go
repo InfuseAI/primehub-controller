@@ -2,6 +2,7 @@ package quota
 
 import (
 	"context"
+	"fmt"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -15,6 +16,30 @@ type ResourceQuota struct {
 	Cpu    *resource.Quantity
 	Gpu    *resource.Quantity
 	Memory *resource.Quantity
+}
+
+func (r *ResourceQuota) Sub(y ResourceQuota) {
+	if r.Cpu != nil && y.Cpu != nil {
+		r.Cpu.Sub(*y.Cpu)
+	}
+	if r.Gpu != nil && y.Gpu != nil {
+		r.Gpu.Sub(*y.Gpu)
+	}
+	if r.Memory != nil && y.Memory != nil {
+		r.Memory.Sub(*y.Memory)
+	}
+}
+
+func (r *ResourceQuota) Add(y ResourceQuota) {
+	if r.Cpu != nil && y.Cpu != nil {
+		r.Cpu.Add(*y.Cpu)
+	}
+	if r.Gpu != nil && y.Gpu != nil {
+		r.Gpu.Add(*y.Gpu)
+	}
+	if r.Memory != nil && y.Memory != nil {
+		r.Memory.Add(*y.Memory)
+	}
 }
 
 func NewResourceQuota() *ResourceQuota {
@@ -108,9 +133,19 @@ func ConvertToResourceQuota(cpu float32, gpu float32, memory string) (*ResourceQ
 }
 
 func ValidateResource(requestedQuota *ResourceQuota, resourceQuota *ResourceQuota) bool {
-	if (resourceQuota.Cpu != nil && requestedQuota.Cpu != nil && resourceQuota.Cpu.Cmp(*requestedQuota.Cpu) == -1) ||
-		(resourceQuota.Gpu != nil && requestedQuota.Gpu != nil && resourceQuota.Gpu.Cmp(*requestedQuota.Gpu) == -1) ||
-		(resourceQuota.Memory != nil && requestedQuota.Memory != nil && resourceQuota.Memory.Cmp(*requestedQuota.Memory) == -1) {
+	//if (resourceQuota.Cpu != nil && requestedQuota.Cpu != nil && resourceQuota.Cpu.Cmp(*requestedQuota.Cpu) == -1) ||
+	//	(resourceQuota.Gpu != nil && requestedQuota.Gpu != nil && resourceQuota.Gpu.Cmp(*requestedQuota.Gpu) == -1) ||
+	//	(resourceQuota.Memory != nil && requestedQuota.Memory != nil && resourceQuota.Memory.Cmp(*requestedQuota.Memory) == -1) {
+	//	return false
+	//}
+	if resourceQuota.Cpu != nil && requestedQuota.Cpu != nil && resourceQuota.Cpu.Cmp(*requestedQuota.Cpu) == -1 {
+		fmt.Printf("Reqest CPU: %d > Remain CPU: %d\n", requestedQuota.Cpu.Value(), resourceQuota.Cpu.Value())
+		return false
+	} else if resourceQuota.Gpu != nil && requestedQuota.Gpu != nil && resourceQuota.Gpu.Cmp(*requestedQuota.Gpu) == -1 {
+		fmt.Printf("Reqest GPU: %d > Remain GPU: %d\n", requestedQuota.Gpu.Value(), resourceQuota.Gpu.Value())
+		return false
+	} else if resourceQuota.Memory != nil && requestedQuota.Memory != nil && resourceQuota.Memory.Cmp(*requestedQuota.Memory) == -1 {
+		fmt.Printf("Reqest Men: %d > Remain Men: %d\n", requestedQuota.Memory.Value(), resourceQuota.Memory.Value())
 		return false
 	}
 	return true
