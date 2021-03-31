@@ -74,7 +74,7 @@ func (r *PrimeHubCache) FetchInstanceType(instanceTypeID string) (*graphql.DtoIn
 
 func (r *PrimeHubCache) FetchGlobalDatasets() ([]*graphql.DtoDataset, error) {
 	cacheKey := "globalDatasets"
-	cacheItem := r.InstanceType.Get(cacheKey)
+	cacheItem := r.Datasets.Get(cacheKey)
 	if cacheItem == nil || cacheItem.Expired() {
 		globalDatasets, err := r.GraphqlClient.FetchGlobalDatasets()
 		if err != nil {
