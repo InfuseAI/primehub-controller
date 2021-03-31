@@ -5,7 +5,7 @@ go 1.13
 require (
 	github.com/fatih/structtag v1.2.0 // indirect
 	github.com/go-logr/logr v0.1.0
-	github.com/karlseguin/ccache v2.0.3+incompatible // indirect
+	github.com/karlseguin/ccache v2.0.3+incompatible
 	github.com/karlseguin/expect v1.0.7 // indirect
 	github.com/magiconair/properties v1.8.1 // indirect
 	github.com/onsi/ginkgo v1.6.0
