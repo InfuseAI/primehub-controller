@@ -153,6 +153,7 @@ type AbstractGraphqlClient interface {
 	FetchGroupEnableModelDeployment(string) (bool, error)
 	FetchGroupInfo(string) (*DtoGroup, error)
 	FetchGroupInfoByName(string) (*DtoGroup, error)
+	FetchGlobalDatasets() ([]*DtoDataset, error)
 	FetchInstanceTypeInfo(string) (*DtoInstanceType, error)
 	FetchTimeZone() (string, error)
 	NotifyPhJobEvent(id string, eventType string) (float64, error)
@@ -391,6 +392,46 @@ func (c GraphqlClient) FetchGroupInfoByName(groupName string) (*DtoGroup, error)
 	}
 
 	return &group, nil
+}
+
+func (c GraphqlClient) FetchGlobalDatasets() ([]*DtoDataset, error) {
+	query := `
+	query {
+		datasets { 
+			name displayName description spec global writable mountRoot homeSymlink launchGroupOnly
+	  }
+	}`
+	requestData := map[string]interface{}{
+		"query": query,
+	}
+	body, err := c.QueryServer(requestData)
+	if err != nil {
+		return nil, err
+	}
+	data := map[string]interface{}{}
+	json.Unmarshal(body, &data)
+
+	data, ok := data["data"].(map[string]interface{})
+	if !ok {
+		return nil, errors.New("can not find data in response")
+	}
+	_datasets, ok := data["datasets"].([]interface{})
+	if !ok {
+		return nil, errors.New("can not find datasets in response")
+	}
+
+	var globalDatasets []*DtoDataset
+
+	for _, d := range _datasets {
+		var dataset DtoDataset
+		jsonObj, _ := json.Marshal(d)
+		json.Unmarshal(jsonObj, &dataset)
+		if dataset.Global == true {
+			globalDatasets = append(globalDatasets, &dataset)
+		}
+	}
+
+	return globalDatasets, nil
 }
 
 func (c GraphqlClient) FetchGroupInfo(groupId string) (*DtoGroup, error) {

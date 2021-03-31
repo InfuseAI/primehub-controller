@@ -171,7 +171,7 @@ func NewSpawnerForModelDeployment(data DtoData, groupName string, instanceTypeNa
 	return spawner, nil
 }
 
-func NewSpawnerForPhApplication(appID string, group DtoGroup, instanceType DtoInstanceType, spec corev1.PodSpec) (*Spawner, error) {
+func NewSpawnerForPhApplication(appID string, group DtoGroup, instanceType DtoInstanceType, grobalDatasets []*DtoDataset, spec corev1.PodSpec) (*Spawner, error) {
 	//var err error
 	spawner := &Spawner{}
 	var primeHubAppRoot string
@@ -180,6 +180,7 @@ func NewSpawnerForPhApplication(appID string, group DtoGroup, instanceType DtoIn
 	if group.EnabledSharedVolume {
 		primeHubAppRoot = "/project/phusers/phapplications/" + appID
 		spawner.applyVolumeForGroup(group.Name, group)
+		spawner.workingDir = primeHubAppRoot
 	} else {
 		primeHubAppRoot = "/phapplications/" + appID
 		spawner.applyVolumeForWorkingDir(primeHubAppRoot, resource.MustParse("5Gi"))
@@ -189,6 +190,11 @@ func NewSpawnerForPhApplication(appID string, group DtoGroup, instanceType DtoIn
 	for _, d := range group.Datasets {
 		spawner.applyDataset(d)
 	}
+	// Apply Global Dataset
+	for _, d := range grobalDatasets {
+		spawner.applyDataset(*d)
+	}
+	spawner.applyVolumeForDatasetDir()
 
 	// Apply Resource
 	spawner.applyResourceForInstanceType(instanceType)
@@ -665,7 +671,7 @@ func (spawner *Spawner) applyVolumeForDatasetDir() {
 
 	spawner.volumes = append(spawner.volumes, volume)
 	spawner.volumeMounts = append(spawner.volumeMounts, volumeMount)
-	spawner.symlinks = append(spawner.symlinks, "ln -sf /datasets .")
+	spawner.symlinks = append(spawner.symlinks, "test -d ./datasets || ln -sf /datasets .")
 
 }
 
