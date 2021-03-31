@@ -14,6 +14,7 @@ type PrimeHubCache struct {
 	GraphqlClient graphql.AbstractGraphqlClient
 	Group         *ccache.Cache
 	InstanceType  *ccache.Cache
+	Datasets      *ccache.Cache
 	TimeZone      *ccache.Cache
 	ExpiredTime   time.Duration
 }
@@ -24,6 +25,7 @@ func NewPrimeHubCache(graphqlClient graphql.AbstractGraphqlClient) *PrimeHubCach
 			GraphqlClient: graphqlClient,
 			Group:         ccache.New(ccache.Configure().MaxSize(1000).ItemsToPrune(100)),
 			InstanceType:  ccache.New(ccache.Configure().MaxSize(1000).ItemsToPrune(100)),
+			Datasets:      ccache.New(ccache.Configure().MaxSize(1000).ItemsToPrune(100)),
 			TimeZone:      ccache.New(ccache.Configure().MaxSize(1).ItemsToPrune(1)),
 			ExpiredTime:   time.Minute,
 		}
@@ -68,6 +70,19 @@ func (r *PrimeHubCache) FetchInstanceType(instanceTypeID string) (*graphql.DtoIn
 		r.InstanceType.Set(cacheKey, instanceTypeInfo, r.ExpiredTime)
 	}
 	return r.InstanceType.Get(cacheKey).Value().(*graphql.DtoInstanceType), nil
+}
+
+func (r *PrimeHubCache) FetchGlobalDatasets() ([]*graphql.DtoDataset, error) {
+	cacheKey := "globalDatasets"
+	cacheItem := r.InstanceType.Get(cacheKey)
+	if cacheItem == nil || cacheItem.Expired() {
+		globalDatasets, err := r.GraphqlClient.FetchGlobalDatasets()
+		if err != nil {
+			return nil, err
+		}
+		r.Datasets.Set(cacheKey, globalDatasets, r.ExpiredTime)
+	}
+	return r.Datasets.Get(cacheKey).Value().([]*graphql.DtoDataset), nil
 }
 
 func (r *PrimeHubCache) FetchTimeZone() (timezone string, err error) {

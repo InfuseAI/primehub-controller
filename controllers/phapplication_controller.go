@@ -68,6 +68,12 @@ func (r *PhApplicationReconciler) generateDeploymentSpec(phApplication *v1alpha1
 		return err
 	}
 
+	// Fetch Global Datasets from graphql
+	globalDatasets, err := r.PrimeHubCache.FetchGlobalDatasets()
+	if err != nil {
+		return err
+	}
+
 	deployment.Name = phApplication.AppName()
 	deployment.Namespace = phApplication.ObjectMeta.Namespace
 	deployment.ObjectMeta.Labels = labels
@@ -79,7 +85,7 @@ func (r *PhApplicationReconciler) generateDeploymentSpec(phApplication *v1alpha1
 	}
 	deployment.Spec.Template.ObjectMeta.Labels = labels
 	deployment.Spec.Template.Spec = *podSpec
-	spawner, err := graphql.NewSpawnerForPhApplication(phApplication.AppID(), *groupInfo, *instanceTypeInfo, *podSpec)
+	spawner, err := graphql.NewSpawnerForPhApplication(phApplication.AppID(), *groupInfo, *instanceTypeInfo, globalDatasets, *podSpec)
 	if err != nil {
 		return err
 	}
