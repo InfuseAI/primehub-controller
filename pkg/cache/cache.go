@@ -72,7 +72,7 @@ func (r *PrimeHubCache) FetchInstanceType(instanceTypeID string) (*graphql.DtoIn
 	return r.InstanceType.Get(cacheKey).Value().(*graphql.DtoInstanceType), nil
 }
 
-func (r *PrimeHubCache) FetchGlobalDatasets() ([]*graphql.DtoDataset, error) {
+func (r *PrimeHubCache) FetchGlobalDatasets() ([]graphql.DtoDataset, error) {
 	cacheKey := "globalDatasets"
 	cacheItem := r.Datasets.Get(cacheKey)
 	if cacheItem == nil || cacheItem.Expired() {
@@ -82,7 +82,7 @@ func (r *PrimeHubCache) FetchGlobalDatasets() ([]*graphql.DtoDataset, error) {
 		}
 		r.Datasets.Set(cacheKey, globalDatasets, r.ExpiredTime)
 	}
-	return r.Datasets.Get(cacheKey).Value().([]*graphql.DtoDataset), nil
+	return r.Datasets.Get(cacheKey).Value().([]graphql.DtoDataset), nil
 }
 
 func (r *PrimeHubCache) FetchTimeZone() (timezone string, err error) {

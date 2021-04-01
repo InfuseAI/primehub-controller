@@ -153,7 +153,7 @@ type AbstractGraphqlClient interface {
 	FetchGroupEnableModelDeployment(string) (bool, error)
 	FetchGroupInfo(string) (*DtoGroup, error)
 	FetchGroupInfoByName(string) (*DtoGroup, error)
-	FetchGlobalDatasets() ([]*DtoDataset, error)
+	FetchGlobalDatasets() ([]DtoDataset, error)
 	FetchInstanceTypeInfo(string) (*DtoInstanceType, error)
 	FetchTimeZone() (string, error)
 	NotifyPhJobEvent(id string, eventType string) (float64, error)
@@ -394,7 +394,7 @@ func (c GraphqlClient) FetchGroupInfoByName(groupName string) (*DtoGroup, error)
 	return &group, nil
 }
 
-func (c GraphqlClient) FetchGlobalDatasets() ([]*DtoDataset, error) {
+func (c GraphqlClient) FetchGlobalDatasets() ([]DtoDataset, error) {
 	query := `
 	query {
 		datasets { 
@@ -420,14 +420,14 @@ func (c GraphqlClient) FetchGlobalDatasets() ([]*DtoDataset, error) {
 		return nil, errors.New("can not find datasets in response")
 	}
 
-	var globalDatasets []*DtoDataset
+	var globalDatasets []DtoDataset
 
 	for _, d := range _datasets {
 		var dataset DtoDataset
 		jsonObj, _ := json.Marshal(d)
 		json.Unmarshal(jsonObj, &dataset)
 		if dataset.Global == true {
-			globalDatasets = append(globalDatasets, &dataset)
+			globalDatasets = append(globalDatasets, dataset)
 		}
 	}
 
