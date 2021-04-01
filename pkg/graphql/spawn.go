@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -449,6 +450,11 @@ func (spawner *Spawner) mergeDataset(slice []DtoDataset, elems ...DtoDataset) []
 	for _, v := range datasets {
 		mergedDatasets = append(mergedDatasets, v)
 	}
+
+	// Sort the datasets list
+	sort.SliceStable(mergedDatasets, func(i, j int) bool {
+		return mergedDatasets[i].Name > mergedDatasets[j].Name
+	})
 	return mergedDatasets
 }
 
