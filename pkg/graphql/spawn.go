@@ -171,7 +171,7 @@ func NewSpawnerForModelDeployment(data DtoData, groupName string, instanceTypeNa
 	return spawner, nil
 }
 
-func NewSpawnerForPhApplication(appID string, group DtoGroup, instanceType DtoInstanceType, grobalDatasets []*DtoDataset, spec corev1.PodSpec) (*Spawner, error) {
+func NewSpawnerForPhApplication(appID string, group DtoGroup, instanceType DtoInstanceType, globalDatasets []DtoDataset, spec corev1.PodSpec) (*Spawner, error) {
 	//var err error
 	spawner := &Spawner{}
 	var primeHubAppRoot string
@@ -187,12 +187,9 @@ func NewSpawnerForPhApplication(appID string, group DtoGroup, instanceType DtoIn
 	}
 
 	// Apply Dataset
-	for _, d := range group.Datasets {
+	datasets := spawner.mergeDataset(group.Datasets, globalDatasets...)
+	for _, d := range datasets {
 		spawner.applyDataset(d)
-	}
-	// Apply Global Dataset
-	for _, d := range grobalDatasets {
-		spawner.applyDataset(*d)
 	}
 	spawner.applyVolumeForDatasetDir()
 
@@ -432,6 +429,27 @@ func (spawner *Spawner) applyDatasets(groups []DtoGroup, launchGroupName string)
 	}
 
 	spawner.applyVolumeForDatasetDir()
+}
+
+func (spawner *Spawner) mergeDataset(slice []DtoDataset, elems ...DtoDataset) []DtoDataset {
+	var mergedDatasets []DtoDataset
+	datasets := map[string]DtoDataset{}
+	tempSlice := append(slice, elems...)
+
+	for _, s := range tempSlice {
+		if _, ok := datasets[s.Name]; ok {
+			if s.Writable == true {
+				datasets[s.Name] = s
+			}
+		} else {
+			datasets[s.Name] = s
+		}
+	}
+
+	for _, v := range datasets {
+		mergedDatasets = append(mergedDatasets, v)
+	}
+	return mergedDatasets
 }
 
 // apply dataset setting to volumes and environment variables

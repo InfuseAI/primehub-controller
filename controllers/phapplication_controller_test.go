@@ -127,7 +127,7 @@ func TestPhApplicationReconciler_Reconcile(t *testing.T) {
 		Images:                          nil,
 		Datasets:                        nil,
 	}, primehubCache.ExpiredTime)
-	primehubCache.Datasets.Set("globalDatasets", []*graphql.DtoDataset{}, primehubCache.ExpiredTime)
+	primehubCache.Datasets.Set("globalDatasets", []graphql.DtoDataset{}, primehubCache.ExpiredTime)
 
 	t.Run("Create PhApplication", func(t *testing.T) {
 		var err error
