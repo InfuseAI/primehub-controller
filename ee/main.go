@@ -151,6 +151,8 @@ func main() {
 		Log:           ctrl.Log.WithName("controllers").WithName("PhApplication"),
 		Scheme:        mgr.GetScheme(),
 		PrimeHubCache: primehubCache,
+		PhfsEnabled:   phfsEnabled,
+		PhfsPVC:       phfsPVC,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PhApplication")
 		os.Exit(1)

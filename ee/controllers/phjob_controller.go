@@ -96,7 +96,7 @@ func (r *PhJobReconciler) buildPod(phJob *primehubv1alpha1.PhJob) (*corev1.Pod, 
 
 	// Build the podTemplate according to data from graphql and phjob group, instanceType, image settings
 	var spawner *graphql.Spawner
-	options := graphql.SpawnerForJobOptions{
+	options := graphql.SpawnerOptions{
 		WorkingDirSize:           r.WorkingDirSize,
 		PhfsEnabled:              r.PhfsEnabled,
 		PhfsPVC:                  r.PhfsPVC,
