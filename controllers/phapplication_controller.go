@@ -26,6 +26,8 @@ type PhApplicationReconciler struct {
 	Log           logr.Logger
 	Scheme        *runtime.Scheme
 	PrimeHubCache *phcache.PrimeHubCache
+	PhfsEnabled   bool
+	PhfsPVC       string
 }
 
 func (r *PhApplicationReconciler) getPhApplicationObject(namespace string, name string, obj runtime.Object) (bool, error) {
@@ -85,7 +87,11 @@ func (r *PhApplicationReconciler) generateDeploymentSpec(phApplication *v1alpha1
 	}
 	deployment.Spec.Template.ObjectMeta.Labels = labels
 	deployment.Spec.Template.Spec = *podSpec
-	spawner, err := graphql.NewSpawnerForPhApplication(phApplication.AppID(), *groupInfo, *instanceTypeInfo, globalDatasets, *podSpec)
+	options := graphql.SpawnerOptions{
+		PhfsEnabled: r.PhfsEnabled,
+		PhfsPVC:     r.PhfsPVC,
+	}
+	spawner, err := graphql.NewSpawnerForPhApplication(phApplication.AppID(), *groupInfo, *instanceTypeInfo, globalDatasets, *podSpec, options)
 	if err != nil {
 		return err
 	}
@@ -386,7 +392,7 @@ func (r *PhApplicationReconciler) diagnosisStatus(deploymentStatus *appv1.Deploy
 				// Failed to pull image
 				phase = v1alpha1.ApplicationError
 				message = fmt.Sprintf("%s: %s", firstContainer.State.Waiting.Reason, firstContainer.State.Waiting.Message)
-			} else if firstContainer.State.Terminated != nil {
+			} else if firstContainer.State.Terminated != nil && firstContainer.State.Terminated.Reason != "" {
 				// Container runtime error
 				phase = v1alpha1.ApplicationError
 				message = fmt.Sprintf("%s: %s", firstContainer.State.Terminated.Reason, firstContainer.State.Terminated.Message)
@@ -495,12 +501,7 @@ func (r *PhApplicationReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 		reconcileError = err
 	}
 
-	err, requeueAfter := r.updatePhApplicationStatus(&phApplication, reconcileError)
-	// Update status
-	if err != nil {
-		log.Info("Update status failed", "error", err)
-	}
-
+	_, requeueAfter := r.updatePhApplicationStatus(&phApplication, reconcileError)
 	return ctrl.Result{RequeueAfter: requeueAfter}, nil
 }
 

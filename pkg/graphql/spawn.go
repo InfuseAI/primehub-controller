@@ -3,6 +3,7 @@ package graphql
 import (
 	"errors"
 	"fmt"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -13,7 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
-type SpawnerForJobOptions struct {
+type SpawnerOptions struct {
 	WorkingDir               string
 	WorkingDirSize           resource.Quantity
 	PhfsEnabled              bool
@@ -72,7 +73,7 @@ type ContainerResource struct {
 }
 
 // Set spanwer by graphql response data
-func NewSpawnerForJob(data DtoData, groupName string, instanceTypeName string, imageName string, options SpawnerForJobOptions) (*Spawner, error) {
+func NewSpawnerForJob(data DtoData, groupName string, instanceTypeName string, imageName string, options SpawnerOptions) (*Spawner, error) {
 	var group DtoGroup
 	var groupGlobal DtoGroup
 	var image DtoImage
@@ -99,10 +100,10 @@ func NewSpawnerForJob(data DtoData, groupName string, instanceTypeName string, i
 
 	// Group volume
 	for _, group := range data.User.Groups {
-		spawner.applyVolumeForGroup(groupName, group)
+		spawner.applyVolumeForGroup(groupName, group, workingDir)
 	}
 	if options.PhfsEnabled {
-		spawner.applyVolumeForPhfs(groupName, options.PhfsPVC)
+		spawner.applyVolumeForPhfs(groupName, options.PhfsPVC, workingDir)
 	}
 
 	// Instance type
@@ -118,10 +119,11 @@ func NewSpawnerForJob(data DtoData, groupName string, instanceTypeName string, i
 	spawner.applyImageForImageSpec(image.Spec, isGpu)
 
 	// Working Dir
-	spawner.applyVolumeForWorkingDir(workingDir, workingDirSize)
+	spawner.applyEmptyDirVolume("workingdir", workingDir, workingDirSize)
+	spawner.workingDir = workingDir
 
 	// Dataset
-	spawner.applyDatasets(data.User.Groups, groupName)
+	spawner.applyDatasets(data.User.Groups, groupName, workingDir)
 
 	// User and Group env variables
 	spawner.applyUserAndGroupEnv(data.User.Username, groupName)
@@ -172,7 +174,7 @@ func NewSpawnerForModelDeployment(data DtoData, groupName string, instanceTypeNa
 	return spawner, nil
 }
 
-func NewSpawnerForPhApplication(appID string, group DtoGroup, instanceType DtoInstanceType, globalDatasets []DtoDataset, spec corev1.PodSpec) (*Spawner, error) {
+func NewSpawnerForPhApplication(appID string, group DtoGroup, instanceType DtoInstanceType, globalDatasets []DtoDataset, spec corev1.PodSpec, options SpawnerOptions) (*Spawner, error) {
 	//var err error
 	spawner := &Spawner{}
 	var primeHubAppRoot string
@@ -180,11 +182,15 @@ func NewSpawnerForPhApplication(appID string, group DtoGroup, instanceType DtoIn
 	// Apply Group volume
 	if group.EnabledSharedVolume {
 		primeHubAppRoot = "/project/phusers/phapplications/" + appID
-		spawner.applyVolumeForGroup(group.Name, group)
-		spawner.workingDir = primeHubAppRoot
+		spawner.applyVolumeForGroup(group.Name, group, "")
 	} else {
 		primeHubAppRoot = "/phapplications/" + appID
-		spawner.applyVolumeForWorkingDir(primeHubAppRoot, resource.MustParse("5Gi"))
+		spawner.applyEmptyDirVolume("primehubAppRoot", primeHubAppRoot, resource.MustParse("5Gi"))
+	}
+
+	// Apply PHFS volume
+	if options.PhfsEnabled == true {
+		spawner.applyVolumeForPhfs(group.Name, options.PhfsPVC, primeHubAppRoot)
 	}
 
 	// Apply Dataset
@@ -192,7 +198,7 @@ func NewSpawnerForPhApplication(appID string, group DtoGroup, instanceType DtoIn
 	for _, d := range datasets {
 		spawner.applyDataset(d)
 	}
-	spawner.applyVolumeForDatasetDir()
+	spawner.applyVolumeForDatasetDir(primeHubAppRoot)
 
 	// Apply Resource
 	spawner.applyResourceForInstanceType(instanceType)
@@ -324,7 +330,7 @@ func findInstanceType(instanceTypes []DtoInstanceType, instanceTypesGlobal []Dto
 // (if homeSymlink is enabled)
 // homeSymlink: ./<group name> -> /projects/<group name>
 //
-func (spawner *Spawner) applyVolumeForGroup(launchGroup string, group DtoGroup) {
+func (spawner *Spawner) applyVolumeForGroup(launchGroup string, group DtoGroup, workingDir string) {
 	if !group.EnabledSharedVolume {
 		return
 	}
@@ -362,12 +368,12 @@ func (spawner *Spawner) applyVolumeForGroup(launchGroup string, group DtoGroup) 
 
 	spawner.volumes = append(spawner.volumes, volume)
 	spawner.volumeMounts = append(spawner.volumeMounts, volumeMount)
-	if homeSymlink {
-		spawner.symlinks = append(spawner.symlinks, fmt.Sprintf("ln -s %s .", mountPath))
+	if homeSymlink && workingDir != "" {
+		spawner.symlinks = append(spawner.symlinks, fmt.Sprintf("ln -s %s %s", mountPath, workingDir))
 	}
 }
 
-func (spawner *Spawner) applyVolumeForPhfs(groupName string, pvcName string) {
+func (spawner *Spawner) applyVolumeForPhfs(groupName string, pvcName string, workingDir string) {
 	groupName = strings.ToLower(strings.ReplaceAll(groupName, "_", "-"))
 
 	if len(pvcName) > 0 {
@@ -388,11 +394,11 @@ func (spawner *Spawner) applyVolumeForPhfs(groupName string, pvcName string) {
 
 		spawner.volumes = append(spawner.volumes, volume)
 		spawner.volumeMounts = append(spawner.volumeMounts, volumeMount)
-		spawner.symlinks = append(spawner.symlinks, fmt.Sprintf("ln -s %s .", "/phfs"))
+		spawner.symlinks = append(spawner.symlinks, fmt.Sprintf("ln -s %s %s", "/phfs", workingDir))
 	}
 }
 
-func (spawner *Spawner) applyDatasets(groups []DtoGroup, launchGroupName string) {
+func (spawner *Spawner) applyDatasets(groups []DtoGroup, launchGroupName string, workingDir string) {
 
 	launchGroupDataset := make(map[string]DtoDataset)
 	globalDataset := make(map[string]DtoDataset)
@@ -400,7 +406,7 @@ func (spawner *Spawner) applyDatasets(groups []DtoGroup, launchGroupName string)
 
 	for _, group := range groups {
 		for _, dataset := range group.Datasets {
-			if group.Name == launchGroupName { // collect lauch group dataset
+			if group.Name == launchGroupName { // collect launch group dataset
 				launchGroupDataset[dataset.Name] = dataset
 			}
 			if group.Name == "everyone" { // collect global dataset
@@ -429,7 +435,7 @@ func (spawner *Spawner) applyDatasets(groups []DtoGroup, launchGroupName string)
 		}
 	}
 
-	spawner.applyVolumeForDatasetDir()
+	spawner.applyVolumeForDatasetDir(workingDir)
 }
 
 func (spawner *Spawner) mergeDataset(slice []DtoDataset, elems ...DtoDataset) []DtoDataset {
@@ -675,38 +681,22 @@ func transformEnvKey(prefix string, key string) (string, bool) {
 	return envKey, true
 }
 
-func (spawner *Spawner) applyVolumeForDatasetDir() {
+func (spawner *Spawner) applyVolumeForDatasetDir(workingDir string) {
 	sizeLimit, _ := resource.ParseQuantity("1M")
 
 	name := "datasets"
-	path := "/datasets"
+	mountPath := "/datasets"
+	symlinkPath := path.Join(workingDir, name)
 
-	volume := corev1.Volume{
-		Name: name,
-		VolumeSource: corev1.VolumeSource{
-			EmptyDir: &corev1.EmptyDirVolumeSource{SizeLimit: &sizeLimit},
-		},
-	}
-
-	volumeMount := corev1.VolumeMount{
-		MountPath: path,
-		Name:      name,
-	}
-
-	spawner.volumes = append(spawner.volumes, volume)
-	spawner.volumeMounts = append(spawner.volumeMounts, volumeMount)
-	spawner.symlinks = append(spawner.symlinks, "test -d ./datasets || ln -sf /datasets .")
-
+	spawner.applyEmptyDirVolume(name, mountPath, sizeLimit)
+	spawner.symlinks = append(spawner.symlinks, fmt.Sprintf("test -d %s || ln -sf %s %s", symlinkPath, mountPath, workingDir))
 }
 
-func (spawner *Spawner) applyVolumeForWorkingDir(workingDirPath string, workingDirSize resource.Quantity) {
-	name := "workingdir"
-	path := workingDirPath
-
+func (spawner *Spawner) applyEmptyDirVolume(name string, path string, size resource.Quantity) {
 	volume := corev1.Volume{
 		Name: name,
 		VolumeSource: corev1.VolumeSource{
-			EmptyDir: &corev1.EmptyDirVolumeSource{SizeLimit: &workingDirSize},
+			EmptyDir: &corev1.EmptyDirVolumeSource{SizeLimit: &size},
 		},
 	}
 
@@ -717,7 +707,6 @@ func (spawner *Spawner) applyVolumeForWorkingDir(workingDirPath string, workingD
 
 	spawner.volumes = append(spawner.volumes, volume)
 	spawner.volumeMounts = append(spawner.volumeMounts, volumeMount)
-	spawner.workingDir = path
 }
 
 func (spawner *Spawner) applyResourceForInstanceType(instanceType DtoInstanceType) bool {

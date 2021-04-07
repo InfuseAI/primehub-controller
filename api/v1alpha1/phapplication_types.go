@@ -125,7 +125,7 @@ func (in *PhApplication) ProxyNetworkPolicyIngressRule() []networkv1.NetworkPoli
 			From: []networkv1.NetworkPolicyPeer{
 				{
 					PodSelector: &metav1.LabelSelector{
-						MatchLabels: map[string]string{"primehub.io/phapplication": in.AppName()},
+						MatchLabels: map[string]string{"app.kubernetes.io/name": "primehub-console"},
 					},
 				},
 			},

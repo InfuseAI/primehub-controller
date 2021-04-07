@@ -37,7 +37,7 @@ func TestSpawnForJob(t *testing.T) {
 			var spawner *Spawner
 			var err error
 
-			options := SpawnerForJobOptions{}
+			options := SpawnerOptions{}
 			spawner, err = NewSpawnerForJob(result.Data, test.group, test.instanceType, test.image, options)
 			if test.success {
 				assert.Nil(t, err, "NewSpawnerForJob")
@@ -115,7 +115,7 @@ func TestGroupVolume(t *testing.T) {
 	for _, test := range testsPvc {
 		t.Run(test.name, func(t *testing.T) {
 			spawner := Spawner{}
-			spawner.applyVolumeForGroup(test.launchGroup, test.group)
+			spawner.applyVolumeForGroup(test.launchGroup, test.group, "/")
 
 			volume, volumeMount := findVolume(&spawner, test.volumeName)
 
@@ -208,7 +208,7 @@ func TestDatasetMountedandPermission(t *testing.T) {
 
 	t.Run("group1", func(t *testing.T) {
 		spawner := Spawner{}
-		spawner.applyDatasets(groups, "group1")
+		spawner.applyDatasets(groups, "group1", "/")
 
 		assert.True(t, checkDatasetPermission(&spawner, "d1", true))
 		assert.True(t, checkDatasetPermission(&spawner, "d2", true))
@@ -219,7 +219,7 @@ func TestDatasetMountedandPermission(t *testing.T) {
 
 	t.Run("group2", func(t *testing.T) {
 		spawner := Spawner{}
-		spawner.applyDatasets(groups, "group2")
+		spawner.applyDatasets(groups, "group2", "/")
 
 		assert.True(t, checkDatasetPermission(&spawner, "d1", false))
 		assert.True(t, checkDatasetPermission(&spawner, "d2", false))
@@ -230,7 +230,7 @@ func TestDatasetMountedandPermission(t *testing.T) {
 
 	t.Run("group3", func(t *testing.T) {
 		spawner := Spawner{}
-		spawner.applyDatasets(groups, "group3")
+		spawner.applyDatasets(groups, "group3", "/")
 
 		//should not be mounted, global: false
 		assert.True(t, !checkDatasetMounted(&spawner, "d1"))
@@ -246,7 +246,7 @@ func TestDatasetMountedandPermission(t *testing.T) {
 
 	t.Run("everyone", func(t *testing.T) {
 		spawner := Spawner{}
-		spawner.applyDatasets(groups, "everyone")
+		spawner.applyDatasets(groups, "everyone", "/")
 
 		//should not be mounted, global: fals
 		assert.True(t, !checkDatasetMounted(&spawner, "d1"))
