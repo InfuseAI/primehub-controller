@@ -181,7 +181,7 @@ func NewSpawnerForPhApplication(appID string, group DtoGroup, instanceType DtoIn
 
 	// Apply Group volume
 	if group.EnabledSharedVolume {
-		primeHubAppRoot = "/project/" + group.Name + "/phapplications/" + appID
+		primeHubAppRoot = "/project/" + strings.ToLower(strings.ReplaceAll(group.Name, "_", "-")) + "/phapplications/" + appID
 		spawner.applyVolumeForGroup(group.Name, group, "")
 	} else {
 		primeHubAppRoot = "/phapplications/" + appID
