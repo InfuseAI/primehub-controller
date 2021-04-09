@@ -45,8 +45,6 @@ type Spawner struct {
 	symlinks        []string // main container: symbolic links commands
 	image           string   // main container: image
 	imagePullSecret string   // main container: imagePullSecret
-	command         []string // main container: command
-	args            []string // main container: args
 
 	PodSecurityContext corev1.PodSecurityContext
 	NodeSelector       map[string]string
@@ -60,7 +58,8 @@ type Spawner struct {
 	limitsMemory   resource.Quantity
 	requestsGpu    resource.Quantity
 	limitsGpu      resource.Quantity
-	containerName  string // main container: name
+	container      corev1.Container // main container
+	initContainer  corev1.Container // init container
 }
 
 type ContainerResource struct {
@@ -71,6 +70,14 @@ type ContainerResource struct {
 	RequestsGpu    resource.Quantity
 	LimitsGpu      resource.Quantity
 }
+
+type ContainerResourceType string
+
+const (
+	RESOURCE_CPU ContainerResourceType = "cpu"
+	RESOURCE_MEM ContainerResourceType = "memory"
+	RESOURCE_GPU ContainerResourceType = "nvidia.com/gpu"
+)
 
 // Set spanwer by graphql response data
 func NewSpawnerForJob(data DtoData, groupName string, instanceTypeName string, imageName string, options SpawnerOptions) (*Spawner, error) {
@@ -139,7 +146,7 @@ func NewSpawnerForJob(data DtoData, groupName string, instanceTypeName string, i
 	// Apply grant sudo
 	spawner.applyGrantSudo(options.GrantSudo)
 
-	spawner.containerName = "main"
+	spawner.container.Name = "main"
 
 	return spawner, nil
 }
@@ -169,7 +176,7 @@ func NewSpawnerForModelDeployment(data DtoData, groupName string, instanceTypeNa
 	spawner.applyResourceForInstanceType(instanceType)
 	spawner.image = imageUrl
 
-	spawner.containerName = "model"
+	spawner.container.Name = "model"
 
 	return spawner, nil
 }
@@ -209,15 +216,23 @@ func NewSpawnerForPhApplication(appID string, group DtoGroup, instanceType DtoIn
 	// Apply Toleration
 	spawner.ApplyTolerationsForOperator(instanceType.Spec.Tolerations)
 
-	// Apply Container
 	container := spec.Containers[0] // According the spec, we only keep the first container
-	spawner.containerName = container.Name
+	// Apply Container
 	spawner.image = container.Image
-	spawner.command = append([]string{"/scripts/run-app"}, container.Command...)
-	spawner.args = container.Args
+	spawner.container.Name = container.Name
+	spawner.container.Command = container.Command
+	spawner.container.Args = container.Args
 
-	// Mount `scripts`
-	spawner.applyScripts("primehub-controller-phapplication-scripts")
+	// Apply InitContainer
+	spawner.initContainer.Name = "init-" + appID
+	spawner.initContainer.Image = container.Image
+	root := int64(0)
+	spawner.initContainer.Command = []string{"sh", "-c"}
+	spawner.initContainer.Args = []string{"mkdir -p ${PRIMEHUB_APP_ROOT}; chmod 777 ${PRIMEHUB_APP_ROOT};"}
+	spawner.initContainer.SecurityContext = &corev1.SecurityContext{
+		RunAsUser:  &root,
+		RunAsGroup: &root,
+	}
 
 	// Prepend Env
 	spawner.prependEnv = append(spawner.env, []corev1.EnvVar{
@@ -260,7 +275,7 @@ func (spawner *Spawner) ApplyAffinityForOperator(affinity corev1.Affinity) *Spaw
 }
 
 func (spawner *Spawner) WithCommand(command []string) *Spawner {
-	spawner.command = command
+	spawner.container.Command = command
 	return spawner
 }
 
@@ -531,12 +546,12 @@ func (spawner *Spawner) applyVolumeForPvDataset(
 	matchedHostpath, err := regexp.MatchString(`^hostpath:`, dataset.Spec.VolumeName)
 	if err == nil && matchedHostpath {
 		re := regexp.MustCompile(`^hostpath:`)
-		path := re.ReplaceAllString(dataset.Spec.VolumeName, "")
+		hostPath := re.ReplaceAllString(dataset.Spec.VolumeName, "")
 		volume = corev1.Volume{
 			Name: logicName,
 			VolumeSource: corev1.VolumeSource{
 				HostPath: &corev1.HostPathVolumeSource{
-					Path: path,
+					Path: hostPath,
 				},
 			},
 		}
@@ -854,26 +869,54 @@ func (spawner *Spawner) applyGrantSudo(grantSudo bool) {
 	spawner.PodSecurityContext = securityContext
 }
 
-func (spawner *Spawner) PatchPodSpec(podSpec *corev1.PodSpec) {
-	var container corev1.Container
-	if len(podSpec.Containers) == 0 {
-		spawner.BuildPodSpec(podSpec)
-		return
+func (spawner *Spawner) configContainerResource(container *corev1.Container, resourceType ContainerResourceType) {
+	switch resourceType {
+	case "cpu":
+		if !spawner.requestsCpu.IsZero() {
+			container.Resources.Requests["cpu"] = spawner.requestsCpu
+		}
+		if !spawner.limitsCpu.IsZero() {
+			container.Resources.Limits["cpu"] = spawner.limitsCpu
+		}
+	case "memory":
+		if !spawner.requestsMemory.IsZero() {
+			container.Resources.Requests["memory"] = spawner.requestsMemory
+		}
+		if !spawner.limitsMemory.IsZero() {
+			container.Resources.Limits["memory"] = spawner.limitsMemory
+		}
+	case "nvidia.com/gpu":
+		if !spawner.requestsGpu.IsZero() {
+			container.Resources.Requests["nvidia.com/gpu"] = spawner.requestsGpu
+		}
+		if !spawner.limitsGpu.IsZero() {
+			container.Resources.Requests["nvidia.com/gpu"] = spawner.limitsGpu
+		}
 	}
+}
 
-	container = podSpec.Containers[0]
+func (spawner *Spawner) buildInitContainer(inherit *corev1.Container) corev1.Container {
+	var container *corev1.Container
+	if inherit != nil {
+		container = inherit
+	} else {
+		container = &spawner.initContainer
+	}
 	container.TerminationMessagePolicy = corev1.TerminationMessageFallbackToLogsOnError
 	container.ImagePullPolicy = corev1.PullIfNotPresent
 	container.VolumeMounts = append(container.VolumeMounts, spawner.volumeMounts...)
 
-	if spawner.containerName != "" {
-		container.Name = spawner.containerName
+	if spawner.initContainer.Name != "" {
+		container.Name = spawner.initContainer.Name
 	}
 	if spawner.image != "" {
 		container.Image = spawner.image
 	}
-	if len(spawner.command) > 0 {
-		container.Command = spawner.command
+	if len(spawner.initContainer.Command) > 0 {
+		container.Command = spawner.initContainer.Command
+	}
+	if len(spawner.initContainer.Args) > 0 {
+		container.Args = spawner.initContainer.Args
 	}
 	if spawner.workingDir != "" {
 		container.WorkingDir = spawner.workingDir
@@ -888,29 +931,48 @@ func (spawner *Spawner) PatchPodSpec(podSpec *corev1.PodSpec) {
 	// Resource Limit
 	container.Resources.Requests = map[corev1.ResourceName]resource.Quantity{}
 	container.Resources.Limits = map[corev1.ResourceName]resource.Quantity{}
-	if !spawner.requestsCpu.IsZero() {
-		container.Resources.Requests["cpu"] = spawner.requestsCpu
+	spawner.configContainerResource(container, RESOURCE_CPU)
+	spawner.configContainerResource(container, RESOURCE_MEM)
+
+	return *container
+}
+
+func (spawner *Spawner) buildContainer(inherit *corev1.Container) corev1.Container {
+	var container *corev1.Container
+	if inherit != nil {
+		container = inherit
+	} else {
+		container = &spawner.container
+	}
+	container.TerminationMessagePolicy = corev1.TerminationMessageFallbackToLogsOnError
+	container.ImagePullPolicy = corev1.PullIfNotPresent
+	container.VolumeMounts = append(container.VolumeMounts, spawner.volumeMounts...)
+
+	if spawner.container.Name != "" {
+		container.Name = spawner.container.Name
+	}
+	if spawner.image != "" {
+		container.Image = spawner.image
+	}
+	if len(spawner.container.Command) > 0 {
+		container.Command = spawner.container.Command
+	}
+	if spawner.workingDir != "" {
+		container.WorkingDir = spawner.workingDir
+	}
+	if len(spawner.env) > 0 {
+		container.Env = append(container.Env, spawner.env...)
+	}
+	if len(spawner.prependEnv) > 0 {
+		container.Env = append(spawner.prependEnv, container.Env...)
 	}
 
-	if !spawner.requestsMemory.IsZero() {
-		container.Resources.Requests["memory"] = spawner.requestsMemory
-	}
-
-	if !spawner.requestsGpu.IsZero() {
-		container.Resources.Requests["nvidia.com/gpu"] = spawner.requestsGpu
-	}
-
-	if !spawner.limitsCpu.IsZero() {
-		container.Resources.Limits["cpu"] = spawner.limitsCpu
-	}
-
-	if !spawner.limitsMemory.IsZero() {
-		container.Resources.Limits["memory"] = spawner.limitsMemory
-	}
-
-	if !spawner.limitsGpu.IsZero() {
-		container.Resources.Limits["nvidia.com/gpu"] = spawner.limitsGpu
-	}
+	// Resource Limit
+	container.Resources.Requests = map[corev1.ResourceName]resource.Quantity{}
+	container.Resources.Limits = map[corev1.ResourceName]resource.Quantity{}
+	spawner.configContainerResource(container, RESOURCE_CPU)
+	spawner.configContainerResource(container, RESOURCE_MEM)
+	spawner.configContainerResource(container, RESOURCE_GPU)
 
 	if spawner.symlinks != nil {
 		container.Lifecycle = &corev1.Lifecycle{
@@ -926,8 +988,23 @@ func (spawner *Spawner) PatchPodSpec(podSpec *corev1.PodSpec) {
 		}
 	}
 
+	return *container
+}
+
+func (spawner *Spawner) PatchPodSpec(podSpec *corev1.PodSpec) {
+	var container corev1.Container
+	if len(podSpec.Containers) == 0 {
+		spawner.BuildPodSpec(podSpec)
+		return
+	}
+
+	// container
+	container = spawner.buildContainer(&podSpec.Containers[0])
+	initContainer := spawner.buildInitContainer(nil)
+
 	// Pod
 	podSpec.Containers = []corev1.Container{container}
+	podSpec.InitContainers = []corev1.Container{initContainer}
 	podSpec.Volumes = append(podSpec.Volumes, spawner.volumes...)
 	if spawner.imagePullSecret != "" {
 		podSpec.ImagePullSecrets = append(podSpec.ImagePullSecrets, corev1.LocalObjectReference{
@@ -951,55 +1028,7 @@ func (spawner *Spawner) PatchPodSpec(podSpec *corev1.PodSpec) {
 
 func (spawner *Spawner) BuildPodSpec(podSpec *corev1.PodSpec) {
 	// container
-	container := corev1.Container{}
-	container.Name = spawner.containerName
-	container.Image = spawner.image
-	container.Command = spawner.command
-	container.WorkingDir = spawner.workingDir
-	container.VolumeMounts = append(container.VolumeMounts, spawner.volumeMounts...)
-	container.Env = append(container.Env, spawner.env...)
-	container.Resources.Requests = map[corev1.ResourceName]resource.Quantity{}
-	container.Resources.Limits = map[corev1.ResourceName]resource.Quantity{}
-	container.TerminationMessagePolicy = corev1.TerminationMessageFallbackToLogsOnError
-	container.ImagePullPolicy = corev1.PullIfNotPresent
-
-	if !spawner.requestsCpu.IsZero() {
-		container.Resources.Requests["cpu"] = spawner.requestsCpu
-	}
-
-	if !spawner.requestsMemory.IsZero() {
-		container.Resources.Requests["memory"] = spawner.requestsMemory
-	}
-
-	if !spawner.requestsGpu.IsZero() {
-		container.Resources.Requests["nvidia.com/gpu"] = spawner.requestsGpu
-	}
-
-	if !spawner.limitsCpu.IsZero() {
-		container.Resources.Limits["cpu"] = spawner.limitsCpu
-	}
-
-	if !spawner.limitsMemory.IsZero() {
-		container.Resources.Limits["memory"] = spawner.limitsMemory
-	}
-
-	if !spawner.limitsGpu.IsZero() {
-		container.Resources.Limits["nvidia.com/gpu"] = spawner.limitsGpu
-	}
-
-	if spawner.symlinks != nil {
-		container.Lifecycle = &corev1.Lifecycle{
-			PostStart: &corev1.Handler{
-				Exec: &corev1.ExecAction{
-					Command: []string{
-						"sh",
-						"-c",
-						strings.Join(spawner.symlinks, ";"),
-					},
-				},
-			},
-		}
-	}
+	container := spawner.buildContainer(nil)
 
 	// pod
 	podSpec.Volumes = append(podSpec.Volumes, spawner.volumes...)
