@@ -871,21 +871,21 @@ func (spawner *Spawner) applyGrantSudo(grantSudo bool) {
 
 func (spawner *Spawner) configContainerResource(container *corev1.Container, resourceType ContainerResourceType) {
 	switch resourceType {
-	case "cpu":
+	case RESOURCE_CPU:
 		if !spawner.requestsCpu.IsZero() {
 			container.Resources.Requests["cpu"] = spawner.requestsCpu
 		}
 		if !spawner.limitsCpu.IsZero() {
 			container.Resources.Limits["cpu"] = spawner.limitsCpu
 		}
-	case "memory":
+	case RESOURCE_MEM:
 		if !spawner.requestsMemory.IsZero() {
 			container.Resources.Requests["memory"] = spawner.requestsMemory
 		}
 		if !spawner.limitsMemory.IsZero() {
 			container.Resources.Limits["memory"] = spawner.limitsMemory
 		}
-	case "nvidia.com/gpu":
+	case RESOURCE_GPU:
 		if !spawner.requestsGpu.IsZero() {
 			container.Resources.Requests["nvidia.com/gpu"] = spawner.requestsGpu
 		}
