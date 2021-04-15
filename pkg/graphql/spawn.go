@@ -192,7 +192,7 @@ func NewSpawnerForPhApplication(appID string, group DtoGroup, instanceType DtoIn
 		spawner.applyVolumeForGroup(group.Name, group, "")
 	} else {
 		primeHubAppRoot = "/phapplications/" + appID
-		spawner.applyEmptyDirVolume("primehubAppRoot", primeHubAppRoot, resource.MustParse("5Gi"))
+		spawner.applyEmptyDirVolume("primehub-app-root", primeHubAppRoot, resource.MustParse("5Gi"))
 	}
 
 	// Apply PHFS volume
