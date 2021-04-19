@@ -70,6 +70,15 @@ type DtoGroup struct {
 	InstanceTypes []DtoInstanceType
 	Images        []DtoImage
 	Datasets      []DtoDataset
+
+	Mlflow *DtoMlflow
+}
+
+type DtoMlflow struct {
+	TrackingUri  string
+	UiUrl        string
+	TrackingEnvs []corev1.EnvVar
+	ArtifactEnvs []corev1.EnvVar
 }
 
 type DtoInstanceType struct {
@@ -189,6 +198,7 @@ func (c GraphqlClient) FetchByUserId(userId string) (*DtoResult, error) {
 					instanceTypes { name displayName description spec global }
 					images { name displayName description spec global }
 					datasets { name displayName description spec global writable mountRoot homeSymlink launchGroupOnly }
+					mlflow { trackingUri uiUrl trackingEnvs { name value } artifactEnvs { name value } }
 			}
 		}
 	}
