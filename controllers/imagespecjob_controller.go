@@ -5,6 +5,7 @@ import (
 	"context"
 	"primehub-controller/api/v1alpha1"
 	"primehub-controller/pkg/random"
+	"regexp"
 	"text/template"
 
 	"github.com/go-logr/logr"
@@ -136,7 +137,30 @@ func (r *ImageSpecJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
+func filterIllegalPackages(packages v1alpha1.ImageSpecSpecPackages) v1alpha1.ImageSpecSpecPackages {
+	re := regexp.MustCompile(`^[a-zA-Z0-9-_:=\.]+$`)
+	legalPackages := v1alpha1.ImageSpecSpecPackages{}
+	for _, s := range packages.Apt {
+		if re.MatchString(s) {
+			legalPackages.Apt = append(legalPackages.Apt, s)
+		}
+	}
+	for _, s := range packages.Conda {
+		if re.MatchString(s) {
+			legalPackages.Conda = append(legalPackages.Conda, s)
+		}
+	}
+	for _, s := range packages.Pip {
+		if re.MatchString(s) {
+			legalPackages.Pip = append(legalPackages.Pip, s)
+		}
+	}
+	return legalPackages
+}
+
 func generateDockerfile(imageSpecJob v1alpha1.ImageSpecJob) string {
+	spec := imageSpecJob.Spec.DeepCopy()
+	spec.Packages = filterIllegalPackages(spec.Packages)
 	dockerfileTmpl := `FROM {{ .BaseImage }}
 
 USER root
@@ -168,7 +192,7 @@ RUN pip install --no-cache-dir
 
 	var res bytes.Buffer
 	tmpl, _ := template.New("dockerfile").Parse(dockerfileTmpl)
-	_ = tmpl.Execute(&res, imageSpecJob.Spec)
+	_ = tmpl.Execute(&res, spec)
 
 	return res.String()
 }
