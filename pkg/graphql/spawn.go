@@ -235,7 +235,7 @@ func NewSpawnerForPhApplication(appID string, group DtoGroup, instanceType DtoIn
 	}
 
 	// Prepend Env
-	spawner.prependEnv = append(spawner.env, []corev1.EnvVar{
+	spawner.prependEnv = []corev1.EnvVar{
 		{
 			Name:  "PRIMEHUB_APP_ID",
 			Value: appID,
@@ -247,7 +247,7 @@ func NewSpawnerForPhApplication(appID string, group DtoGroup, instanceType DtoIn
 		{
 			Name:  "PRIMEHUB_APP_BASE_URL",
 			Value: "/console/apps/" + appID,
-		}}...)
+		}}
 
 	return spawner, nil
 }
@@ -677,10 +677,13 @@ func (spawner *Spawner) applyVolumeForEnvDataset(dataset DtoDataset) {
 				Value: value,
 			})
 			// Actually, hyphen is not supported in bash
-			spawner.env = append(spawner.env, corev1.EnvVar{
-				Name:  strings.ReplaceAll(envKey, "-", "_"),
-				Value: value,
-			})
+			patchedKey := strings.ReplaceAll(envKey, "-", "_")
+			if patchedKey != envKey {
+				spawner.env = append(spawner.env, corev1.EnvVar{
+					Name:  patchedKey,
+					Value: value,
+				})
+			}
 		}
 	}
 }
@@ -925,7 +928,9 @@ func (spawner *Spawner) buildInitContainer(inherit *corev1.Container) corev1.Con
 		container.Env = append(container.Env, spawner.env...)
 	}
 	if len(spawner.prependEnv) > 0 {
-		container.Env = append(spawner.prependEnv, container.Env...)
+		var prependEnv []corev1.EnvVar
+		prependEnv = append(prependEnv, spawner.prependEnv...)
+		container.Env = append(prependEnv, container.Env...)
 	}
 
 	// Resource Limit
@@ -964,7 +969,9 @@ func (spawner *Spawner) buildContainer(inherit *corev1.Container) corev1.Contain
 		container.Env = append(container.Env, spawner.env...)
 	}
 	if len(spawner.prependEnv) > 0 {
-		container.Env = append(spawner.prependEnv, container.Env...)
+		var prependEnv []corev1.EnvVar
+		prependEnv = append(prependEnv, spawner.prependEnv...)
+		container.Env = append(prependEnv, container.Env...)
 	}
 
 	// Resource Limit
@@ -1001,7 +1008,6 @@ func (spawner *Spawner) PatchPodSpec(podSpec *corev1.PodSpec) {
 	// container
 	container = spawner.buildContainer(&podSpec.Containers[0])
 	initContainer := spawner.buildInitContainer(nil)
-
 	// Pod
 	podSpec.Containers = []corev1.Container{container}
 	podSpec.InitContainers = []corev1.Container{initContainer}
