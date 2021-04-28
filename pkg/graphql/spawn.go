@@ -668,7 +668,7 @@ func (spawner *Spawner) applyVolumeForNfsDataset(
 func (spawner *Spawner) applyVolumeForEnvDataset(dataset DtoDataset) {
 	// The Map of Golang is implemented by hashmap, it doesn't guarantee the order of fetching keys
 	keys := make([]string, 0, len(dataset.Spec.Variables))
-	for _, k := range dataset.Spec.Variables {
+	for k := range dataset.Spec.Variables {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
