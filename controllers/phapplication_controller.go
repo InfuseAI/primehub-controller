@@ -29,6 +29,7 @@ type PhApplicationReconciler struct {
 	PrimeHubCache *phcache.PrimeHubCache
 	PhfsEnabled   bool
 	PhfsPVC       string
+	PrimehubUrl   string
 }
 
 func (r *PhApplicationReconciler) getPhApplicationObject(namespace string, name string, obj runtime.Object) (bool, error) {
@@ -92,7 +93,7 @@ func (r *PhApplicationReconciler) generateDeploymentSpec(phApplication *v1alpha1
 		PhfsEnabled: r.PhfsEnabled,
 		PhfsPVC:     r.PhfsPVC,
 	}
-	spawner, err := graphql.NewSpawnerForPhApplication(phApplication.AppID(), *groupInfo, *instanceTypeInfo, globalDatasets, *podSpec, options)
+	spawner, err := graphql.NewSpawnerForPhApplication(phApplication.AppID(), r.PrimehubUrl, *groupInfo, *instanceTypeInfo, globalDatasets, *podSpec, options)
 	if err != nil {
 		return err
 	}

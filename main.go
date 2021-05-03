@@ -106,6 +106,7 @@ func main() {
 		PrimeHubCache: primehubCache,
 		PhfsEnabled:   phfsEnabled,
 		PhfsPVC:       phfsPVC,
+		PrimehubUrl:   viper.GetString("application.primehubUrl"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PhApplication")
 		os.Exit(1)
