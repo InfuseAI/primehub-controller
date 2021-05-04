@@ -106,7 +106,7 @@ func main() {
 		PrimeHubCache: primehubCache,
 		PhfsEnabled:   phfsEnabled,
 		PhfsPVC:       phfsPVC,
-		PrimeHubURL:   viper.GetString("application.primehubUrl"),
+		PrimeHubURL:   viper.GetString("primehubUrl"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PhApplication")
 		os.Exit(1)
@@ -151,6 +151,7 @@ func loadConfig() {
 	}
 
 	configs := []string{
+		"primehubUrl",
 		"graphqlEndpoint",
 		"graphqlSecret",
 		"customImage.pushSecretName",

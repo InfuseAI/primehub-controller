@@ -1,4 +1,4 @@
-
+primehubUrl: https://primehub.local
 graphqlEndpoint: https://primehub.local/api/graphql
 graphqlSecret: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
