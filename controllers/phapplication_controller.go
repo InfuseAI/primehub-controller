@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -97,8 +98,20 @@ func (r *PhApplicationReconciler) generateDeploymentSpec(phApplication *v1alpha1
 	}
 
 	spawner.PatchPodSpec(&deployment.Spec.Template.Spec)
-
+	if deployment.Spec.Template.ObjectMeta.Annotations == nil {
+		deployment.Spec.Template.ObjectMeta.Annotations = make(map[string]string)
+	}
+	deployment.Spec.Template.ObjectMeta.Annotations["primehub.io/usage"] = r.buildUsageAnnotation(phApplication)
 	return nil
+}
+
+func (r *PhApplicationReconciler) buildUsageAnnotation(phApplication *v1alpha1.PhApplication) string {
+	usageAnnotations, _ := json.Marshal(map[string]string{
+		"component":      "app",
+		"component_name": phApplication.Name,
+		"instance_type":  phApplication.Spec.InstanceType,
+		"group":          phApplication.Spec.GroupName})
+	return string(usageAnnotations)
 }
 
 func (r *PhApplicationReconciler) createDeployment(phApplication *v1alpha1.PhApplication, deployment *appv1.Deployment) error {
