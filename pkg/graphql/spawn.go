@@ -181,7 +181,7 @@ func NewSpawnerForModelDeployment(data DtoData, groupName string, instanceTypeNa
 	return spawner, nil
 }
 
-func NewSpawnerForPhApplication(appID string, group DtoGroup, instanceType DtoInstanceType, globalDatasets []DtoDataset, spec corev1.PodSpec, options SpawnerOptions) (*Spawner, error) {
+func NewSpawnerForPhApplication(appID string, primehubUrl string, group DtoGroup, instanceType DtoInstanceType, globalDatasets []DtoDataset, spec corev1.PodSpec, options SpawnerOptions) (*Spawner, error) {
 	//var err error
 	spawner := &Spawner{}
 	var primeHubAppRoot string
@@ -247,8 +247,15 @@ func NewSpawnerForPhApplication(appID string, group DtoGroup, instanceType DtoIn
 		{
 			Name:  "PRIMEHUB_APP_BASE_URL",
 			Value: "/console/apps/" + appID,
+		},
+		{
+			Name:  "PRIMEHUB_URL",
+			Value: primehubUrl,
+		},
+		{
+			Name:  "PRIMEHUB_GROUP",
+			Value: group.Name,
 		}}
-
 	return spawner, nil
 }
 

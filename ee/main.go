@@ -153,6 +153,7 @@ func main() {
 		PrimeHubCache: primehubCache,
 		PhfsEnabled:   phfsEnabled,
 		PhfsPVC:       phfsPVC,
+		PrimeHubURL:   viper.GetString("primehubUrl"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PhApplication")
 		os.Exit(1)
@@ -207,7 +208,6 @@ func main() {
 
 	modelDeployment := viper.GetBool("modelDeployment.enabled")
 	ingress := eecontrollers.PhIngress{}
-	primehubUrl := viper.GetString("modelDeployment.primehubUrl")
 	if modelDeployment {
 		// get the ingress from the config which is from the helm value.
 
@@ -220,9 +220,6 @@ func main() {
 		}
 		if ingress.Annotations == nil {
 			ingress.Annotations = make(map[string]string)
-		}
-		if primehubUrl == "" {
-			panic(fmt.Errorf("should provide primehubUrl in config.yaml if enable model deployment"))
 		}
 
 		var engineContainerImage string
@@ -257,7 +254,7 @@ func main() {
 			Scheme:                            mgr.GetScheme(),
 			GraphqlClient:                     graphqlClient,
 			Ingress:                           ingress,
-			PrimehubUrl:                       primehubUrl,
+			PrimehubUrl:                       viper.GetString("primehubUrl"),
 			EngineImage:                       engineContainerImage,
 			EngineImagePullPolicy:             engineContainerPullPolicy,
 			ModelStorageInitializerImage:      modelStorageInitializerImage,
@@ -314,6 +311,7 @@ func loadConfig() {
 	}
 
 	configs := []string{
+		"primehubUrl",
 		"graphqlEndpoint",
 		"graphqlSecret",
 		"customImage.pushSecretName",
