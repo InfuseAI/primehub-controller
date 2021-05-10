@@ -37,17 +37,19 @@ import (
 // PhDeploymentReconciler reconciles a PhDeployment object
 type PhDeploymentReconciler struct {
 	client.Client
-	Log                               logr.Logger
-	Scheme                            *runtime.Scheme
-	GraphqlClient                     graphql.AbstractGraphqlClient
-	Ingress                           PhIngress
-	PrimehubUrl                       string
-	EngineImage                       string
-	EngineImagePullPolicy             corev1.PullPolicy
-	ModelStorageInitializerImage      string
-	ModelStorageInitializerPullPolicy corev1.PullPolicy
-	PhfsEnabled                       bool
-	PhfsPVC                           string
+	Log                                     logr.Logger
+	Scheme                                  *runtime.Scheme
+	GraphqlClient                           graphql.AbstractGraphqlClient
+	Ingress                                 PhIngress
+	PrimehubUrl                             string
+	EngineImage                             string
+	EngineImagePullPolicy                   corev1.PullPolicy
+	ModelStorageInitializerImage            string
+	ModelStorageInitializerPullPolicy       corev1.PullPolicy
+	MlflowModelStorageInitializerImage      string
+	MlflowModelStorageInitializerPullPolicy corev1.PullPolicy
+	PhfsEnabled                             bool
+	PhfsPVC                                 string
 }
 
 type FailedPodStatus struct {
@@ -828,26 +830,64 @@ func (r *PhDeploymentReconciler) buildDeployment(ctx context.Context, phDeployme
 			})
 		}
 
-		initContainers = append(initContainers, corev1.Container{
-			Name:                     ModelStorageInitializerName,
-			Image:                    r.ModelStorageInitializerImage,
-			ImagePullPolicy:          r.ModelStorageInitializerPullPolicy,
-			Args:                     []string{modelURI, "/mnt/models"},
-			VolumeMounts:             initContainersVolumeMount,
-			TerminationMessagePolicy: corev1.TerminationMessageFallbackToLogsOnError,
-			Env: []corev1.EnvVar{
-				// Workaround to bypass credential discovery in GCE
-				// https://app.clubhouse.io/infuseai/story/14009/cannot-download-files-of-model-uri-in-gke
-				{
-					Name:  "GCE_METADATA_IP",
-					Value: "127.0.0.1",
+		// build the model-storage-init container
+		if len(modelURI) > 8 && strings.HasPrefix(modelURI, "models:/") {
+			result, err := r.GraphqlClient.FetchByUserId(phDeployment.Spec.UserId)
+
+			if err == nil {
+				// mount group volume for copying model data
+				groupName := strings.ToLower(strings.ReplaceAll(phDeployment.Spec.GroupName, "_", "-"))
+				name := "project-" + groupName
+				mountPath := "/project/" + groupName
+				volumes = append(volumes, corev1.Volume{
+					Name: name,
+					VolumeSource: corev1.VolumeSource{
+						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+							ClaimName: name,
+						},
+					},
+				})
+
+				initContainersVolumeMount = append(initContainersVolumeMount, corev1.VolumeMount{
+					MountPath: mountPath,
+					Name:      name,
+				})
+
+				initContainers = append(initContainers, corev1.Container{
+					Name:                     ModelStorageInitializerName,
+					Image:                    r.MlflowModelStorageInitializerImage,
+					ImagePullPolicy:          r.MlflowModelStorageInitializerPullPolicy,
+					Args:                     []string{modelURI},
+					VolumeMounts:             initContainersVolumeMount,
+					TerminationMessagePolicy: corev1.TerminationMessageFallbackToLogsOnError,
+					Env:                      graphql.BuildMlflowEnvironmentVariables(phDeployment.Spec.GroupName, result),
+				})
+			} else {
+				return nil, err
+			}
+		} else {
+			initContainers = append(initContainers, corev1.Container{
+				Name:                     ModelStorageInitializerName,
+				Image:                    r.ModelStorageInitializerImage,
+				ImagePullPolicy:          r.ModelStorageInitializerPullPolicy,
+				Args:                     []string{modelURI, "/mnt/models"},
+				VolumeMounts:             initContainersVolumeMount,
+				TerminationMessagePolicy: corev1.TerminationMessageFallbackToLogsOnError,
+				Env: []corev1.EnvVar{
+					// Workaround to bypass credential discovery in GCE
+					// https://app.clubhouse.io/infuseai/story/14009/cannot-download-files-of-model-uri-in-gke
+					{
+						Name:  "GCE_METADATA_IP",
+						Value: "127.0.0.1",
+					},
+					{
+						Name:  "GCE_METADATA_HOST",
+						Value: "127.0.0.1",
+					},
 				},
-				{
-					Name:  "GCE_METADATA_HOST",
-					Value: "127.0.0.1",
-				},
-			},
-		})
+			})
+		}
+
 		volumes = append(volumes, corev1.Volume{
 			Name: "model-storage",
 			VolumeSource: corev1.VolumeSource{

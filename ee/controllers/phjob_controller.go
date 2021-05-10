@@ -141,7 +141,7 @@ func (r *PhJobReconciler) buildPod(phJob *primehubv1alpha1.PhJob) (*corev1.Pod, 
 	}
 
 	// add envs for the primehub-job python package (submit a function as a job)
-	mlflowEnvs := r.buildMlflowEnvironmentVariables(phJob, result)
+	mlflowEnvs := graphql.BuildMlflowEnvironmentVariables(phJob.Spec.GroupName, result)
 	for idx, _ := range pod.Spec.Containers {
 		envsToAppend := []corev1.EnvVar{
 			corev1.EnvVar{Name: "GROUP_ID", Value: phJob.Spec.GroupId},
@@ -183,25 +183,6 @@ func (r *PhJobReconciler) buildPod(phJob *primehubv1alpha1.PhJob) (*corev1.Pod, 
 	}
 
 	return pod, nil
-}
-
-func (r *PhJobReconciler) buildMlflowEnvironmentVariables(phJob *primehubv1alpha1.PhJob, result *graphql.DtoResult) []corev1.EnvVar {
-	var envs []corev1.EnvVar
-	for _, group := range result.Data.User.Groups {
-		if group.Name == phJob.Spec.GroupName {
-			if group.Mlflow != nil {
-				envs = append(envs, corev1.EnvVar{Name: "MLFLOW_TRACKING_URI", Value: group.Mlflow.TrackingUri})
-				envs = append(envs, corev1.EnvVar{Name: "MLFLOW_UI_URL", Value: group.Mlflow.UiUrl})
-				for _, v := range group.Mlflow.TrackingEnvs {
-					envs = append(envs, v)
-				}
-				for _, v := range group.Mlflow.ArtifactEnvs {
-					envs = append(envs, v)
-				}
-			}
-		}
-	}
-	return envs
 }
 
 func (r *PhJobReconciler) attachMonitoringAgent(phJob *primehubv1alpha1.PhJob, podSpec *corev1.PodSpec) {
