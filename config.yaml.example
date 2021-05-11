@@ -37,14 +37,18 @@ monitoringAgent:
 
 modelDeployment:
   enabled: false
-  primehubUrl: https://primehub.local
   engineContainer:
     image:
-      repository: seldonio/seldon-core-executor
-      tag: 1.1.0
       pullPolicy: IfNotPresent
+      repository: seldonio/seldon-core-executor
+      tag: 1.4.0
   modelStorageInitializer:
     image:
+      pullPolicy: IfNotPresent
       repository: gcr.io/kfserving/storage-initializer
       tag: v0.4.0
+  mlflowModelStorageInitializer:
+    image:
       pullPolicy: IfNotPresent
+      repository: infuseai/mlflow-model-downloader
+      tag: v0.1.0
