@@ -226,41 +226,35 @@ func main() {
 		engineContainerRepository := viper.GetString("modelDeployment.engineContainer.image.repository")
 		engineContainerTag := viper.GetString("modelDeployment.engineContainer.image.tag")
 		engineContainerPullPolicy := corev1.PullPolicy(viper.GetString("modelDeployment.engineContainer.image.pullPolicy"))
-		if engineContainerRepository != "" && engineContainerTag != "" {
-			engineContainerImage = fmt.Sprintf("%s:%s", engineContainerRepository, engineContainerTag)
-		} else {
-			engineContainerImage = "seldonio/seldon-core-executor:1.4.0"
-		}
-		if engineContainerPullPolicy == "" {
-			engineContainerPullPolicy = corev1.PullIfNotPresent
-		}
+		engineContainerImage = fmt.Sprintf("%s:%s", engineContainerRepository, engineContainerTag)
 
 		var modelStorageInitializerImage string
 		modelStorageInitializerRepository := viper.GetString("modelDeployment.modelStorageInitializer.image.repository")
 		modelStorageInitializerTag := viper.GetString("modelDeployment.modelStorageInitializer.image.tag")
 		modelStorageInitializerPullPolicy := corev1.PullPolicy(viper.GetString("modelDeployment.modelStorageInitializer.image.pullPolicy"))
-		if modelStorageInitializerRepository != "" && modelStorageInitializerTag != "" {
-			modelStorageInitializerImage = fmt.Sprintf("%s:%s", modelStorageInitializerRepository, modelStorageInitializerTag)
-		} else {
-			modelStorageInitializerImage = "gcr.io/kfserving/storage-initializer:v0.4.0"
-		}
-		if modelStorageInitializerPullPolicy == "" {
-			modelStorageInitializerPullPolicy = corev1.PullIfNotPresent
-		}
+		modelStorageInitializerImage = fmt.Sprintf("%s:%s", modelStorageInitializerRepository, modelStorageInitializerTag)
+
+		var mlflowModelStorageInitializerImage string
+		mlflowModelStorageInitializerRepository := viper.GetString("modelDeployment.mlflowModelStorageInitializer.image.repository")
+		mlflowModelStorageInitializerTag := viper.GetString("modelDeployment.mlflowModelStorageInitializer.image.tag")
+		mlflowModelStorageInitializerPullPolicy := corev1.PullPolicy(viper.GetString("modelDeployment.mlflowModelStorageInitializer.image.pullPolicy"))
+		mlflowModelStorageInitializerImage = fmt.Sprintf("%s:%s", mlflowModelStorageInitializerRepository, mlflowModelStorageInitializerTag)
 
 		if err = (&eecontrollers.PhDeploymentReconciler{
-			Client:                            mgr.GetClient(),
-			Log:                               ctrl.Log.WithName("controllers").WithName("PhDeployment"),
-			Scheme:                            mgr.GetScheme(),
-			GraphqlClient:                     graphqlClient,
-			Ingress:                           ingress,
-			PrimehubUrl:                       viper.GetString("primehubUrl"),
-			EngineImage:                       engineContainerImage,
-			EngineImagePullPolicy:             engineContainerPullPolicy,
-			ModelStorageInitializerImage:      modelStorageInitializerImage,
-			ModelStorageInitializerPullPolicy: modelStorageInitializerPullPolicy,
-			PhfsEnabled:                       phfsEnabled,
-			PhfsPVC:                           phfsPVC,
+			Client:                                  mgr.GetClient(),
+			Log:                                     ctrl.Log.WithName("controllers").WithName("PhDeployment"),
+			Scheme:                                  mgr.GetScheme(),
+			GraphqlClient:                           graphqlClient,
+			Ingress:                                 ingress,
+			PrimehubUrl:                             viper.GetString("primehubUrl"),
+			EngineImage:                             engineContainerImage,
+			EngineImagePullPolicy:                   engineContainerPullPolicy,
+			ModelStorageInitializerImage:            modelStorageInitializerImage,
+			ModelStorageInitializerPullPolicy:       modelStorageInitializerPullPolicy,
+			MlflowModelStorageInitializerImage:      mlflowModelStorageInitializerImage,
+			MlflowModelStorageInitializerPullPolicy: mlflowModelStorageInitializerPullPolicy,
+			PhfsEnabled:                             phfsEnabled,
+			PhfsPVC:                                 phfsPVC,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "PhDeployment")
 			os.Exit(1)
@@ -319,6 +313,22 @@ func loadConfig() {
 		"jobSubmission.defaultActiveDeadlineSeconds",
 		"jobSubmission.defaultTTLSecondsAfterFinished",
 	}
+
+	modelConfigs := []string{
+		"modelDeployment.engineContainer.image.repository",
+		"modelDeployment.engineContainer.image.tag",
+		"modelDeployment.engineContainer.image.pullPolicy",
+		"modelDeployment.modelStorageInitializer.image.repository",
+		"modelDeployment.modelStorageInitializer.image.tag",
+		"modelDeployment.modelStorageInitializer.image.pullPolicy",
+		"modelDeployment.mlflowModelStorageInitializer.image.repository",
+		"modelDeployment.mlflowModelStorageInitializer.image.tag",
+		"modelDeployment.mlflowModelStorageInitializer.image.pullPolicy",
+	}
+	if viper.GetBool("modelDeployment.enabled") {
+		configs = append(configs, modelConfigs...)
+	}
+
 	for _, config := range configs {
 		if viper.GetString(config) == "" {
 			panic(config + " is required in config.yaml")

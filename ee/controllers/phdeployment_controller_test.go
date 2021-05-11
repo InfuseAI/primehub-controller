@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	primehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
 	"primehub-controller/pkg/graphql"
 	"strings"
@@ -524,4 +525,232 @@ func TestPhDeploymentReconciler_reconcileSecret(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPhDeployment_BuildModelContainer(t *testing.T) {
+	// Setup
+	ctx := context.TODO()
+	logger := log.NullLogger{}
+	scheme := runtime.NewScheme()
+	_ = primehubv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+	fakeClient := fake.NewFakeClientWithScheme(scheme)
+
+	type fields struct {
+		Client                client.Client
+		Log                   logr.Logger
+		Scheme                *runtime.Scheme
+		GraphqlClient         graphql.AbstractGraphqlClient
+		Ingress               PhIngress
+		PrimehubUrl           string
+		EngineImage           string
+		EngineImagePullPolicy corev1.PullPolicy
+	}
+
+	type args struct {
+		ctx          context.Context
+		phDeployment *primehubv1alpha1.PhDeployment
+	}
+
+	graphqlClient := &FakeGraphQLForModelContainer{}
+	tests := []struct {
+		name             string
+		fields           fields
+		args             args
+		initImage        string
+		injectMlflowEnvs bool
+	}{
+		{"ModelUri from phfs:// should mount PHFS", fields{Log: logger, Client: fakeClient, Scheme: scheme, GraphqlClient: graphqlClient}, args{ctx, phdeploymentWithModelUri("phfs:///path/to/my-model")}, "model-init-image", false},
+		{"ModelUri from models:/ should use mlflow-storage-initializer and all mlflow envs", fields{Log: logger, Client: fakeClient, Scheme: scheme, GraphqlClient: graphqlClient}, args{ctx, phdeploymentWithModelUri("models:/foo-bar-bar/5566")}, "mlflow-model-init-image", true},
+		{"ModelUri from gs should use model-storage-initializer", fields{Log: logger, Client: fakeClient, Scheme: scheme, GraphqlClient: graphqlClient}, args{ctx, phdeploymentWithModelUri("gs://my-bucket/path/to/my-model")}, "model-init-image", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &PhDeploymentReconciler{
+				Client:                             tt.fields.Client,
+				Log:                                tt.fields.Log,
+				Scheme:                             tt.fields.Scheme,
+				GraphqlClient:                      tt.fields.GraphqlClient,
+				Ingress:                            tt.fields.Ingress,
+				PrimehubUrl:                        tt.fields.PrimehubUrl,
+				EngineImage:                        tt.fields.EngineImage,
+				EngineImagePullPolicy:              tt.fields.EngineImagePullPolicy,
+				PhfsEnabled:                        true,
+				PhfsPVC:                            "primehub-store",
+				ModelStorageInitializerImage:       "model-init-image",
+				MlflowModelStorageInitializerImage: "mlflow-model-init-image",
+			}
+
+			deployment, err := r.buildDeployment(tt.args.ctx, tt.args.phDeployment)
+			if err != nil {
+				t.Errorf("buildDeployment() error = %v", err)
+			}
+
+			initContainer := deployment.Spec.Template.Spec.InitContainers[0]
+			if initContainer.Image != tt.initImage {
+				t.Errorf("model-init-image should be %v, but %v", tt.initImage, initContainer.Image)
+			}
+
+			modelStorageMount := initContainer.VolumeMounts[0]
+			if modelStorageMount.Name != "model-storage" || modelStorageMount.MountPath != "/mnt/models" {
+				t.Errorf("should have the first volume that named model-storage with path /mnt/models, but [%v]", modelStorageMount)
+			}
+
+			result, _ := tt.fields.GraphqlClient.FetchByUserId("any-id")
+			if tt.injectMlflowEnvs == true && !foundEachEnvsInMlflowSettings(initContainer.Env, result) {
+				t.Errorf("should have each envs in from mlflow. envs[%v], mlflow[%v]", initContainer.Env, result.Data.User.Groups[0].Mlflow)
+			}
+		})
+	}
+}
+
+func foundEachEnvsInMlflowSettings(envVars []corev1.EnvVar, result *graphql.DtoResult) bool {
+	stat := make(map[string]int)
+	variables := graphql.BuildMlflowEnvironmentVariables("tester", result)
+	variables = append(variables, envVars...)
+
+	for _, v := range variables {
+		k := fmt.Sprintf("%v:%v", v.Name, v.Value)
+		if val, ok := stat[k]; ok {
+			stat[k] = val + 1
+		} else {
+			stat[k] = 1
+		}
+	}
+
+	for _, e := range stat {
+		if e != 2 {
+			return false
+		}
+	}
+	return true
+}
+
+func phdeploymentWithModelUri(modelUri string) *primehubv1alpha1.PhDeployment {
+	p := &primehubv1alpha1.PhDeployment{}
+	p.Namespace = "Unit-Test"
+	p.Name = "TestReconcileSecret"
+	p.Spec.Predictors = []primehubv1alpha1.PhDeploymentPredictor{
+		primehubv1alpha1.PhDeploymentPredictor{
+			Name:            "model",
+			Replicas:        1,
+			ModelImage:      "infuseai/model-image",
+			InstanceType:    "cpu-1",
+			ModelURI:        modelUri,
+			ImagePullSecret: "",
+			Metadata:        nil,
+		},
+	}
+	p.Spec.GroupName = "tester"
+	p.Spec.UserId = "tester"
+	return p
+}
+
+type FakeGraphQLForModelContainer struct{}
+
+func (FakeGraphQLForModelContainer) FetchByUserId(s string) (*graphql.DtoResult, error) {
+	return &graphql.DtoResult{
+		Data: graphql.DtoData{
+			System: graphql.DtoSystem{},
+			User: graphql.DtoUser{
+				Groups: []graphql.DtoGroup{
+					{
+						Name:                            "tester",
+						DisplayName:                     "",
+						EnabledSharedVolume:             false,
+						SharedVolumeCapacity:            "",
+						HomeSymlink:                     nil,
+						LaunchGroupOnly:                 nil,
+						QuotaCpu:                        0,
+						QuotaGpu:                        0,
+						QuotaMemory:                     "",
+						UserVolumeCapacity:              "",
+						ProjectQuotaCpu:                 0,
+						ProjectQuotaGpu:                 0,
+						ProjectQuotaMemory:              "",
+						EnabledDeployment:               false,
+						JobDefaultActiveDeadlineSeconds: nil,
+						InstanceTypes: []graphql.DtoInstanceType{
+							graphql.DtoInstanceType{
+								Name:        "cpu-1",
+								Description: "",
+								DisplayName: "",
+								Global:      false,
+								Spec: graphql.DtoInstanceTypeSpec{
+									LimitsCpu:      1,
+									RequestsCpu:    1,
+									RequestsMemory: "1G",
+									LimitsMemory:   "1G",
+									RequestsGpu:    0,
+									LimitsGpu:      0,
+									NodeSelector:   nil,
+									Tolerations:    nil,
+								},
+							},
+						},
+						Images:   nil,
+						Datasets: nil,
+						Mlflow: &graphql.DtoMlflow{
+							TrackingUri: "http://example.primehub.io/foo-bar-bar",
+							UiUrl:       "http://example.primehub.io/foo-bar-bar",
+							TrackingEnvs: []corev1.EnvVar{
+								corev1.EnvVar{
+									Name:  "MLFLOW_TRACKING_USERNAME",
+									Value: "foo",
+								},
+								corev1.EnvVar{
+									Name:  "MLFLOW_TRACKING_PASSWORD",
+									Value: "bar",
+								},
+							},
+							ArtifactEnvs: []corev1.EnvVar{
+								corev1.EnvVar{
+									Name:  "AWS_ACCESS_KEY_ID",
+									Value: "aws-key-id",
+								}, corev1.EnvVar{
+									Name:  "AWS_SECRET_ACCESS_KEY",
+									Value: "aws-secret-key",
+								}, corev1.EnvVar{
+									Name:  "EXTRA",
+									Value: "more",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}, nil
+}
+
+func (FakeGraphQLForModelContainer) QueryServer(m map[string]interface{}) ([]byte, error) {
+	panic("implement me")
+}
+
+func (FakeGraphQLForModelContainer) FetchGroupEnableModelDeployment(s string) (bool, error) {
+	panic("implement me")
+}
+
+func (FakeGraphQLForModelContainer) FetchGroupInfo(s string) (*graphql.DtoGroup, error) {
+	panic("implement me")
+}
+
+func (FakeGraphQLForModelContainer) FetchGroupInfoByName(s string) (*graphql.DtoGroup, error) {
+	panic("implement me")
+}
+
+func (FakeGraphQLForModelContainer) FetchGlobalDatasets() ([]graphql.DtoDataset, error) {
+	panic("implement me")
+}
+
+func (FakeGraphQLForModelContainer) FetchInstanceTypeInfo(s string) (*graphql.DtoInstanceType, error) {
+	panic("implement me")
+}
+
+func (FakeGraphQLForModelContainer) FetchTimeZone() (string, error) {
+	panic("implement me")
+}
+
+func (FakeGraphQLForModelContainer) NotifyPhJobEvent(id string, eventType string) (float64, error) {
+	panic("implement me")
 }

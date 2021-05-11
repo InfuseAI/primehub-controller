@@ -631,3 +631,22 @@ func (c GraphqlClient) NotifyPhJobEvent(id string, eventType string) (float64, e
 
 	return data["notifyPhJobEvent"].(float64), nil
 }
+
+func BuildMlflowEnvironmentVariables(groupName string, result *DtoResult) []corev1.EnvVar {
+	var envs []corev1.EnvVar
+	for _, group := range result.Data.User.Groups {
+		if group.Name == groupName {
+			if group.Mlflow != nil {
+				envs = append(envs, corev1.EnvVar{Name: "MLFLOW_TRACKING_URI", Value: group.Mlflow.TrackingUri})
+				envs = append(envs, corev1.EnvVar{Name: "MLFLOW_UI_URL", Value: group.Mlflow.UiUrl})
+				for _, v := range group.Mlflow.TrackingEnvs {
+					envs = append(envs, v)
+				}
+				for _, v := range group.Mlflow.ArtifactEnvs {
+					envs = append(envs, v)
+				}
+			}
+		}
+	}
+	return envs
+}
