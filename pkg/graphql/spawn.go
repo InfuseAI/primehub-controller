@@ -904,11 +904,9 @@ func (spawner *Spawner) configContainerResource(container *corev1.Container, res
 			container.Resources.Limits["memory"] = spawner.limitsMemory
 		}
 	case RESOURCE_GPU:
-		if !spawner.requestsGpu.IsZero() {
-			container.Resources.Requests["nvidia.com/gpu"] = spawner.requestsGpu
-		}
+		// we never set GPU to the Requests
 		if !spawner.limitsGpu.IsZero() {
-			container.Resources.Requests["nvidia.com/gpu"] = spawner.limitsGpu
+			container.Resources.Limits["nvidia.com/gpu"] = spawner.limitsGpu
 		}
 	}
 }
