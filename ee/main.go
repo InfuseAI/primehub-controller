@@ -7,6 +7,7 @@ import (
 	primehubv1alpha1 "primehub-controller/api/v1alpha1"
 	"primehub-controller/controllers"
 	phcache "primehub-controller/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"strings"
 
 	eeprimehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
@@ -206,63 +207,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	modelDeployment := viper.GetBool("modelDeployment.enabled")
-	ingress := eecontrollers.PhIngress{}
-	if modelDeployment {
-		// get the ingress from the config which is from the helm value.
-
-		err = viper.UnmarshalKey("ingress", &ingress)
-		if err != nil {
-			panic(err.Error() + " cannot UnmarshalKey ingress")
-		}
-		if ingress.Hosts == nil {
-			panic(fmt.Errorf("should provide ingress in config.yaml if enable model deployment"))
-		}
-		if ingress.Annotations == nil {
-			ingress.Annotations = make(map[string]string)
-		}
-
-		var engineContainerImage string
-		engineContainerRepository := viper.GetString("modelDeployment.engineContainer.image.repository")
-		engineContainerTag := viper.GetString("modelDeployment.engineContainer.image.tag")
-		engineContainerPullPolicy := corev1.PullPolicy(viper.GetString("modelDeployment.engineContainer.image.pullPolicy"))
-		engineContainerImage = fmt.Sprintf("%s:%s", engineContainerRepository, engineContainerTag)
-
-		var modelStorageInitializerImage string
-		modelStorageInitializerRepository := viper.GetString("modelDeployment.modelStorageInitializer.image.repository")
-		modelStorageInitializerTag := viper.GetString("modelDeployment.modelStorageInitializer.image.tag")
-		modelStorageInitializerPullPolicy := corev1.PullPolicy(viper.GetString("modelDeployment.modelStorageInitializer.image.pullPolicy"))
-		modelStorageInitializerImage = fmt.Sprintf("%s:%s", modelStorageInitializerRepository, modelStorageInitializerTag)
-
-		var mlflowModelStorageInitializerImage string
-		mlflowModelStorageInitializerRepository := viper.GetString("modelDeployment.mlflowModelStorageInitializer.image.repository")
-		mlflowModelStorageInitializerTag := viper.GetString("modelDeployment.mlflowModelStorageInitializer.image.tag")
-		mlflowModelStorageInitializerPullPolicy := corev1.PullPolicy(viper.GetString("modelDeployment.mlflowModelStorageInitializer.image.pullPolicy"))
-		mlflowModelStorageInitializerImage = fmt.Sprintf("%s:%s", mlflowModelStorageInitializerRepository, mlflowModelStorageInitializerTag)
-
-		if err = (&eecontrollers.PhDeploymentReconciler{
-			Client:                                  mgr.GetClient(),
-			Log:                                     ctrl.Log.WithName("controllers").WithName("PhDeployment"),
-			Scheme:                                  mgr.GetScheme(),
-			GraphqlClient:                           graphqlClient,
-			Ingress:                                 ingress,
-			PrimehubUrl:                             viper.GetString("primehubUrl"),
-			EngineImage:                             engineContainerImage,
-			EngineImagePullPolicy:                   engineContainerPullPolicy,
-			ModelStorageInitializerImage:            modelStorageInitializerImage,
-			ModelStorageInitializerPullPolicy:       modelStorageInitializerPullPolicy,
-			MlflowModelStorageInitializerImage:      mlflowModelStorageInitializerImage,
-			MlflowModelStorageInitializerPullPolicy: mlflowModelStorageInitializerPullPolicy,
-			PhfsEnabled:                             phfsEnabled,
-			PhfsPVC:                                 phfsPVC,
-		}).SetupWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create controller", "controller", "PhDeployment")
-			os.Exit(1)
-		}
-	}
+	createDeploymentReconciler(err, mgr, graphqlClient, phfsEnabled, phfsPVC)
 
 	// +kubebuilder:scaffold:builder
-
 	phJobScheduler := eecontrollers.PHJobScheduler{
 		Client:        mgr.GetClient(),
 		Log:           ctrl.Log.WithName("scheduler").WithName("PhJob"),
@@ -288,6 +235,61 @@ func main() {
 	setupLog.Info("starting manager")
 	if err := mgr.Start(stopChan); err != nil {
 		setupLog.Error(err, "problem running manager")
+		os.Exit(1)
+	}
+}
+
+func createDeploymentReconciler(err error, mgr manager.Manager, graphqlClient graphql.AbstractGraphqlClient, phfsEnabled bool, phfsPVC string) {
+	// Create Model Deployment Reconciler
+	ingress := eecontrollers.PhIngress{}
+
+	// get the ingress from the config which is from the helm value.
+	err = viper.UnmarshalKey("ingress", &ingress)
+	if err != nil {
+		panic(err.Error() + " cannot UnmarshalKey ingress")
+	}
+	if ingress.Hosts == nil {
+		panic(fmt.Errorf("should provide ingress in config.yaml if enable model deployment"))
+	}
+	if ingress.Annotations == nil {
+		ingress.Annotations = make(map[string]string)
+	}
+
+	var engineContainerImage string
+	engineContainerRepository := viper.GetString("modelDeployment.engineContainer.image.repository")
+	engineContainerTag := viper.GetString("modelDeployment.engineContainer.image.tag")
+	engineContainerPullPolicy := corev1.PullPolicy(viper.GetString("modelDeployment.engineContainer.image.pullPolicy"))
+	engineContainerImage = fmt.Sprintf("%s:%s", engineContainerRepository, engineContainerTag)
+
+	var modelStorageInitializerImage string
+	modelStorageInitializerRepository := viper.GetString("modelDeployment.modelStorageInitializer.image.repository")
+	modelStorageInitializerTag := viper.GetString("modelDeployment.modelStorageInitializer.image.tag")
+	modelStorageInitializerPullPolicy := corev1.PullPolicy(viper.GetString("modelDeployment.modelStorageInitializer.image.pullPolicy"))
+	modelStorageInitializerImage = fmt.Sprintf("%s:%s", modelStorageInitializerRepository, modelStorageInitializerTag)
+
+	var mlflowModelStorageInitializerImage string
+	mlflowModelStorageInitializerRepository := viper.GetString("modelDeployment.mlflowModelStorageInitializer.image.repository")
+	mlflowModelStorageInitializerTag := viper.GetString("modelDeployment.mlflowModelStorageInitializer.image.tag")
+	mlflowModelStorageInitializerPullPolicy := corev1.PullPolicy(viper.GetString("modelDeployment.mlflowModelStorageInitializer.image.pullPolicy"))
+	mlflowModelStorageInitializerImage = fmt.Sprintf("%s:%s", mlflowModelStorageInitializerRepository, mlflowModelStorageInitializerTag)
+
+	if err = (&eecontrollers.PhDeploymentReconciler{
+		Client:                                  mgr.GetClient(),
+		Log:                                     ctrl.Log.WithName("controllers").WithName("PhDeployment"),
+		Scheme:                                  mgr.GetScheme(),
+		GraphqlClient:                           graphqlClient,
+		Ingress:                                 ingress,
+		PrimehubUrl:                             viper.GetString("primehubUrl"),
+		EngineImage:                             engineContainerImage,
+		EngineImagePullPolicy:                   engineContainerPullPolicy,
+		ModelStorageInitializerImage:            modelStorageInitializerImage,
+		ModelStorageInitializerPullPolicy:       modelStorageInitializerPullPolicy,
+		MlflowModelStorageInitializerImage:      mlflowModelStorageInitializerImage,
+		MlflowModelStorageInitializerPullPolicy: mlflowModelStorageInitializerPullPolicy,
+		PhfsEnabled:                             phfsEnabled,
+		PhfsPVC:                                 phfsPVC,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "PhDeployment")
 		os.Exit(1)
 	}
 }
