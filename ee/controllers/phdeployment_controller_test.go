@@ -527,6 +527,33 @@ func TestPhDeploymentReconciler_reconcileSecret(t *testing.T) {
 	}
 }
 
+func TestExtractNFSConfig(t *testing.T) {
+	tests := []struct {
+		modelUri string
+		server   string
+		path     string
+		wantErr  bool
+	}{
+		{modelUri: "nfs://1.2.3.4/model/to/path", server: "1.2.3.4", path: "/model/to/path", wantErr: false},
+		{modelUri: "nfs://5.5.6.6", server: "5.5.6.6", path: "/", wantErr: false},
+		{modelUri: "nfs://5.5.6.8/", server: "5.5.6.8", path: "/", wantErr: false},
+		{modelUri: "nfs:7.8.6.6", server: "7.8.6.6", path: "", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.modelUri, func(t *testing.T) {
+			server, path, err := ExtractNFSConfig(tt.modelUri)
+			if tt.wantErr && err == nil {
+				t.Errorf("should get error from modelUri: %s", tt.modelUri)
+			}
+
+			if !tt.wantErr && (tt.server != server || tt.path != path) {
+				t.Errorf("failed to extract server from %s, => server:%s, path:%s", tt.modelUri, server, path)
+			}
+		})
+	}
+}
+
 func TestPhDeployment_BuildModelContainer(t *testing.T) {
 	// Setup
 	ctx := context.TODO()
@@ -561,6 +588,7 @@ func TestPhDeployment_BuildModelContainer(t *testing.T) {
 		injectMlflowEnvs bool
 	}{
 		{"ModelUri from phfs:// should mount PHFS", fields{Log: logger, Client: fakeClient, Scheme: scheme, GraphqlClient: graphqlClient}, args{ctx, phdeploymentWithModelUri("phfs:///path/to/my-model")}, "model-init-image", false},
+		{"ModelUri from nfs:// should mount NFS", fields{Log: logger, Client: fakeClient, Scheme: scheme, GraphqlClient: graphqlClient}, args{ctx, phdeploymentWithModelUri("nfs://1.2.3.4/path/to/my-model")}, "model-init-image", false},
 		{"ModelUri from models:/ should use mlflow-storage-initializer and all mlflow envs", fields{Log: logger, Client: fakeClient, Scheme: scheme, GraphqlClient: graphqlClient}, args{ctx, phdeploymentWithModelUri("models:/foo-bar-bar/5566")}, "mlflow-model-init-image", true},
 		{"ModelUri from gs should use model-storage-initializer", fields{Log: logger, Client: fakeClient, Scheme: scheme, GraphqlClient: graphqlClient}, args{ctx, phdeploymentWithModelUri("gs://my-bucket/path/to/my-model")}, "model-init-image", false},
 	}
@@ -596,11 +624,45 @@ func TestPhDeployment_BuildModelContainer(t *testing.T) {
 				t.Errorf("should have the first volume that named model-storage with path /mnt/models, but [%v]", modelStorageMount)
 			}
 
+			verifyNFSVolume(t, tt.args.phDeployment.Spec.Predictors[0].ModelURI, initContainer, deployment)
+
 			result, _ := tt.fields.GraphqlClient.FetchByUserId("any-id")
 			if tt.injectMlflowEnvs == true && !foundEachEnvsInMlflowSettings(initContainer.Env, result) {
 				t.Errorf("should have each envs in from mlflow. envs[%v], mlflow[%v]", initContainer.Env, result.Data.User.Groups[0].Mlflow)
 			}
 		})
+	}
+}
+
+func verifyNFSVolume(t *testing.T, modelURI string, initContainer corev1.Container, deployment *v1.Deployment) {
+	if !strings.HasPrefix(modelURI, "nfs://") {
+		return
+	}
+	nfsMount := initContainer.VolumeMounts[1]
+	if nfsMount.Name != "nfs" && nfsMount.MountPath != "/nfs" {
+		t.Errorf("should have nfs volumeMount at /nfs")
+	}
+
+	nfsVolume := corev1.Volume{}
+	for idx := range deployment.Spec.Template.Spec.Volumes {
+		v := deployment.Spec.Template.Spec.Volumes[idx]
+		if v.Name == "nfs" {
+			nfsVolume = v
+		}
+	}
+
+	if nfsVolume.Name != "nfs" || nfsVolume.NFS == nil {
+		t.Errorf("NFS Volume not found")
+	}
+
+	server, path, _ := ExtractNFSConfig(modelURI)
+	if server != nfsVolume.NFS.Server || nfsVolume.NFS.Path != "/" || nfsVolume.NFS.ReadOnly != true {
+		t.Errorf("invalid NFS volume %v", nfsVolume.NFS)
+	}
+
+	expectedPath := "file:///nfs" + path
+	if initContainer.Args[0] != expectedPath {
+		t.Errorf("invalid modelPath %s (expected: %s)", initContainer.Args[0], expectedPath)
 	}
 }
 

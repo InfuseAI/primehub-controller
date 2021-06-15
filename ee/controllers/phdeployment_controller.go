@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -520,7 +521,13 @@ func (r *PhDeploymentReconciler) updateStatus(phDeployment *primehubv1alpha1.PhD
 		// - application terminated
 		if failedPods != nil {
 			for _, p := range failedPods {
-				if p.isModelStorageInitError {
+				if p.isModelStorageInitError && len(p.containerStatuses) > 0 {
+					for _, status := range p.containerStatuses {
+						if status.Name == "FailedMount" {
+							phDeployment.Status.Message = "Failed because cannot mount NFS server." + r.explain(failedPods)
+							return nil
+						}
+					}
 					phDeployment.Status.Message = "Failed because cannot successfully copy the model from the model URI." + r.explain(failedPods)
 					return nil
 				}
@@ -607,6 +614,7 @@ func (r *PhDeploymentReconciler) listFailedPods(ctx context.Context, phDeploymen
 			isUnschedulable:         false,
 			isModelStorageInitError: false,
 		}
+
 		for _, c := range pod.Status.Conditions {
 
 			if c.Status == corev1.ConditionFalse && c.Reason != "ContainersNotReady" {
@@ -640,6 +648,34 @@ func (r *PhDeploymentReconciler) listFailedPods(ctx context.Context, phDeploymen
 			if s.Waiting != nil && (s.Waiting.Reason == "ImagePullBackOff" || s.Waiting.Reason == "ErrImagePull") {
 				result.isImageError = true
 				result.containerStatuses = append(result.containerStatuses, c)
+			}
+			if s.Waiting != nil && s.Waiting.Reason == "PodInitializing" {
+				events := &corev1.EventList{}
+				err := r.Client.List(ctx, events, client.InNamespace(phDeployment.Namespace))
+				if err == nil {
+					for _, event := range events.Items {
+						if event.Reason == "FailedMount"  && event.InvolvedObject.Kind == "Pod" && event.InvolvedObject.UID == pod.UID{
+							result.isModelStorageInitError = true
+							result.containerStatuses = append(result.containerStatuses, corev1.ContainerStatus{
+								Name:                 "FailedMount",
+								State:                corev1.ContainerState{
+									Waiting: &corev1.ContainerStateWaiting{
+										Reason:  event.Reason,
+										Message: event.Message,
+									},
+									Running:    nil,
+									Terminated: nil,
+								},
+								LastTerminationState: corev1.ContainerState{},
+								Ready:                false,
+								RestartCount:         0,
+								Image:                "",
+								ImageID:              "",
+								ContainerID:          "",
+							})
+						}
+					}
+				}
 			}
 		}
 		for _, c := range pod.Status.ContainerStatuses {
@@ -830,6 +866,31 @@ func (r *PhDeploymentReconciler) buildDeployment(ctx context.Context, phDeployme
 			})
 		}
 
+		if strings.HasPrefix(modelURI, "nfs://") {
+			initContainersVolumeMount = append(initContainersVolumeMount, corev1.VolumeMount{
+				MountPath: "/nfs",
+				Name:      "nfs",
+				ReadOnly:  true,
+			})
+
+			server, path, err := ExtractNFSConfig(modelURI)
+			modelURI = "file:///nfs" + path
+
+			if err != nil {
+				return nil, err
+			}
+			volumes = append(volumes, corev1.Volume{
+				Name: "nfs",
+				VolumeSource: corev1.VolumeSource{
+					NFS: &corev1.NFSVolumeSource{
+						Path:     "/",
+						ReadOnly: true,
+						Server: server,
+					},
+				},
+			})
+		}
+
 		// build the model-storage-init container
 		if len(modelURI) > 8 && strings.HasPrefix(modelURI, "models:/") {
 			result, err := r.GraphqlClient.FetchByUserId(phDeployment.Spec.UserId)
@@ -965,6 +1026,25 @@ func (r *PhDeploymentReconciler) buildDeployment(ctx context.Context, phDeployme
 	}
 
 	return deployment, nil
+}
+
+func ExtractNFSConfig(uri string) (string, string, error) {
+	if !strings.HasPrefix(uri, "nfs://") {
+		return "", "", errors.New("invalid nfs uri " + uri)
+	}
+	compile, err := regexp.Compile(`nfs://([^/]+)(/.+)?`)
+	if err != nil {
+		return "", "", err
+	}
+	groups := compile.FindAllStringSubmatch(uri, -1)
+	if len(groups[0]) == 3 {
+		path := groups[0][2]
+		if path == "" {
+			path = "/"
+		}
+		return groups[0][1], path, nil
+	}
+	return "", "", errors.New("invalid nfs uri " + uri)
 }
 
 func (r *PhDeploymentReconciler) buildUsageAnnotation(phDeployment *primehubv1alpha1.PhDeployment) string {
@@ -1187,6 +1267,13 @@ func (r PhDeploymentReconciler) buildModelContainer(phDeployment *primehubv1alph
 				MountPath: "/phfs",
 				Name:      "phfs",
 				SubPath:   "groups/" + groupName,
+				ReadOnly:  true,
+			})
+		}
+		if strings.HasPrefix(phDeployment.Spec.Predictors[0].ModelURI, "nfs://") {
+			volumeMounts = append(volumeMounts, corev1.VolumeMount{
+				MountPath: "/nfs",
+				Name:      "nfs",
 				ReadOnly:  true,
 			})
 		}
