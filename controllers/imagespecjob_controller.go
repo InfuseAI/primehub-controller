@@ -3,6 +3,7 @@ package controllers
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"primehub-controller/api/v1alpha1"
 	"primehub-controller/pkg/random"
 	"regexp"
@@ -199,7 +200,7 @@ RUN pip install --no-cache-dir
 
 func (r *ImageSpecJobReconciler) buildPod(imageSpecJob v1alpha1.ImageSpecJob, podName string, dockerfile string) *corev1.Pod {
 	containerName := "build-and-push"
-	containerImage := "quay.io/buildah/stable:v1.11.3"
+	containerImage := fmt.Sprintf("%s:%s", viper.GetString("customImage.buildJob.image.repository"), viper.GetString("customImage.buildJob.image.tag"))
 	privileged := true
 
 	podResources := corev1.ResourceRequirements{}
