@@ -654,11 +654,11 @@ func (r *PhDeploymentReconciler) listFailedPods(ctx context.Context, phDeploymen
 				err := r.Client.List(ctx, events, client.InNamespace(phDeployment.Namespace))
 				if err == nil {
 					for _, event := range events.Items {
-						if event.Reason == "FailedMount"  && event.InvolvedObject.Kind == "Pod" && event.InvolvedObject.UID == pod.UID{
+						if event.Reason == "FailedMount" && event.InvolvedObject.Kind == "Pod" && event.InvolvedObject.UID == pod.UID {
 							result.isModelStorageInitError = true
 							result.containerStatuses = append(result.containerStatuses, corev1.ContainerStatus{
-								Name:                 "FailedMount",
-								State:                corev1.ContainerState{
+								Name: "FailedMount",
+								State: corev1.ContainerState{
 									Waiting: &corev1.ContainerStateWaiting{
 										Reason:  event.Reason,
 										Message: event.Message,
@@ -885,7 +885,7 @@ func (r *PhDeploymentReconciler) buildDeployment(ctx context.Context, phDeployme
 					NFS: &corev1.NFSVolumeSource{
 						Path:     "/",
 						ReadOnly: true,
-						Server: server,
+						Server:   server,
 					},
 				},
 			})
@@ -1527,6 +1527,7 @@ func (r *PhDeploymentReconciler) createIngress(ctx context.Context, phDeployment
 		annotations["nginx.ingress.kubernetes.io/auth-secret-type"] = "auth-file"
 		annotations["nginx.ingress.kubernetes.io/auth-realm"] = "Authentication Required - "
 		annotations["nginx.ingress.kubernetes.io/configuration-snippet"] = `proxy_set_header X-Forwarded-User $remote_user;`
+		annotations["nginx.ingress.kubernetes.io/proxy-body-size"] = "10m"
 	}
 
 	ingress := &v1beta1.Ingress{
