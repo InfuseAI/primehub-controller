@@ -51,6 +51,8 @@ spec:
               properties:
                 spec:
                   properties:
+                    appRoot:
+                      type: string
                     httpPort:
                       format: int32
                       type: integer

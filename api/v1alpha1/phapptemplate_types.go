@@ -33,6 +33,7 @@ type PhAppTemplateContentSpec struct {
 	SvcTemplate PhApplicationSvcTemplate `json:"svcTemplate"`
 	HTTPPort    *int32                   `json:"httpPort,omitempty"`
 	Rewrite     bool                     `json:"rewrite,omitempty"`
+	AppRoot     string                   `json:"appRoot,omitempty"`
 }
 
 // PhAppTemplateContent defines the PhApplication spec content
