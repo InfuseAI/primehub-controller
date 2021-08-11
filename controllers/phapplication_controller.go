@@ -46,12 +46,16 @@ func (r *PhApplicationReconciler) getPhApplicationObject(namespace string, name 
 
 func (r *PhApplicationReconciler) generateDeploymentSpec(phApplication *v1alpha1.PhApplication, deployment *appv1.Deployment) error {
 	var replicas int32
+	var appRoot string
 	var err error
 
 	if phApplication.Spec.Stop == true {
 		replicas = 0
 	} else {
 		replicas = 1
+	}
+	if len(phApplication.Spec.AppRoot) > 0 {
+		appRoot = phApplication.Spec.AppRoot
 	}
 	podSpec := phApplication.Spec.PodTemplate.Spec.DeepCopy()
 	labels := map[string]string{
@@ -93,7 +97,7 @@ func (r *PhApplicationReconciler) generateDeploymentSpec(phApplication *v1alpha1
 		PhfsEnabled: r.PhfsEnabled,
 		PhfsPVC:     r.PhfsPVC,
 	}
-	spawner, err := graphql.NewSpawnerForPhApplication(phApplication.AppID(), r.PrimeHubURL, *groupInfo, *instanceTypeInfo, globalDatasets, *podSpec, options)
+	spawner, err := graphql.NewSpawnerForPhApplication(phApplication.AppID(), r.PrimeHubURL, *groupInfo, *instanceTypeInfo, globalDatasets, *podSpec, appRoot, options)
 	if err != nil {
 		return err
 	}

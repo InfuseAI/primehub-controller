@@ -38,6 +38,8 @@ spec:
           type: object
         spec:
           properties:
+            appRoot:
+              type: string
             displayName:
               type: string
             groupName:

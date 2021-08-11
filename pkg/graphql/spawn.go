@@ -181,7 +181,7 @@ func NewSpawnerForModelDeployment(data DtoData, groupName string, instanceTypeNa
 	return spawner, nil
 }
 
-func NewSpawnerForPhApplication(appID string, primehubUrl string, group DtoGroup, instanceType DtoInstanceType, globalDatasets []DtoDataset, spec corev1.PodSpec, options SpawnerOptions) (*Spawner, error) {
+func NewSpawnerForPhApplication(appID string, primehubUrl string, group DtoGroup, instanceType DtoInstanceType, globalDatasets []DtoDataset, spec corev1.PodSpec, appRoot string, options SpawnerOptions) (*Spawner, error) {
 	//var err error
 	spawner := &Spawner{}
 	var primeHubAppRoot string
@@ -190,9 +190,15 @@ func NewSpawnerForPhApplication(appID string, primehubUrl string, group DtoGroup
 	if group.EnabledSharedVolume {
 		primeHubAppRoot = "/project/" + strings.ToLower(strings.ReplaceAll(group.Name, "_", "-")) + "/phapplications/" + appID
 		spawner.applyVolumeForGroup(group.Name, group, "")
+		if len(appRoot) > 0 {
+			spawner.applyVolumeForAppRoot(group.Name, appRoot, appID, "")
+		}
 	} else {
 		primeHubAppRoot = "/phapplications/" + appID
 		spawner.applyEmptyDirVolume("primehub-app-root", primeHubAppRoot, resource.MustParse("5Gi"))
+		if len(appRoot) > 0 {
+			spawner.applyVolumeForAppRoot(group.Name, appRoot, appID, "primehub-app-root")
+		}
 	}
 
 	// Apply PHFS volume
@@ -235,6 +241,9 @@ func NewSpawnerForPhApplication(appID string, primehubUrl string, group DtoGroup
 	}
 
 	// Prepend Env
+	if len(appRoot) == 0 {
+		appRoot = primeHubAppRoot
+	}
 	spawner.prependEnv = []corev1.EnvVar{
 		{
 			Name:  "PRIMEHUB_APP_ID",
@@ -242,7 +251,7 @@ func NewSpawnerForPhApplication(appID string, primehubUrl string, group DtoGroup
 		},
 		{
 			Name:  "PRIMEHUB_APP_ROOT",
-			Value: primeHubAppRoot,
+			Value: appRoot,
 		},
 		{
 			Name:  "PRIMEHUB_APP_BASE_URL",
@@ -393,6 +402,22 @@ func (spawner *Spawner) applyVolumeForGroup(launchGroup string, group DtoGroup, 
 	if homeSymlink && workingDir != "" {
 		spawner.symlinks = append(spawner.symlinks, fmt.Sprintf("ln -s %s %s", mountPath, workingDir))
 	}
+}
+
+func (spawner *Spawner) applyVolumeForAppRoot(groupName string, appRoot string, appID string, name string) {
+	var subPath string
+	if len(name) == 0 {
+		name = "project-" + strings.ToLower(strings.ReplaceAll(groupName, "_", "-"))
+		subPath = "phapplications/" + appID
+	}
+
+	volumeMount := corev1.VolumeMount{
+		MountPath: appRoot,
+		Name:      name,
+		SubPath:   subPath,
+	}
+
+	spawner.volumeMounts = append(spawner.volumeMounts, volumeMount)
 }
 
 func (spawner *Spawner) applyVolumeForPhfs(groupName string, pvcName string, workingDir string) {

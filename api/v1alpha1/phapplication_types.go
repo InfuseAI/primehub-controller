@@ -49,6 +49,7 @@ type PhApplicationSpec struct {
 	SvcTemplate  PhApplicationSvcTemplate `json:"svcTemplate"`
 	HTTPPort     *int32                   `json:"httpPort,omitempty"`
 	Rewrite      bool                     `json:"rewrite,omitempty"`
+	AppRoot      string                   `json:"appRoot,omitempty"`
 }
 
 // PhApplicationStatus defines the observed state of PhApplication
