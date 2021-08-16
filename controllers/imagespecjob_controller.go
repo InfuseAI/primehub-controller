@@ -241,7 +241,7 @@ func (r *ImageSpecJobReconciler) buildPod(imageSpecJob v1alpha1.ImageSpecJob, po
 						},
 						{
 							Name:  "TARGET_IMAGE",
-							Value: imageSpecJob.Spec.RepoPrefix + "/" + imageSpecJob.Spec.TargetImage,
+							Value: imageSpecJob.TargetImageURL(),
 						},
 						{
 							Name:  "SKIP_TLS_VERIFY",
