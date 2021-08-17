@@ -115,7 +115,7 @@ func (r *ImageSpecReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	imageSpecClone.Status.JobName = imageSpecJob.Name
 	imageSpecClone.Status.Phase = string(imageSpecJob.Status.Phase)
 	if imageSpecClone.Status.Phase == CustomImageJobStatusSucceeded {
-		image := imageSpecJob.Spec.RepoPrefix + "/" + imageSpecJob.Spec.TargetImage
+		image := imageSpecJob.TargetImageURL()
 		imageSpecClone.Status.Image = image
 	}
 
@@ -150,7 +150,15 @@ func (r *ImageSpecReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func buildImageSpecJob(imageSpec v1alpha1.ImageSpec, hash string) *v1alpha1.ImageSpecJob {
 	pushSecretName := viper.GetString("customImage.pushSecretName")
-	repoPrefix := viper.GetString("customImage.pushRepoPrefix")
+	var repoPrefix string
+	var targetImage string
+
+	if repo := viper.GetString("customImage.pushRepo"); len(repo) > 0 {
+		targetImage = repo + ":" + imageSpec.ObjectMeta.Name + "-" + hash
+	} else {
+		targetImage = imageSpec.ObjectMeta.Name + ":" + hash
+		repoPrefix = viper.GetString("customImage.pushRepoPrefix")
+	}
 	imageSpecJob := v1alpha1.ImageSpecJob{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        imageSpec.ObjectMeta.Name + "-" + hash,
@@ -165,7 +173,7 @@ func buildImageSpecJob(imageSpec v1alpha1.ImageSpec, hash string) *v1alpha1.Imag
 			BaseImage:   imageSpec.Spec.BaseImage,
 			PullSecret:  imageSpec.Spec.PullSecret,
 			Packages:    imageSpec.Spec.Packages,
-			TargetImage: imageSpec.ObjectMeta.Name + ":" + hash,
+			TargetImage: targetImage,
 			PushSecret:  pushSecretName,
 			RepoPrefix:  repoPrefix,
 			UpdateTime:  imageSpec.Spec.UpdateTime,
