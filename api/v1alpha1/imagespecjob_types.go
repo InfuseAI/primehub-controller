@@ -17,7 +17,7 @@ type ImageSpecJobSpec struct {
 	Packages    ImageSpecSpecPackages `json:"packages"`
 	TargetImage string                `json:"targetImage"`
 	PushSecret  string                `json:"pushSecret"`
-	RepoPrefix  string                `json:"repoPrefix"`
+	RepoPrefix  string                `json:"repoPrefix,omitempty"`
 
 	UpdateTime *metav1.Time `json:"updateTime,omitempty"`
 }
@@ -55,6 +55,14 @@ type ImageSpecJobList struct {
 	Items           []ImageSpecJob `json:"items"`
 }
 
+func (imageSpecJob *ImageSpecJob) TargetImageURL() (targetImage string) {
+	if len(imageSpecJob.Spec.RepoPrefix) > 0 {
+		targetImage = imageSpecJob.Spec.RepoPrefix + "/" + imageSpecJob.Spec.TargetImage
+	} else {
+		targetImage = imageSpecJob.Spec.TargetImage
+	}
+	return
+}
 func init() {
 	SchemeBuilder.Register(&ImageSpecJob{}, &ImageSpecJobList{})
 }

@@ -89,9 +89,17 @@ func createImageSpecJob(r *ImageReconciler, ctx context.Context, image *v1alpha1
 	}
 
 	pushSecretName := viper.GetString("customImage.pushSecretName")
-	repoPrefix := viper.GetString("customImage.pushRepoPrefix")
-
 	hash := computeHash(image.Spec.ImageSpec.BaseImage, image.Spec.ImageSpec.Packages)
+
+	var repoPrefix string
+	var targetImage string
+
+	if repo := viper.GetString("customImage.pushRepo"); len(repo) > 0 {
+		targetImage = repo + ":" + image.ObjectMeta.Name + "-" + hash
+	} else {
+		targetImage = image.ObjectMeta.Name + ":" + hash
+		repoPrefix = viper.GetString("customImage.pushRepoPrefix")
+	}
 
 	updateTime := image.Spec.ImageSpec.UpdateTime
 	if updateTime == nil {
@@ -112,7 +120,7 @@ func createImageSpecJob(r *ImageReconciler, ctx context.Context, image *v1alpha1
 			BaseImage:   image.Spec.ImageSpec.BaseImage,
 			PullSecret:  image.Spec.ImageSpec.PullSecret,
 			Packages:    image.Spec.ImageSpec.Packages,
-			TargetImage: image.ObjectMeta.Name + ":" + hash,
+			TargetImage: targetImage,
 			PushSecret:  pushSecretName,
 			RepoPrefix:  repoPrefix,
 			UpdateTime:  updateTime,
@@ -183,7 +191,7 @@ func updateImageStatus(r *ImageReconciler, ctx context.Context, image *v1alpha1.
 		imageClone.Status.JobCondiction.JobName = imageSpecJob.Name
 		imageClone.Status.JobCondiction.Phase = imageSpecJob.Status.Phase
 		if imageClone.Status.JobCondiction.Phase == CustomImageJobStatusSucceeded {
-			url := imageSpecJob.Spec.RepoPrefix + "/" + imageSpecJob.Spec.TargetImage
+			url := imageSpecJob.TargetImageURL()
 			imageClone.Status.JobCondiction.Image = url
 			imageClone.Spec.Url = url
 			imageClone.Spec.UrlForGpu = url
