@@ -1,4 +1,6 @@
 version: 2
+orbs:
+  codecov: codecov/codecov@3.0.0
 jobs:
   unit_test_ce:
     docker: # run the steps with Docker
@@ -30,6 +32,9 @@ jobs:
             mv coverage.html /tmp/artifacts
       - store_artifacts:
           path: /tmp/artifacts
+      - upload_codecov:
+          flags: unittests
+          file: cover.out
 
   unit_test_ee:
     working_directory: ~/primehub-controller/ee
@@ -66,6 +71,9 @@ jobs:
             mv coverage.html /tmp/artifacts
       - store_artifacts:
           path: /tmp/artifacts
+      - upload_codecov:
+          flags: unittests
+          file: cover.out
 
   build_ce:
     docker: # run the steps with Docker
