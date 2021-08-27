@@ -1045,10 +1045,18 @@ func (spawner *Spawner) PatchPodSpec(podSpec *corev1.PodSpec) {
 
 	// container
 	container = spawner.buildContainer(&podSpec.Containers[0])
-	initContainer := spawner.buildInitContainer(nil)
+	initContainers := []corev1.Container{spawner.buildInitContainer(nil)}
+	if len(podSpec.InitContainers) > 0 {
+		initContainer := podSpec.InitContainers[0].DeepCopy()
+		initContainer.Env = append(container.Env, initContainer.Env...)
+		initContainer.VolumeMounts = container.VolumeMounts
+		initContainer.Resources = container.Resources
+		initContainers = append(initContainers, *initContainer)
+	}
 	// Pod
 	podSpec.Containers = []corev1.Container{container}
-	podSpec.InitContainers = []corev1.Container{initContainer}
+	podSpec.InitContainers = initContainers
+
 	podSpec.Volumes = append(podSpec.Volumes, spawner.volumes...)
 	if spawner.imagePullSecret != "" {
 		podSpec.ImagePullSecrets = append(podSpec.ImagePullSecrets, corev1.LocalObjectReference{
