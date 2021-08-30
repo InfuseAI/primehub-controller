@@ -234,20 +234,8 @@ workflows:
     jobs:
       - unit_test_ce
       - unit_test_ee
-      - build_ce:
-          requires:
-            - unit_test_ce
-            - unit_test_ee
-          filters:
-            branches:
-              only: master
-      - build_ee:
-          requires:
-            - unit_test_ce
-            - unit_test_ee
-          filters:
-            branches:
-              only: master
+      - build_ce
+      - build_ee
   build_tag:
     jobs:
       - unit_test_ce:
