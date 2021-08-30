@@ -40,7 +40,7 @@ jobs:
     working_directory: ~/primehub-controller/ee
     docker: # run the steps with Docker
       # CircleCI Go images available at: https://hub.docker.com/r/circleci/golang/
-      - image: circleci/golang:1.12
+      - image: circleci/golang:1.13
     steps:
       - checkout:
           path: ~/primehub-controller
