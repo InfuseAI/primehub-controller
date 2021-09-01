@@ -3,7 +3,7 @@
 [![CircleCI](https://circleci.com/gh/InfuseAI/primehub.svg?style=svg)](https://circleci.com/gh/InfuseAI/primehub-controller)
 [![ee docker](https://img.shields.io/docker/pulls/infuseai/primehub-controller-ee?label=ee%20docker%20pulls)](https://hub.docker.com/r/infuseai/primehub-controller-ee)
 [![ce docker](https://img.shields.io/docker/pulls/infuseai/primehub-controller?label=ce%20docker%20pulls)](https://hub.docker.com/r/infuseai/primehub-controller)
-
+[![codecov](https://codecov.io/gh/InfuseAI/primehub-controller/branch/master/graph/badge.svg?token=42RPVTS5L8)](https://codecov.io/gh/InfuseAI/primehub-controller)
 
 # PrimeHub Controller
 
