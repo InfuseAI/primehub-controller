@@ -100,6 +100,9 @@ func (r *LicenseReconciler) generateStatus(content map[string]string) (status pr
 	status.MaxGroup = getIntField(content, "max_group", -1)
 	status.MaxNode = getIntField(content, "max_node", -1)
 	status.MaxModelDeploy = getIntField(content, "max_model_deploy", 0)
+	if value, ok := content["platform_type"]; ok {
+		status.PlatformType = value
+	}
 	return
 }
 

@@ -28,6 +28,7 @@ type LicenseStatus struct {
 	MaxGroup       *int   `json:"max_group,omitempty"`
 	MaxNode        *int   `json:"max_node,omitempty"`
 	MaxModelDeploy *int   `json:"max_model_deploy,omitempty"`
+	PlatformType   string `json:"platform_type,omitempty"`
 }
 
 // +kubebuilder:subresource:status
