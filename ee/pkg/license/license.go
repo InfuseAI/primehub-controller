@@ -11,7 +11,7 @@ type License struct {
 	Err           error
 }
 
-func NewLicense(signedLicense string) (lic *License) {
+func NewLicense(signedLicense string, platformType string) (lic *License) {
 	lic = &License{}
 	lic.SignedLicense = signedLicense
 	lic.Decoded = map[string]string{}
@@ -24,6 +24,12 @@ func NewLicense(signedLicense string) (lic *License) {
 	}
 	lic.Decoded, err = Decode(signedLicense)
 	if err != nil {
+		lic.Err = err
+		lic.Status = STATUS_INVALID
+		return
+	}
+
+	if err := TypeCheck(lic.Decoded, platformType); err != nil {
 		lic.Err = err
 		lic.Status = STATUS_INVALID
 		return

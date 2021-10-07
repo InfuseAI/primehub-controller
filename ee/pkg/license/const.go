@@ -11,6 +11,11 @@ const (
 )
 
 const (
+	PLATFORM_TYPE_ENTERPRISE = "enterprise"
+	PLATFORM_TYPE_DEPLOY     = "deploy"
+)
+
+const (
 	TIME_LAYOUT                = "2006-01-02T15:04:05Z"
 	RESOURCE_NAME              = "primehub-license"
 	DEFAULT_RESOURCE_NAMESPACE = "hub"

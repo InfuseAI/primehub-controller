@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"errors"
+	"github.com/spf13/viper"
 	"os"
 	"reflect"
 	"strconv"
@@ -31,6 +32,7 @@ type LicenseReconciler struct {
 	resourceName      string
 	resourceNamespace string
 	RequeueAfter      time.Duration
+	platformType      string
 }
 
 func (r *LicenseReconciler) buildSecret(status *primehubv1alpha1.LicenseStatus) *corev1.Secret {
@@ -161,7 +163,7 @@ func (r *LicenseReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, err
 	}
 
 	lic = lic.DeepCopy()
-	verifiedLicense := license.NewLicense(lic.Spec.SignedLicense)
+	verifiedLicense := license.NewLicense(lic.Spec.SignedLicense, r.platformType)
 	if verifiedLicense.Status == license.STATUS_INVALID {
 		log.Info(verifiedLicense.Err.Error())
 		defaultLic, _ := r.createDefaultLicense()
@@ -222,6 +224,12 @@ func (r *LicenseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.resourceName = license.RESOURCE_NAME
 	r.resourceNamespace = namespace
 	r.RequeueAfter = license.CHECK_EXPIRY_INTERVAL
+	switch mode := viper.GetString("primehubMode"); mode {
+	case license.PLATFORM_TYPE_ENTERPRISE, "ee":
+		r.platformType = license.PLATFORM_TYPE_ENTERPRISE
+	case license.PLATFORM_TYPE_DEPLOY:
+		r.platformType = license.PLATFORM_TYPE_DEPLOY
+	}
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&primehubv1alpha1.License{}).
