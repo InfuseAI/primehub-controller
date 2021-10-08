@@ -3,7 +3,6 @@ package controllers
 import (
 	"context"
 	"errors"
-	"github.com/spf13/viper"
 	"os"
 	"reflect"
 	"strconv"
@@ -224,7 +223,7 @@ func (r *LicenseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.resourceName = license.RESOURCE_NAME
 	r.resourceNamespace = namespace
 	r.RequeueAfter = license.CHECK_EXPIRY_INTERVAL
-	switch mode := viper.GetString("primehubMode"); mode {
+	switch platformType := os.Getenv("PLATFORM_TYPE"); platformType {
 	case license.PLATFORM_TYPE_ENTERPRISE, "ee":
 		r.platformType = license.PLATFORM_TYPE_ENTERPRISE
 	case license.PLATFORM_TYPE_DEPLOY:
