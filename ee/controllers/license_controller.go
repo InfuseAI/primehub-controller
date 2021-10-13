@@ -125,7 +125,7 @@ func (r *LicenseReconciler) createDefaultLicense() (lic primehubv1alpha1.License
 	}
 	status := r.generateStatus(content)
 	status.Expired = license.STATUS_INVALID
-	status.Reason = "invalid since we can't valid your licensed key, using default now"
+	status.Reason = "Invalid license or wrong target platform. Use the default license instead."
 	defaultLic.Status = status
 
 	return defaultLic, nil
