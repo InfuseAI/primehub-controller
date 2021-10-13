@@ -31,6 +31,7 @@ type LicenseReconciler struct {
 	resourceName      string
 	resourceNamespace string
 	RequeueAfter      time.Duration
+	platformType      string
 }
 
 func (r *LicenseReconciler) buildSecret(status *primehubv1alpha1.LicenseStatus) *corev1.Secret {
@@ -100,6 +101,9 @@ func (r *LicenseReconciler) generateStatus(content map[string]string) (status pr
 	status.MaxGroup = getIntField(content, "max_group", -1)
 	status.MaxNode = getIntField(content, "max_node", -1)
 	status.MaxModelDeploy = getIntField(content, "max_model_deploy", 0)
+	if value, ok := content["platform_type"]; ok {
+		status.PlatformType = value
+	}
 	return
 }
 
@@ -121,7 +125,7 @@ func (r *LicenseReconciler) createDefaultLicense() (lic primehubv1alpha1.License
 	}
 	status := r.generateStatus(content)
 	status.Expired = license.STATUS_INVALID
-	status.Reason = "invalid since we can't valid your licensed key, using default now"
+	status.Reason = "Invalid license or wrong target platform. Use the default license instead."
 	defaultLic.Status = status
 
 	return defaultLic, nil
@@ -158,7 +162,7 @@ func (r *LicenseReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, err
 	}
 
 	lic = lic.DeepCopy()
-	verifiedLicense := license.NewLicense(lic.Spec.SignedLicense)
+	verifiedLicense := license.NewLicense(lic.Spec.SignedLicense, r.platformType)
 	if verifiedLicense.Status == license.STATUS_INVALID {
 		log.Info(verifiedLicense.Err.Error())
 		defaultLic, _ := r.createDefaultLicense()
@@ -219,6 +223,12 @@ func (r *LicenseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.resourceName = license.RESOURCE_NAME
 	r.resourceNamespace = namespace
 	r.RequeueAfter = license.CHECK_EXPIRY_INTERVAL
+	switch platformType := os.Getenv("PLATFORM_TYPE"); platformType {
+	case license.PLATFORM_TYPE_ENTERPRISE, "ee":
+		r.platformType = license.PLATFORM_TYPE_ENTERPRISE
+	case license.PLATFORM_TYPE_DEPLOY:
+		r.platformType = license.PLATFORM_TYPE_DEPLOY
+	}
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&primehubv1alpha1.License{}).
