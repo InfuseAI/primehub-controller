@@ -25,6 +25,7 @@ type LicenseStatus struct {
 	LicensedTo     string `json:"licensed_to,omitempty"`
 	StartedAt      string `json:"started_at,omitempty"`
 	ExpiredAt      string `json:"expired_at,omitempty"`
+	MaxUser        *int   `json:"max_user,omitempty"`
 	MaxGroup       *int   `json:"max_group,omitempty"`
 	MaxNode        *int   `json:"max_node,omitempty"`
 	MaxModelDeploy *int   `json:"max_model_deploy,omitempty"`

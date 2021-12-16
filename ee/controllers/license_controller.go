@@ -98,6 +98,7 @@ func (r *LicenseReconciler) generateStatus(content map[string]string) (status pr
 	status.LicensedTo = content["licensed_to"]
 	status.StartedAt = content["started_at"]
 	status.ExpiredAt = content["expired_at"]
+	status.MaxUser = getIntField(content, "max_user", -1)
 	status.MaxGroup = getIntField(content, "max_group", -1)
 	status.MaxNode = getIntField(content, "max_node", -1)
 	status.MaxModelDeploy = getIntField(content, "max_model_deploy", 0)
