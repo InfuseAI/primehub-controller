@@ -1,28 +1,89 @@
 domain: io
 repo: primehub-controller
+projectName: primehub-controller
+layout:
+- go.kubebuilder.io/v3
 resources:
-- group: primehub
-  kind: ImageSpec
-  version: v1alpha1
-- group: primehub
-  kind: ImageSpecJob
-  version: v1alpha1
-- group: primehub
-  kind: PhJob
-  version: v1alpha1
-- group: primehub
-  kind: PhSchedule
-  version: v1alpha1
-- group: primehub
-  kind: PhDeployment
-  version: v1alpha1
-- group: primehub
+- api:
+    crdVersion: v1alpha1
+    namespaced: true
+  controller: true
+  domain: io
+  group: primehub
   kind: Image
+  path: primehub-controller/api/v1alpha1
   version: v1alpha1
-- group: primehub
-  kind: PhAppTemplate
+- api:
+    crdVersion: v1alpha1
+    namespaced: true
+  controller: true
+  domain: io
+  group: primehub
+  kind: ImageSpec
+  path: primehub-controller/api/v1alpha1
   version: v1alpha1
-- group: primehub
+- api:
+    crdVersion: v1alpha1
+    namespaced: true
+  controller: true
+  domain: io
+  group: primehub
+  kind: ImageSpecJob
+  path: primehub-controller/api/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1alpha1
+    namespaced: true
+  controller: true
+  domain: io
+  group: primehub
   kind: PhApplication
+  path: primehub-controller/api/v1alpha1
   version: v1alpha1
-version: "2"
+- api:
+    crdVersion: v1alpha1
+    namespaced: true
+  controller: true
+  domain: io
+  group: primehub
+  kind: PhAppTemplate
+  path: primehub-controller/api/v1alpha1
+  version: v1alpha1
+
+- api:
+    crdVersion: v1alpha1
+    namespaced: true
+  controller: true
+  domain: io
+  group: primehub
+  kind: License
+  path: primehub-controller/ee/api/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1alpha1
+    namespaced: true
+  controller: true
+  domain: io
+  group: primehub
+  kind: PhDeployment
+  path: primehub-controller/ee/api/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1alpha1
+    namespaced: true
+  controller: true
+  domain: io
+  group: primehub
+  kind: PhJob
+  path: primehub-controller/ee/api/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1alpha1
+    namespaced: true
+  controller: true
+  domain: io
+  group: primehub
+  kind: PhSchedule
+  path: primehub-controller/ee/api/v1alpha1
+  version: v1alpha1
+version: "3"

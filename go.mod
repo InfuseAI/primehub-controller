@@ -1,26 +1,23 @@
 module primehub-controller
 
-go 1.13
+go 1.16
 
 require (
-	github.com/fatih/structtag v1.2.0 // indirect
-	github.com/go-logr/logr v0.1.0
+	github.com/evanphx/json-patch v5.6.0+incompatible // indirect
+	github.com/go-logr/logr v1.2.0
+	github.com/google/go-cmp v0.5.7 // indirect
 	github.com/karlseguin/ccache v2.0.3+incompatible
 	github.com/karlseguin/expect v1.0.7 // indirect
-	github.com/magiconair/properties v1.8.1 // indirect
-	github.com/onsi/ginkgo v1.6.0
-	github.com/onsi/gomega v1.4.2
-	github.com/pelletier/go-toml v1.6.0 // indirect
-	github.com/robfig/cron/v3 v3.0.0 // indirect
-	github.com/spf13/jwalterweatherman v1.1.0 // indirect
-	github.com/spf13/viper v1.4.0
-	github.com/stretchr/testify v1.3.0
-	go.uber.org/zap v1.10.0
-	golang.org/x/sys v0.0.0-20191029155521-f43be2a4598c // indirect
-	golang.org/x/text v0.3.2 // indirect
-	k8s.io/api v0.0.0-20190918195907-bd6ac527cfd2
-	k8s.io/apimachinery v0.0.0-20190817020851-f2f3a405f61d
-	k8s.io/client-go v0.0.0-20190918200256-06eb1244587a
-	sigs.k8s.io/controller-runtime v0.3.0
+	github.com/onsi/ginkgo v1.16.5
+	github.com/onsi/gomega v1.17.0
+	github.com/spf13/viper v1.10.1
+	github.com/stretchr/objx v0.2.0 // indirect
+	github.com/stretchr/testify v1.7.0
+	go.uber.org/zap v1.19.1
+	k8s.io/api v0.23.2
+	k8s.io/apimachinery v0.23.2
+	k8s.io/client-go v0.23.2
+	k8s.io/kube-openapi v0.0.0-20220114203427-a0453230fd26 // indirect
+	sigs.k8s.io/controller-runtime v0.11.0
 
 )

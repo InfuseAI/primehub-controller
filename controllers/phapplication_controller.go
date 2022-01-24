@@ -32,7 +32,7 @@ type PhApplicationReconciler struct {
 	PrimeHubURL   string
 }
 
-func (r *PhApplicationReconciler) getPhApplicationObject(namespace string, name string, obj runtime.Object) (bool, error) {
+func (r *PhApplicationReconciler) getPhApplicationObject(namespace string, name string, obj client.Object) (bool, error) {
 	exist := true
 	err := r.Get(context.Background(), client.ObjectKey{Namespace: namespace, Name: name}, obj)
 	if err != nil {
@@ -485,7 +485,7 @@ func (r *PhApplicationReconciler) updatePhApplicationStatus(phApplication *v1alp
 // +kubebuilder:rbac:groups=extensions;apps,resources=deployments,verbs=get;list;watch;create;update;delete;patch
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;delete;patch
 
-func (r *PhApplicationReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+func (r *PhApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	var err error
 	var phApplication v1alpha1.PhApplication
 	var reconcileError error

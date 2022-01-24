@@ -2,7 +2,8 @@ package controllers
 
 import (
 	"context"
-	log "github.com/go-logr/logr/testing"
+	log "github.com/go-logr/logr"
+
 	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkv1 "k8s.io/api/networking/v1"
@@ -19,7 +20,8 @@ import (
 )
 
 func TestPhApplicationReconciler_Reconcile(t *testing.T) {
-	logger := log.NullLogger{}
+	ctx := context.Background()
+	logger := log.Discard()
 	scheme := runtime.NewScheme()
 	_ = v1alpha1.AddToScheme(scheme)
 	_ = appv1.AddToScheme(scheme)
@@ -131,7 +133,7 @@ func TestPhApplicationReconciler_Reconcile(t *testing.T) {
 
 	t.Run("Create PhApplication", func(t *testing.T) {
 		var err error
-		_, err = r.Reconcile(req)
+		_, err = r.Reconcile(ctx, req)
 		if err != nil {
 			t.Errorf("PhApplication should create without error")
 		}

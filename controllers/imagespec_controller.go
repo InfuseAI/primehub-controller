@@ -36,8 +36,7 @@ func ignoreNotFound(err error) error {
 // +kubebuilder:rbac:groups=primehub.io,resources=imagespecs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=primehub.io,resources=imagespecs/status,verbs=get;update;patch
 
-func (r *ImageSpecReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx := context.Background()
+func (r *ImageSpecReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("imagespec", req.NamespacedName)
 
 	if err := checkPushSecret(r, ctx, req, log); err != nil {

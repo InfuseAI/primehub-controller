@@ -208,10 +208,9 @@ func updateImageStatus(r *ImageReconciler, ctx context.Context, image *v1alpha1.
 // +kubebuilder:rbac:groups=primehub.io,resources=images,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=primehub.io,resources=images/status,verbs=get;update;patch
 
-func (r *ImageReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+func (r *ImageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	var image v1alpha1.Image
 	var err error
-	ctx := context.Background()
 	log := r.Log.WithValues("image", req.NamespacedName)
 
 	if err = r.Get(ctx, req.NamespacedName, &image); err != nil {

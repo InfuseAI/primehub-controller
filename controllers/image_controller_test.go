@@ -2,7 +2,7 @@ package controllers
 
 import (
 	"context"
-	log "github.com/go-logr/logr/testing"
+	log "github.com/go-logr/logr"
 	"github.com/spf13/viper"
 	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -23,7 +23,7 @@ func Test_createImageSpecJob(t *testing.T) {
 	var namespace string
 	var imageCreateTime time.Time
 	ctx := context.Background()
-	logger := log.NullLogger{}
+	logger := log.Discard()
 	scheme := runtime.NewScheme()
 	_ = v1alpha1.AddToScheme(scheme)
 	_ = v1.AddToScheme(scheme)
@@ -133,7 +133,7 @@ func Test_cancelImageSpecJob(t *testing.T) {
 	var namespace string
 	var imageCreateTime time.Time
 	ctx := context.Background()
-	logger := log.NullLogger{}
+	logger := log.Discard()
 	scheme := runtime.NewScheme()
 	_ = v1alpha1.AddToScheme(scheme)
 	_ = v1.AddToScheme(scheme)
@@ -221,7 +221,7 @@ func Test_rebuildImageSpecJob(t *testing.T) {
 	var namespace string
 	var imageCreateTime time.Time
 	ctx := context.Background()
-	logger := log.NullLogger{}
+	logger := log.Discard()
 	scheme := runtime.NewScheme()
 	_ = v1alpha1.AddToScheme(scheme)
 	_ = v1.AddToScheme(scheme)
@@ -306,7 +306,7 @@ func Test_updateImageStatus(t *testing.T) {
 	var namespace string
 	var imageCreateTime time.Time
 	ctx := context.Background()
-	logger := log.NullLogger{}
+	logger := log.Discard()
 	scheme := runtime.NewScheme()
 	_ = v1alpha1.AddToScheme(scheme)
 	_ = v1.AddToScheme(scheme)
@@ -495,7 +495,7 @@ func Test_isImageCustomBuild(t *testing.T) {
 
 func Test_makeImageControllerAction(t *testing.T) {
 	ctx := context.Background()
-	logger := log.NullLogger{}
+	logger := log.Discard()
 	scheme := runtime.NewScheme()
 	_ = v1alpha1.AddToScheme(scheme)
 	_ = v1.AddToScheme(scheme)
@@ -802,7 +802,7 @@ func Test_makeImageControllerAction(t *testing.T) {
 
 func TestImageReconciler_Reconcile(t *testing.T) {
 	ctx := context.Background()
-	logger := log.NullLogger{}
+	logger := log.Discard()
 	scheme := runtime.NewScheme()
 	_ = v1alpha1.AddToScheme(scheme)
 	_ = v1.AddToScheme(scheme)
@@ -852,7 +852,7 @@ func TestImageReconciler_Reconcile(t *testing.T) {
 	var targetImage string
 	t.Run("Create Image Build", func(t *testing.T) {
 		var err error
-		_, err = r.Reconcile(req)
+		_, err = r.Reconcile(ctx, req)
 		if err != nil {
 			t.Errorf("ImageReconciler should create without error")
 		}
@@ -881,7 +881,7 @@ func TestImageReconciler_Reconcile(t *testing.T) {
 
 		createdImageSpecJob.Status.Phase = "Running"
 		_ = r.Update(ctx, createdImageSpecJob)
-		_, err = r.Reconcile(req)
+		_, err = r.Reconcile(ctx, req)
 		if err != nil {
 			t.Errorf("ImageReconciler should update without error")
 		}
@@ -895,7 +895,7 @@ func TestImageReconciler_Reconcile(t *testing.T) {
 		// Update Successeded status with URL
 		createdImageSpecJob.Status.Phase = CustomImageJobStatusSucceeded
 		_ = r.Update(ctx, createdImageSpecJob)
-		_, err = r.Reconcile(req)
+		_, err = r.Reconcile(ctx, req)
 		if err != nil {
 			t.Errorf("ImageReconciler should update without error")
 		}
@@ -924,7 +924,7 @@ func TestImageReconciler_Reconcile(t *testing.T) {
 		updatedImage.Spec.ImageSpec.UpdateTime = &metav1.Time{Time: imageCreateTime}
 		_ = r.Update(ctx, updatedImage)
 
-		_, err = r.Reconcile(req)
+		_, err = r.Reconcile(ctx, req)
 		if err != nil {
 			t.Errorf("ImageReconciler should rebuild without error")
 		}
@@ -942,7 +942,7 @@ func TestImageReconciler_Reconcile(t *testing.T) {
 		updatedImage.Spec.ImageSpec.Cancel = true
 		_ = r.Update(ctx, updatedImage)
 
-		_, err = r.Reconcile(req)
+		_, err = r.Reconcile(ctx, req)
 		if err != nil {
 			t.Errorf("ImageReconciler should cancel without error")
 		}
@@ -956,7 +956,7 @@ func TestImageReconciler_Reconcile(t *testing.T) {
 	// Skip
 	t.Run("Skip Image Build if Already Cancelled", func(t *testing.T) {
 		var err error
-		_, err = r.Reconcile(req)
+		_, err = r.Reconcile(ctx, req)
 		if err != nil {
 			t.Errorf("ImageReconciler should do skip without error")
 		}

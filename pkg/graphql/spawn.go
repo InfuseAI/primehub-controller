@@ -1021,7 +1021,7 @@ func (spawner *Spawner) buildContainer(inherit *corev1.Container) corev1.Contain
 
 	if spawner.symlinks != nil {
 		container.Lifecycle = &corev1.Lifecycle{
-			PostStart: &corev1.Handler{
+			PostStart: &corev1.LifecycleHandler{
 				Exec: &corev1.ExecAction{
 					Command: []string{
 						"sh",
