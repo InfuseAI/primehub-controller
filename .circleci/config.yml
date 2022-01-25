@@ -5,7 +5,7 @@ jobs:
   unit_test_ce:
     docker: # run the steps with Docker
       # CircleCI Go images available at: https://hub.docker.com/r/circleci/golang/
-      - image: circleci/golang:1.16
+      - image: circleci/golang:1.17
     steps:
       - checkout
       - run:
@@ -254,27 +254,27 @@ workflows:
               only: /.*/
             branches:
               ignore: /.*/
-      - unit_test_ee:
-          filters:
-            tags:
-              only: /.*/
-            branches:
-              ignore: /.*/
-      - build_ce:
-          requires:
-            - unit_test_ce
-            - unit_test_ee
-          filters:
-            tags:
-              only: /.*/
-            branches:
-              ignore: /.*/
-      - build_ee:
-          requires:
-            - unit_test_ce
-            - unit_test_ee
-          filters:
-            tags:
-              only: /.*/
-            branches:
-              ignore: /.*/
+      #- unit_test_ee:
+      #    filters:
+      #      tags:
+      #        only: /.*/
+      #      branches:
+      #        ignore: /.*/
+      #- build_ce:
+      #    requires:
+      #      - unit_test_ce
+      #      - unit_test_ee
+      #    filters:
+      #      tags:
+      #        only: /.*/
+      #      branches:
+      #        ignore: /.*/
+      #- build_ee:
+      #    requires:
+      #      - unit_test_ce
+      #      - unit_test_ee
+      #    filters:
+      #      tags:
+      #        only: /.*/
+      #      branches:
+      #        ignore: /.*/
