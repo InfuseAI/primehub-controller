@@ -5,7 +5,7 @@ jobs:
   unit_test_ce:
     docker: # run the steps with Docker
       # CircleCI Go images available at: https://hub.docker.com/r/circleci/golang/
-      - image: circleci/golang:1.15
+      - image: circleci/golang:1.16
     steps:
       - checkout
       - run:
@@ -14,13 +14,10 @@ jobs:
             os=$(go env GOOS)
             arch=$(go env GOARCH)
 
-            # download kubebuilder and extract it to tmp
-            curl -sL https://github.com/kubernetes-sigs/kubebuilder/releases/download/v2.2.0/kubebuilder_2.2.0_${os}_${arch}.tar.gz | tar -xz -C /tmp/
+            # download kubebuilder
+            curl -L -o kubebuilder https://go.kubebuilder.io/dl/latest/${os}/${arch}
+            chmod +x kubebuilder && mv kubebuilder /usr/local/bin/
 
-            # move to a long-term location and put it on your path
-            # (you'll need to set the KUBEBUILDER_ASSETS env var if you put it somewhere else)
-            sudo mv /tmp/kubebuilder_2.2.0_${os}_${arch} /usr/local/kubebuilder
-            export PATH=$PATH:/usr/local/kubebuilder/bin
       - setup_remote_docker
       - run:
           name: Unit tests
