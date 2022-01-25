@@ -16,7 +16,8 @@ jobs:
 
             # download kubebuilder
             curl -L -o kubebuilder https://go.kubebuilder.io/dl/latest/${os}/${arch}
-            chmod +x kubebuilder && mv kubebuilder /usr/local/bin/
+            chmod +x kubebuilder
+            sudo mv kubebuilder /usr/local/bin/
 
       - setup_remote_docker
       - run:
