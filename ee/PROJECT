@@ -1,7 +1,16 @@
 domain: io
 repo: primehub-controller/ee
+projectName: primehub-controller/ee
+layout:
+- go.kubebuilder.io/v3
 resources:
-- group: primehub
+- api:
+    crdVersion: v1alpha1
+    namespaced: true
+  controller: true
+  domain: io
+  group: primehub
   kind: License
+  path: primehub-controller/ee/api/v1alpha1
   version: v1alpha1
-version: "2"
+version: "3"

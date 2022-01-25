@@ -21,7 +21,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/go-logr/logr"
-	"github.com/prometheus/common/log"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -73,8 +72,7 @@ const (
 // +kubebuilder:rbac:groups=primehub.io,resources=phdeployments/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups="",resources=events,verbs=get;list;watch
 
-func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx := context.Background()
+func (r *PhDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := r.Log.WithValues("phdeployment", req.NamespacedName)
 
 	phDeployment := &primehubv1alpha1.PhDeployment{}
@@ -1193,20 +1191,20 @@ func (r *PhDeploymentReconciler) buildEngineContainer(phDeployment *primehubv1al
 			//{ContainerPort: int32(8082), Name: "admin", Protocol: corev1.ProtocolTCP},
 			//{ContainerPort: int32(9090), Name: "jmx", Protocol: corev1.ProtocolTCP},
 		},
-		ReadinessProbe: &corev1.Probe{Handler: corev1.Handler{HTTPGet: &corev1.HTTPGetAction{Port: intstr.FromString("rest"), Path: "/ready", Scheme: corev1.URISchemeHTTP}},
+		ReadinessProbe: &corev1.Probe{ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Port: intstr.FromString("rest"), Path: "/ready", Scheme: corev1.URISchemeHTTP}},
 			InitialDelaySeconds: 20,
 			PeriodSeconds:       5,
 			FailureThreshold:    3,
 			SuccessThreshold:    1,
 			TimeoutSeconds:      60},
-		LivenessProbe: &corev1.Probe{Handler: corev1.Handler{HTTPGet: &corev1.HTTPGetAction{Port: intstr.FromString("rest"), Path: "/live", Scheme: corev1.URISchemeHTTP}},
+		LivenessProbe: &corev1.Probe{ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Port: intstr.FromString("rest"), Path: "/live", Scheme: corev1.URISchemeHTTP}},
 			InitialDelaySeconds: 20,
 			PeriodSeconds:       5,
 			FailureThreshold:    3,
 			SuccessThreshold:    1,
 			TimeoutSeconds:      60},
 		Lifecycle: &corev1.Lifecycle{
-			PreStop: &corev1.Handler{
+			PreStop: &corev1.LifecycleHandler{
 				Exec: &corev1.ExecAction{Command: []string{"/bin/sh", "-c", "curl 127.0.0.1:8000" + "/pause; /bin/sleep 10"}},
 			},
 		},
@@ -1285,7 +1283,7 @@ func (r PhDeploymentReconciler) buildModelContainer(phDeployment *primehubv1alph
 		Name:  "model",
 		Image: phDeployment.Spec.Predictors[0].ModelImage,
 		ReadinessProbe: &corev1.Probe{
-			Handler:             corev1.Handler{TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromString("http")}},
+			ProbeHandler:        corev1.ProbeHandler{TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromString("http")}},
 			InitialDelaySeconds: 20,
 			PeriodSeconds:       5,
 			FailureThreshold:    3,
@@ -1293,7 +1291,7 @@ func (r PhDeploymentReconciler) buildModelContainer(phDeployment *primehubv1alph
 			TimeoutSeconds:      60,
 		},
 		LivenessProbe: &corev1.Probe{
-			Handler:             corev1.Handler{TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromString("http")}},
+			ProbeHandler:        corev1.ProbeHandler{TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromString("http")}},
 			InitialDelaySeconds: 20,
 			PeriodSeconds:       5,
 			FailureThreshold:    3,
@@ -1301,7 +1299,7 @@ func (r PhDeploymentReconciler) buildModelContainer(phDeployment *primehubv1alph
 			TimeoutSeconds:      60,
 		},
 		Lifecycle: &corev1.Lifecycle{
-			PreStop: &corev1.Handler{
+			PreStop: &corev1.LifecycleHandler{
 				Exec: &corev1.ExecAction{
 					Command: []string{"/bin/sh", "-c", "/bin/sleep 10"},
 				},
@@ -1457,6 +1455,7 @@ func (r *PhDeploymentReconciler) deleteDeployment(ctx context.Context, deploymen
 
 // scale down deployment to 0 replica
 func (r *PhDeploymentReconciler) scaleDownDeployment(ctx context.Context, deployment *v1.Deployment) error {
+	logger := r.Log.WithValues("phDeployment", deployment.Name)
 
 	if *deployment.Spec.Replicas == int32(0) {
 		// if replicas has already changed to 0, then return
@@ -1468,7 +1467,7 @@ func (r *PhDeploymentReconciler) scaleDownDeployment(ctx context.Context, deploy
 
 	err := r.Client.Update(ctx, deployment)
 	if err != nil {
-		log.Error(err, "return since k8s UPDATE deployment err ")
+		logger.Error(err, "return since k8s UPDATE deployment err ")
 		return err
 	}
 	return nil

@@ -135,8 +135,7 @@ func (r *LicenseReconciler) createDefaultLicense() (lic primehubv1alpha1.License
 // +kubebuilder:rbac:groups=primehub.io,resources=licenses,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=primehub.io,resources=licenses/status,verbs=get;update;patch
 
-func (r *LicenseReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, err error) {
-	ctx := context.Background()
+func (r *LicenseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
 	log := r.Log.WithValues("license", req.NamespacedName)
 
 	// Skip if it's not in the same namespace
@@ -196,7 +195,7 @@ func (r *LicenseReconciler) EnsureLicense(mgr ctrl.Manager) (err error) {
 	mgrSyncCtx, mgrSyncCtxCancel := context.WithTimeout(context.Background(), 10*60*time.Second)
 	defer mgrSyncCtxCancel()
 
-	if synced := mgr.GetCache().WaitForCacheSync(mgrSyncCtx.Done()); !synced {
+	if synced := mgr.GetCache().WaitForCacheSync(mgrSyncCtx); !synced {
 		return errors.New("timed out waiting for cachesync")
 	}
 

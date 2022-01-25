@@ -74,8 +74,7 @@ func (r *PhScheduleReconciler) buildPhJob(phSchedule *primehubv1alpha1.PhSchedul
 // +kubebuilder:rbac:groups=primehub.io,resources=phschedules,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=primehub.io,resources=phschedules/status,verbs=get;update;patch
 
-func (r *PhScheduleReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx := context.Background()
+func (r *PhScheduleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("phschedule", req.Name)
 
 	phSchedule := &primehubv1alpha1.PhSchedule{}
