@@ -22,19 +22,13 @@ var _ = Context("Inside of a new namespace", func() {
 	ctx := context.TODO()
 	ns := &core.Namespace{}
 
-	var stopCh chan struct{}
-
 	BeforeEach(func() {
-		stopCh = make(chan struct{})
 		*ns = core.Namespace{
 			ObjectMeta: metav1.ObjectMeta{Name: "testns-" + randStringRunes(5)},
 		}
 
 		err := k8sClient.Create(ctx, ns)
 		Expect(err).NotTo(HaveOccurred(), "failed to create test namespace")
-
-		mgr, err := ctrl.NewManager(cfg, ctrl.Options{})
-		Expect(err).NotTo(HaveOccurred(), "failed to create manager")
 
 		controller := &ImageSpecReconciler{
 			Client: mgr.GetClient(),
@@ -43,16 +37,9 @@ var _ = Context("Inside of a new namespace", func() {
 		}
 		err = controller.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
-
-		go func() {
-			err := mgr.Start(ctx)
-			Expect(err).NotTo(HaveOccurred(), "failed to start manager")
-		}()
 	})
 
 	AfterEach(func() {
-		close(stopCh)
-
 		err := k8sClient.Delete(ctx, ns)
 		Expect(err).NotTo(HaveOccurred(), "failed to delete test namespace")
 	})

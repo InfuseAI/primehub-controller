@@ -1,11 +1,11 @@
 domain: io
-repo: primehub-controller
-projectName: primehub-controller
 layout:
 - go.kubebuilder.io/v3
+projectName: primehub-controller
+repo: primehub-controller
 resources:
 - api:
-    crdVersion: v1alpha1
+    crdVersion: v1
     namespaced: true
   controller: true
   domain: io
@@ -14,7 +14,7 @@ resources:
   path: primehub-controller/api/v1alpha1
   version: v1alpha1
 - api:
-    crdVersion: v1alpha1
+    crdVersion: v1
     namespaced: true
   controller: true
   domain: io
@@ -23,7 +23,7 @@ resources:
   path: primehub-controller/api/v1alpha1
   version: v1alpha1
 - api:
-    crdVersion: v1alpha1
+    crdVersion: v1
     namespaced: true
   controller: true
   domain: io
@@ -32,7 +32,7 @@ resources:
   path: primehub-controller/api/v1alpha1
   version: v1alpha1
 - api:
-    crdVersion: v1alpha1
+    crdVersion: v1
     namespaced: true
   controller: true
   domain: io
@@ -41,7 +41,7 @@ resources:
   path: primehub-controller/api/v1alpha1
   version: v1alpha1
 - api:
-    crdVersion: v1alpha1
+    crdVersion: v1
     namespaced: true
   controller: true
   domain: io
@@ -49,9 +49,8 @@ resources:
   kind: PhAppTemplate
   path: primehub-controller/api/v1alpha1
   version: v1alpha1
-
 - api:
-    crdVersion: v1alpha1
+    crdVersion: v1
     namespaced: true
   controller: true
   domain: io
@@ -60,7 +59,7 @@ resources:
   path: primehub-controller/ee/api/v1alpha1
   version: v1alpha1
 - api:
-    crdVersion: v1alpha1
+    crdVersion: v1
     namespaced: true
   controller: true
   domain: io
@@ -69,7 +68,7 @@ resources:
   path: primehub-controller/ee/api/v1alpha1
   version: v1alpha1
 - api:
-    crdVersion: v1alpha1
+    crdVersion: v1
     namespaced: true
   controller: true
   domain: io

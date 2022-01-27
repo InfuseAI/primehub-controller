@@ -2,8 +2,11 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"path/filepath"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"testing"
 	"time"
 
@@ -29,6 +32,9 @@ import (
 var cfg *rest.Config
 var k8sClient client.Client
 var testEnv *envtest.Environment
+var mgr manager.Manager
+var ctx = context.Background()
+var ctxCancel context.CancelFunc
 var letterRunes = []rune("abcdefghijklmnopqrstuvwxyz1234567890")
 
 func TestAPIs(t *testing.T) {
@@ -39,12 +45,15 @@ func TestAPIs(t *testing.T) {
 		[]Reporter{printer.NewlineReporter{}})
 }
 
-var _ = BeforeSuite(func(done Done) {
+var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
+
+	ctx, ctxCancel = context.WithCancel(context.TODO())
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths: []string{filepath.Join("..", "config", "crd", "bases")},
+		CRDDirectoryPaths:     []string{filepath.Join("..", "config", "crd", "bases")},
+		ErrorIfCRDPathMissing: false,
 	}
 
 	var err error
@@ -55,27 +64,36 @@ var _ = BeforeSuite(func(done Done) {
 	err = primehubv1alpha1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = primehubv1alpha1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = primehubv1alpha1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = primehubv1alpha1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-
 	// +kubebuilder:scaffold:scheme
 
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
 	Expect(err).ToNot(HaveOccurred())
 	Expect(k8sClient).ToNot(BeNil())
 
-	close(done)
+	mgr, err = ctrl.NewManager(cfg, ctrl.Options{
+		Scheme:             scheme.Scheme,
+		LeaderElection:     false,
+		MetricsBindAddress: "0",
+	})
+	Expect(err).NotTo(HaveOccurred(), "failed to create manager")
+	fmt.Println("mgr created")
+
+	go func() {
+		//defer GinkgoRecover()
+		err := mgr.Start(ctx)
+		Expect(err).NotTo(HaveOccurred(), "failed to start manager")
+		//gexec.KillAndWait(4 * time.Second)
+		//err = testEnv.Stop()
+		//Expect(err).ToNot(HaveOccurred())
+	}()
 }, 60)
 
 var _ = AfterSuite(func() {
+	ctxCancel()
 	By("tearing down the test environment")
 	err := testEnv.Stop()
+	fmt.Println("err: ")
+	fmt.Println(err)
 	Expect(err).ToNot(HaveOccurred())
 })
 

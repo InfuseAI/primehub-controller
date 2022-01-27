@@ -544,6 +544,9 @@ func Test_makeImageControllerAction(t *testing.T) {
 			UpdateTime:  &metav1.Time{Time: imageCreateTime},
 		},
 	}
+	mockCancelImageSpecJob.Kind = "ImageSpecJob"
+	mockCancelImageSpecJob.APIVersion = "primehub.io/v1alpha1"
+
 	cancelCustomImage := &v1alpha1.Image{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 		Spec: v1alpha1.ImageCrdSpec{
@@ -587,6 +590,9 @@ func Test_makeImageControllerAction(t *testing.T) {
 			UpdateTime:  &metav1.Time{Time: imageCreateTime},
 		},
 	}
+	mockRebuildImageSpecJob.Kind = "ImageSpecJob"
+	mockRebuildImageSpecJob.APIVersion = "primehub.io/v1alpha1"
+
 	imageCreateTime = time.Date(2021, time.January, 1, 23, 59, 59, 0, time.Local)
 	rebuildCustomImage := &v1alpha1.Image{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
@@ -639,6 +645,9 @@ func Test_makeImageControllerAction(t *testing.T) {
 			PodName:    name,
 		},
 	}
+	mockUpdateImageSpecJob.Kind = "ImageSpecJob"
+	mockUpdateImageSpecJob.APIVersion = "primehub.io/v1alpha1"
+
 	updateCustomImage := &v1alpha1.Image{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 		Spec: v1alpha1.ImageCrdSpec{
