@@ -155,6 +155,7 @@ func main() {
 		PhfsEnabled:   phfsEnabled,
 		PhfsPVC:       phfsPVC,
 		PrimeHubURL:   viper.GetString("primehubUrl"),
+		ImagePrefix:   viper.GetString("imagePrefix"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PhApplication")
 		os.Exit(1)
@@ -288,6 +289,7 @@ func createDeploymentReconciler(err error, mgr manager.Manager, graphqlClient gr
 		MlflowModelStorageInitializerPullPolicy: mlflowModelStorageInitializerPullPolicy,
 		PhfsEnabled:                             phfsEnabled,
 		PhfsPVC:                                 phfsPVC,
+		ImagePrefix:                             viper.GetString("imagePrefix"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PhDeployment")
 		os.Exit(1)
@@ -327,6 +329,7 @@ func loadConfig() {
 		"modelDeployment.mlflowModelStorageInitializer.image.tag",
 		"modelDeployment.mlflowModelStorageInitializer.image.pullPolicy",
 	}
+
 	if viper.GetBool("modelDeployment.enabled") {
 		configs = append(configs, modelConfigs...)
 	}
