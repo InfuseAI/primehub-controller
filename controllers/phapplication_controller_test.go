@@ -88,7 +88,7 @@ func TestPhApplicationReconciler_Reconcile(t *testing.T) {
 	}
 	fakeClient := fake.NewFakeClientWithScheme(scheme, []runtime.Object{phApplication}...)
 	primehubCache := phcache.NewPrimeHubCache(nil)
-	r := &PhApplicationReconciler{fakeClient, logger, scheme, primehubCache, false, "primehub-store", "http://example.primehub.io"}
+	r := &PhApplicationReconciler{fakeClient, logger, scheme, primehubCache, false, "primehub-store", "http://example.primehub.io", ""}
 	req := controllerruntime.Request{}
 
 	primehubCache.InstanceType.Set("instanceType:"+instanceType, &graphql.DtoInstanceType{

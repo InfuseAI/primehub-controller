@@ -19,6 +19,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"primehub-controller/api/v1alpha1"
+	"primehub-controller/pkg/airgap"
 )
 
 // PhApplicationReconciler reconciles a PhApplication object
@@ -30,6 +31,7 @@ type PhApplicationReconciler struct {
 	PhfsEnabled   bool
 	PhfsPVC       string
 	PrimeHubURL   string
+	ImagePrefix   string
 }
 
 func (r *PhApplicationReconciler) getPhApplicationObject(namespace string, name string, obj runtime.Object) (bool, error) {
@@ -57,7 +59,8 @@ func (r *PhApplicationReconciler) generateDeploymentSpec(phApplication *v1alpha1
 	if len(phApplication.Spec.AppRoot) > 0 {
 		appRoot = phApplication.Spec.AppRoot
 	}
-	podSpec := phApplication.Spec.PodTemplate.Spec.DeepCopy()
+
+	podSpec := airgap.ApplyAirGapImagePrefix(phApplication.Spec.PodTemplate.Spec.DeepCopy(), r.ImagePrefix)
 	labels := map[string]string{
 		"app":                       phApplication.App(),
 		"primehub.io/phapplication": phApplication.AppName(),
@@ -97,6 +100,7 @@ func (r *PhApplicationReconciler) generateDeploymentSpec(phApplication *v1alpha1
 		PhfsEnabled: r.PhfsEnabled,
 		PhfsPVC:     r.PhfsPVC,
 	}
+
 	spawner, err := graphql.NewSpawnerForPhApplication(phApplication.AppID(), r.PrimeHubURL, *groupInfo, *instanceTypeInfo, globalDatasets, *podSpec, appRoot, options)
 	if err != nil {
 		return err

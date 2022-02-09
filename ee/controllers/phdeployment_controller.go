@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"primehub-controller/pkg/airgap"
 	"reflect"
 	"regexp"
 	"sort"
@@ -51,6 +52,7 @@ type PhDeploymentReconciler struct {
 	MlflowModelStorageInitializerPullPolicy corev1.PullPolicy
 	PhfsEnabled                             bool
 	PhfsPVC                                 string
+	ImagePrefix                             string
 }
 
 type FailedPodStatus struct {
@@ -1026,6 +1028,7 @@ func (r *PhDeploymentReconciler) buildDeployment(ctx context.Context, phDeployme
 		return nil, err
 	}
 
+	airgap.ApplyAirGapImagePrefix(&deployment.Spec.Template.Spec, r.ImagePrefix)
 	return deployment, nil
 }
 
