@@ -49,7 +49,7 @@ modelDeployment:
   modelStorageInitializer:
     image:
       pullPolicy: IfNotPresent
-      repository: gcr.io/kfserving/storage-initializer
+      repository: kfserving/storage-initializer
       tag: v0.4.0
   mlflowModelStorageInitializer:
     image:
