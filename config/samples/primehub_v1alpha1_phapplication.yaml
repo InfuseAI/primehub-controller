@@ -1,0 +1,6 @@
+apiVersion: primehub.io/v1alpha1
+kind: PhApplication
+metadata:
+  name: phapplication-sample
+spec:
+  # TODO(user): Add fields here

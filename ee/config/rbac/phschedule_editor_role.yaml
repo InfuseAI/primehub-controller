@@ -1,0 +1,24 @@
+# permissions for end users to edit phschedules.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: phschedule-editor-role
+rules:
+- apiGroups:
+  - primehub.io
+  resources:
+  - phschedules
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - primehub.io
+  resources:
+  - phschedules/status
+  verbs:
+  - get

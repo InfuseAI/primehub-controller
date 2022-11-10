@@ -21,7 +21,7 @@ import (
 
 func TestConfigurationError(t *testing.T) {
 	// Setup
-	logger := log.NullLogger{}
+	logger := log.NewTestLogger(t)
 	scheme := runtime.NewScheme()
 	_ = primehubv1alpha1.AddToScheme(scheme)
 	_ = v1.AddToScheme(scheme)
@@ -171,7 +171,7 @@ func TestConfigurationError(t *testing.T) {
 
 func TestRuntimeError(t *testing.T) {
 	// Setup
-	logger := log.NullLogger{}
+	logger := log.NewTestLogger(t)
 	scheme := runtime.NewScheme()
 	_ = primehubv1alpha1.AddToScheme(scheme)
 	_ = v1.AddToScheme(scheme)
@@ -319,7 +319,7 @@ func TestRuntimeError(t *testing.T) {
 
 func TestQuotaNotEnough(t *testing.T) {
 	// Setup
-	logger := log.NullLogger{}
+	logger := log.NewTestLogger(t)
 	scheme := runtime.NewScheme()
 	_ = primehubv1alpha1.AddToScheme(scheme)
 	_ = v1.AddToScheme(scheme)
@@ -451,7 +451,7 @@ func TestQuotaNotEnough(t *testing.T) {
 func TestPhDeploymentReconciler_reconcileSecret(t *testing.T) {
 	// Setup
 	ctx := context.TODO()
-	logger := log.NullLogger{}
+	logger := log.NewTestLogger(t)
 	scheme := runtime.NewScheme()
 	_ = primehubv1alpha1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
@@ -557,7 +557,7 @@ func TestExtractNFSConfig(t *testing.T) {
 func TestPhDeployment_BuildModelContainer(t *testing.T) {
 	// Setup
 	ctx := context.TODO()
-	logger := log.NullLogger{}
+	logger := log.NewTestLogger(t)
 	scheme := runtime.NewScheme()
 	_ = primehubv1alpha1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)

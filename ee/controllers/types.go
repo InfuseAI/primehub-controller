@@ -3,14 +3,14 @@ package controllers
 import (
 	autoscalingv2beta2 "k8s.io/api/autoscaling/v2beta1"
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/api/extensions/v1beta1"
+	networkv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type PhIngress struct {
 	Annotations map[string]string
 	Hosts       []string
-	TLS         []v1beta1.IngressTLS
+	TLS         []networkv1.IngressTLS
 }
 
 type PredictiveUnitType string

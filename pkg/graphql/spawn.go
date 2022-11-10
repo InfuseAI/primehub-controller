@@ -352,15 +352,14 @@ func findInstanceType(instanceTypes []DtoInstanceType, instanceTypesGlobal []Dto
 // add volume and volume mount if necessary.
 //
 // project volume is mounted while
-// 1. shared volume is enabled
-// 2. group is the launch group or
-//    group setting `isLaunchGroupOnly` is disabled
+//  1. shared volume is enabled
+//  2. group is the launch group or
+//     group setting `isLaunchGroupOnly` is disabled
 //
 // mount path: /projects/<group name>
 //
 // (if homeSymlink is enabled)
 // homeSymlink: ./<group name> -> /projects/<group name>
-//
 func (spawner *Spawner) applyVolumeForGroup(launchGroup string, group DtoGroup, workingDir string) {
 	if !group.EnabledSharedVolume {
 		return
@@ -513,18 +512,19 @@ func (spawner *Spawner) mergeDataset(slice []DtoDataset, elems ...DtoDataset) []
 
 // apply dataset setting to volumes and environment variables
 //
-// For all volumes
+// # For all volumes
 //
 // mount point: 		/mnt/dataset-<name>
 // dataset symlink:  	/datasets/<name> -> /mnt/dataset-<name> (pv)
-// 									     -> /mnt/dataset-<name>/<name> (git)
+//
+//	-> /mnt/dataset-<name>/<name> (git)
+//
 // home symlink: 		./<name> -> /datasets/<name>
 // all dataset symlink: ./datasets -> /datasets
 //
-// For envirnonment variable
+// # For envirnonment variable
 //
 // <key>:				<DATASET_NAME>_<KEY>=<value>
-//
 func (spawner *Spawner) applyDataset(dataset DtoDataset) {
 	homeSymlink := true
 	isVolume := false
@@ -1021,7 +1021,7 @@ func (spawner *Spawner) buildContainer(inherit *corev1.Container) corev1.Contain
 
 	if spawner.symlinks != nil {
 		container.Lifecycle = &corev1.Lifecycle{
-			PostStart: &corev1.Handler{
+			PostStart: &corev1.LifecycleHandler{
 				Exec: &corev1.ExecAction{
 					Command: []string{
 						"sh",

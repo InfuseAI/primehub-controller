@@ -1,0 +1,6 @@
+apiVersion: primehub.io/v1alpha1
+kind: PhAppTemplate
+metadata:
+  name: phapptemplate-sample
+spec:
+  # TODO(user): Add fields here

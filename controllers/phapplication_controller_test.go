@@ -8,6 +8,7 @@ import (
 	networkv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"primehub-controller/api/v1alpha1"
 	phcache "primehub-controller/pkg/cache"
@@ -19,7 +20,7 @@ import (
 )
 
 func TestPhApplicationReconciler_Reconcile(t *testing.T) {
-	logger := log.NullLogger{}
+	logger := log.NewTestLogger(t)
 	scheme := runtime.NewScheme()
 	_ = v1alpha1.AddToScheme(scheme)
 	_ = appv1.AddToScheme(scheme)
@@ -30,6 +31,7 @@ func TestPhApplicationReconciler_Reconcile(t *testing.T) {
 	instanceType := "cpu-1"
 	group := "group"
 	httpPort := int32(5000)
+	ctx := context.Background()
 
 	phApplication := &v1alpha1.PhApplication{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
@@ -89,7 +91,12 @@ func TestPhApplicationReconciler_Reconcile(t *testing.T) {
 	fakeClient := fake.NewFakeClientWithScheme(scheme, []runtime.Object{phApplication}...)
 	primehubCache := phcache.NewPrimeHubCache(nil)
 	r := &PhApplicationReconciler{fakeClient, logger, scheme, primehubCache, false, "primehub-store", "http://example.primehub.io", ""}
-	req := controllerruntime.Request{}
+	req := controllerruntime.Request{
+		NamespacedName: types.NamespacedName{
+			Namespace: phApplication.Namespace,
+			Name:      phApplication.Name,
+		},
+	}
 
 	primehubCache.InstanceType.Set("instanceType:"+instanceType, &graphql.DtoInstanceType{
 		Name:        "cpu-1",
@@ -131,7 +138,7 @@ func TestPhApplicationReconciler_Reconcile(t *testing.T) {
 
 	t.Run("Create PhApplication", func(t *testing.T) {
 		var err error
-		_, err = r.Reconcile(req)
+		_, err = r.Reconcile(ctx, req)
 		if err != nil {
 			t.Errorf("PhApplication should create without error")
 		}

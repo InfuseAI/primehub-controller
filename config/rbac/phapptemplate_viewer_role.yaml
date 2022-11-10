@@ -1,0 +1,20 @@
+# permissions for end users to view phapptemplates.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: phapptemplate-viewer-role
+rules:
+- apiGroups:
+  - primehub.io
+  resources:
+  - phapptemplates
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - primehub.io
+  resources:
+  - phapptemplates/status
+  verbs:
+  - get

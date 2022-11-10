@@ -1,0 +1,20 @@
+# permissions for end users to view imagespecs.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: imagespec-viewer-role
+rules:
+- apiGroups:
+  - primehub.io
+  resources:
+  - imagespecs
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - primehub.io
+  resources:
+  - imagespecs/status
+  verbs:
+  - get

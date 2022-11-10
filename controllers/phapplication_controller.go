@@ -1,3 +1,19 @@
+/*
+Copyright 2022.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package controllers
 
 import (
@@ -5,21 +21,20 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/go-logr/logr"
+	corev1 "k8s.io/api/core/v1"
+	networkv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"primehub-controller/api/v1alpha1"
+	"primehub-controller/pkg/airgap"
 	phcache "primehub-controller/pkg/cache"
 	"primehub-controller/pkg/graphql"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"time"
 
 	appv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	networkv1 "k8s.io/api/networking/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"primehub-controller/api/v1alpha1"
-	"primehub-controller/pkg/airgap"
+	"k8s.io/apimachinery/pkg/runtime"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // PhApplicationReconciler reconciles a PhApplication object
@@ -34,7 +49,7 @@ type PhApplicationReconciler struct {
 	ImagePrefix   string
 }
 
-func (r *PhApplicationReconciler) getPhApplicationObject(namespace string, name string, obj runtime.Object) (bool, error) {
+func (r *PhApplicationReconciler) getPhApplicationObject(namespace string, name string, obj client.Object) (bool, error) {
 	exist := true
 	err := r.Get(context.Background(), client.ObjectKey{Namespace: namespace, Name: name}, obj)
 	if err != nil {
@@ -488,8 +503,9 @@ func (r *PhApplicationReconciler) updatePhApplicationStatus(phApplication *v1alp
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;delete;patch
 // +kubebuilder:rbac:groups=extensions;apps,resources=deployments,verbs=get;list;watch;create;update;delete;patch
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;delete;patch
+//+kubebuilder:rbac:groups=primehub.io,resources=phapplications/finalizers,verbs=update
 
-func (r *PhApplicationReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+func (r *PhApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	var err error
 	var phApplication v1alpha1.PhApplication
 	var reconcileError error

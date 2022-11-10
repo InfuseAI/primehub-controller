@@ -1,3 +1,19 @@
+/*
+Copyright 2022.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package controllers
 
 import (
@@ -6,34 +22,28 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
-	"primehub-controller/pkg/airgap"
-	"reflect"
-	"regexp"
-	"sort"
-	"strings"
-	"time"
-
+	"github.com/go-logr/logr"
 	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-
-	"k8s.io/api/extensions/v1beta1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/intstr"
-
-	"github.com/go-logr/logr"
-	"github.com/prometheus/common/log"
+	networkv1 "k8s.io/api/networking/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	"math"
 	primehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
+	"primehub-controller/pkg/airgap"
 	"primehub-controller/pkg/escapism"
 	"primehub-controller/pkg/graphql"
-
-	apiequality "k8s.io/apimachinery/pkg/api/equality"
+	"reflect"
+	"regexp"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sort"
+	"strings"
+	"time"
 )
 
 // PhDeploymentReconciler reconciles a PhDeployment object
@@ -71,12 +81,11 @@ const (
 	ModelStorageInitializerName = "model-storage-initializer"
 )
 
-// +kubebuilder:rbac:groups=primehub.io,resources=phdeployments,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=primehub.io,resources=phdeployments/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups="",resources=events,verbs=get;list;watch
+//+kubebuilder:rbac:groups=primehub.io,resources=phdeployments,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=primehub.io,resources=phdeployments/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=primehub.io,resources=phdeployments/finalizers,verbs=update
 
-func (r *PhDeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx := context.Background()
+func (r *PhDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := r.Log.WithValues("phdeployment", req.NamespacedName)
 
 	phDeployment := &primehubv1alpha1.PhDeployment{}
@@ -192,7 +201,7 @@ func (r *PhDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&primehubv1alpha1.PhDeployment{}).
 		Owns(&v1.Deployment{}).
 		Owns(&corev1.Service{}).
-		Owns(&v1beta1.Ingress{}).
+		Owns(&networkv1.Ingress{}).
 		Owns(&corev1.Secret{}).
 		Complete(r)
 }
@@ -1196,20 +1205,20 @@ func (r *PhDeploymentReconciler) buildEngineContainer(phDeployment *primehubv1al
 			//{ContainerPort: int32(8082), Name: "admin", Protocol: corev1.ProtocolTCP},
 			//{ContainerPort: int32(9090), Name: "jmx", Protocol: corev1.ProtocolTCP},
 		},
-		ReadinessProbe: &corev1.Probe{Handler: corev1.Handler{HTTPGet: &corev1.HTTPGetAction{Port: intstr.FromString("rest"), Path: "/ready", Scheme: corev1.URISchemeHTTP}},
+		ReadinessProbe: &corev1.Probe{ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Port: intstr.FromString("rest"), Path: "/ready", Scheme: corev1.URISchemeHTTP}},
 			InitialDelaySeconds: 20,
 			PeriodSeconds:       5,
 			FailureThreshold:    3,
 			SuccessThreshold:    1,
 			TimeoutSeconds:      60},
-		LivenessProbe: &corev1.Probe{Handler: corev1.Handler{HTTPGet: &corev1.HTTPGetAction{Port: intstr.FromString("rest"), Path: "/live", Scheme: corev1.URISchemeHTTP}},
+		LivenessProbe: &corev1.Probe{ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Port: intstr.FromString("rest"), Path: "/live", Scheme: corev1.URISchemeHTTP}},
 			InitialDelaySeconds: 20,
 			PeriodSeconds:       5,
 			FailureThreshold:    3,
 			SuccessThreshold:    1,
 			TimeoutSeconds:      60},
 		Lifecycle: &corev1.Lifecycle{
-			PreStop: &corev1.Handler{
+			PreStop: &corev1.LifecycleHandler{
 				Exec: &corev1.ExecAction{Command: []string{"/bin/sh", "-c", "curl 127.0.0.1:8000" + "/pause; /bin/sleep 10"}},
 			},
 		},
@@ -1288,7 +1297,7 @@ func (r PhDeploymentReconciler) buildModelContainer(phDeployment *primehubv1alph
 		Name:  "model",
 		Image: phDeployment.Spec.Predictors[0].ModelImage,
 		ReadinessProbe: &corev1.Probe{
-			Handler:             corev1.Handler{TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromString("http")}},
+			ProbeHandler:        corev1.ProbeHandler{TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromString("http")}},
 			InitialDelaySeconds: 20,
 			PeriodSeconds:       5,
 			FailureThreshold:    3,
@@ -1296,7 +1305,7 @@ func (r PhDeploymentReconciler) buildModelContainer(phDeployment *primehubv1alph
 			TimeoutSeconds:      60,
 		},
 		LivenessProbe: &corev1.Probe{
-			Handler:             corev1.Handler{TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromString("http")}},
+			ProbeHandler:        corev1.ProbeHandler{TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromString("http")}},
 			InitialDelaySeconds: 20,
 			PeriodSeconds:       5,
 			FailureThreshold:    3,
@@ -1304,7 +1313,7 @@ func (r PhDeploymentReconciler) buildModelContainer(phDeployment *primehubv1alph
 			TimeoutSeconds:      60,
 		},
 		Lifecycle: &corev1.Lifecycle{
-			PreStop: &corev1.Handler{
+			PreStop: &corev1.LifecycleHandler{
 				Exec: &corev1.ExecAction{
 					Command: []string{"/bin/sh", "-c", "/bin/sleep 10"},
 				},
@@ -1460,7 +1469,7 @@ func (r *PhDeploymentReconciler) deleteDeployment(ctx context.Context, deploymen
 
 // scale down deployment to 0 replica
 func (r *PhDeploymentReconciler) scaleDownDeployment(ctx context.Context, deployment *v1.Deployment) error {
-
+	log := r.Log.WithValues("deployment", deployment.Name)
 	if *deployment.Spec.Replicas == int32(0) {
 		// if replicas has already changed to 0, then return
 		return nil
@@ -1507,8 +1516,8 @@ func (r *PhDeploymentReconciler) deleteService(ctx context.Context, serviceKey c
 	return nil
 }
 
-func (r *PhDeploymentReconciler) getIngress(ctx context.Context, ingressKey client.ObjectKey) (*v1beta1.Ingress, error) {
-	ingress := &v1beta1.Ingress{}
+func (r *PhDeploymentReconciler) getIngress(ctx context.Context, ingressKey client.ObjectKey) (*networkv1.Ingress, error) {
+	ingress := &networkv1.Ingress{}
 
 	if err := r.Client.Get(ctx, ingressKey, ingress); err != nil {
 		return nil, err
@@ -1518,7 +1527,7 @@ func (r *PhDeploymentReconciler) getIngress(ctx context.Context, ingressKey clie
 }
 
 // build ingress of the phDeployment
-func (r *PhDeploymentReconciler) createIngress(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, ingressKey client.ObjectKey, secretKey client.ObjectKey) (*v1beta1.Ingress, error) {
+func (r *PhDeploymentReconciler) createIngress(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, ingressKey client.ObjectKey, secretKey client.ObjectKey) (*networkv1.Ingress, error) {
 
 	annotations := r.Ingress.Annotations
 	hosts := r.Ingress.Hosts
@@ -1534,27 +1543,28 @@ func (r *PhDeploymentReconciler) createIngress(ctx context.Context, phDeployment
 		annotations["nginx.ingress.kubernetes.io/proxy-body-size"] = "10m"
 	}
 
-	ingress := &v1beta1.Ingress{
+	ingress := &networkv1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        ingressKey.Name,
 			Namespace:   ingressKey.Namespace,
 			Annotations: annotations, // from config
 		},
-		Spec: v1beta1.IngressSpec{
+		Spec: networkv1.IngressSpec{
 			TLS: ingressTLS, // from config
-			Rules: []v1beta1.IngressRule{
+			Rules: []networkv1.IngressRule{
 				{
 					Host: hosts[0], // from config
-					IngressRuleValue: v1beta1.IngressRuleValue{
-						HTTP: &v1beta1.HTTPIngressRuleValue{
-							Paths: []v1beta1.HTTPIngressPath{
+					IngressRuleValue: networkv1.IngressRuleValue{
+						HTTP: &networkv1.HTTPIngressRuleValue{
+							Paths: []networkv1.HTTPIngressPath{
 								{
 									Path: "/deployment/" + phDeployment.Name + "/(.+)",
-									Backend: v1beta1.IngressBackend{
-										ServiceName: ingressKey.Name,
-										ServicePort: intstr.IntOrString{
-											Type:   intstr.Int,
-											IntVal: 8000,
+									Backend: networkv1.IngressBackend{
+										Service: &networkv1.IngressServiceBackend{
+											Name: ingressKey.Name,
+											Port: networkv1.ServiceBackendPort{
+												Number: 8000,
+											},
 										},
 									},
 								},
@@ -1576,7 +1586,7 @@ func (r *PhDeploymentReconciler) createIngress(ctx context.Context, phDeployment
 	return ingress, err
 }
 
-func (r *PhDeploymentReconciler) updateIngress(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, oldIngress *v1beta1.Ingress, secretKey client.ObjectKey) error {
+func (r *PhDeploymentReconciler) updateIngress(ctx context.Context, phDeployment *primehubv1alpha1.PhDeployment, oldIngress *networkv1.Ingress, secretKey client.ObjectKey) error {
 	shouldUpdate := false
 	ingress := oldIngress.DeepCopy()
 
@@ -1607,7 +1617,7 @@ func (r *PhDeploymentReconciler) updateIngress(ctx context.Context, phDeployment
 
 // delete the seldonDeployment of the phDeployment
 func (r *PhDeploymentReconciler) deleteIngress(ctx context.Context, ingressKey client.ObjectKey) error {
-	ingress := &v1beta1.Ingress{}
+	ingress := &networkv1.Ingress{}
 	if err := r.Client.Get(ctx, ingressKey, ingress); err != nil {
 		if apierrors.IsNotFound(err) { // seldonDeployment not found
 			return nil
@@ -1701,3 +1711,10 @@ func GetLastApplied(obj metav1.Object) (*primehubv1alpha1.PhDeploymentSpec, erro
 	}
 	return lastApplied, nil
 }
+
+//// SetupWithManager sets up the controller with the Manager.
+//func (r *PhDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
+//	return ctrl.NewControllerManagedBy(mgr).
+//		For(&primehubv1alpha1.PhDeployment{}).
+//		Complete(r)
+//}

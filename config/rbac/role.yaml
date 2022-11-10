@@ -1,4 +1,3 @@
-
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -6,17 +5,6 @@ metadata:
   creationTimestamp: null
   name: manager-role
 rules:
-- apiGroups:
-  - ""
-  resources:
-  - pods
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - update
-  - watch
 - apiGroups:
   - ""
   resources:
@@ -69,6 +57,12 @@ rules:
 - apiGroups:
   - primehub.io
   resources:
+  - images/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - primehub.io
+  resources:
   - images/status
   verbs:
   - get
@@ -86,6 +80,12 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - primehub.io
+  resources:
+  - imagespecjobs/finalizers
+  verbs:
+  - update
 - apiGroups:
   - primehub.io
   resources:
@@ -109,7 +109,39 @@ rules:
 - apiGroups:
   - primehub.io
   resources:
+  - imagespecs/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - primehub.io
+  resources:
   - imagespecs/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - primehub.io
+  resources:
+  - licenses
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - primehub.io
+  resources:
+  - licenses/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - primehub.io
+  resources:
+  - licenses/status
   verbs:
   - get
   - patch
@@ -129,7 +161,91 @@ rules:
 - apiGroups:
   - primehub.io
   resources:
+  - phapplications/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - primehub.io
+  resources:
   - phapplications/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - primehub.io
+  resources:
+  - phdeployments
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - primehub.io
+  resources:
+  - phdeployments/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - primehub.io
+  resources:
+  - phdeployments/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - primehub.io
+  resources:
+  - phjobs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - primehub.io
+  resources:
+  - phjobs/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - primehub.io
+  resources:
+  - phjobs/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - primehub.io
+  resources:
+  - phschedules
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - primehub.io
+  resources:
+  - phschedules/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - primehub.io
+  resources:
+  - phschedules/status
   verbs:
   - get
   - patch

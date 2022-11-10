@@ -1,28 +1,52 @@
 domain: io
+layout:
+- go.kubebuilder.io/v4-alpha
+projectName: primehub-controller
 repo: primehub-controller
 resources:
-- group: primehub
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: io
+  group: primehub
   kind: ImageSpec
+  path: primehub-controller/api/v1alpha1
   version: v1alpha1
-- group: primehub
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: io
+  group: primehub
   kind: ImageSpecJob
+  path: primehub-controller/api/v1alpha1
   version: v1alpha1
-- group: primehub
-  kind: PhJob
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: io
+  group: primehub
+  kind: XDXImage
+  path: primehub-controller/api/v1alpha1
   version: v1alpha1
-- group: primehub
-  kind: PhSchedule
-  version: v1alpha1
-- group: primehub
-  kind: PhDeployment
-  version: v1alpha1
-- group: primehub
-  kind: Image
-  version: v1alpha1
-- group: primehub
-  kind: PhAppTemplate
-  version: v1alpha1
-- group: primehub
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: io
+  group: primehub
   kind: PhApplication
+  path: primehub-controller/api/v1alpha1
   version: v1alpha1
-version: "2"
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: io
+  group: primehub
+  kind: PhAppTemplate
+  path: primehub-controller/api/v1alpha1
+  version: v1alpha1
+version: "3"
