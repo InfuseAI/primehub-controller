@@ -84,6 +84,7 @@ const (
 //+kubebuilder:rbac:groups=primehub.io,resources=phdeployments,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=primehub.io,resources=phdeployments/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=primehub.io,resources=phdeployments/finalizers,verbs=update
+//+kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=update;list;watch;create
 
 func (r *PhDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := r.Log.WithValues("phdeployment", req.NamespacedName)
