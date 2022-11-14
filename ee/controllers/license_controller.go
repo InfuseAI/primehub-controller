@@ -150,7 +150,7 @@ func (r *LicenseReconciler) createDefaultLicense() (lic primehubv1alpha1.License
 //+kubebuilder:rbac:groups=primehub.io,resources=licenses,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=primehub.io,resources=licenses/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=primehub.io,resources=licenses/finalizers,verbs=update
-//+kubebuilder:rbac:groups=,resources=secrets,verbs=get;list;watch;create;update
+//+kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update
 
 func (r *LicenseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
 	log := r.Log.WithValues("license", req.NamespacedName)

@@ -70,6 +70,7 @@ type PhJobReconciler struct {
 //+kubebuilder:rbac:groups=primehub.io,resources=phjobs,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=primehub.io,resources=phjobs/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=primehub.io,resources=phjobs/finalizers,verbs=update
+//+kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;create;update;patch;delete
 
 func (r *PhJobReconciler) buildAnnotationsWithUsageMetadata(phJob *primehubv1alpha1.PhJob) map[string]string {
 	annotations := make(map[string]string)
