@@ -272,8 +272,6 @@ func main() {
 		}
 	}()
 
-	setupLog.Info("starting manager")
-
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
 		os.Exit(1)
