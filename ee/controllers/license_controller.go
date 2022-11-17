@@ -23,7 +23,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/tools/cache"
 	"os"
 	"primehub-controller/ee/pkg/license"
 	"reflect"
@@ -207,12 +206,7 @@ func (r *LicenseReconciler) EnsureLicense(mgr ctrl.Manager) (err error) {
 	ctx := context.Background()
 	log := r.Log.WithValues("license", "ensure license")
 
-	// ref: https://github.com/kubernetes/test-infra/pull/15489/files
-	// Wait for cachesync then ensure license installed
-	mgrSyncCtx, mgrSyncCtxCancel := context.WithTimeout(context.Background(), 10*60*time.Second)
-	defer mgrSyncCtxCancel()
-
-	if synced := cache.WaitForCacheSync(mgrSyncCtx.Done()); !synced {
+	if synced := mgr.GetCache().WaitForCacheSync(ctx); !synced {
 		return errors.New("timed out waiting for cachesync")
 	}
 

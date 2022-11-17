@@ -250,6 +250,7 @@ func (r *PhJobReconciler) attachMonitoringAgent(phJob *primehubv1alpha1.PhJob, p
 }
 
 func (r *PhJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+
 	log := r.Log.WithValues("phjob", req.NamespacedName)
 	podkey := client.ObjectKey{
 		Namespace: req.Namespace,
