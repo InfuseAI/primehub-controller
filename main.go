@@ -20,6 +20,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/spf13/viper"
+	"go.uber.org/zap/zapcore"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"os"
@@ -87,6 +88,7 @@ func main() {
 	ctrl.SetLogger(ctrlzap.New(func(o *ctrlzap.Options) {
 		o.Development = true
 		o.Level = &l
+		o.TimeEncoder = zapcore.ISO8601TimeEncoder
 	}))
 
 	opts := ctrlzap.Options{
