@@ -224,6 +224,8 @@ func (r *LicenseReconciler) EnsureLicense(mgr ctrl.Manager) (err error) {
 			if err := r.Create(ctx, &defaultLic); err != nil {
 				return errors.New("failed to create default License")
 			}
+		} else {
+			log.Error(err, "Get errors when EnsureLicense")
 		}
 	}
 
