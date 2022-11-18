@@ -56,6 +56,10 @@ type ImageStatus struct {
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".spec.type",description="type of current image"
+// +kubebuilder:printcolumn:name="Group",type="string",JSONPath=".spec.groupName",description="group of current image"
+// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.jobCondition.phase",description="phase of current image"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // Image is the Schema for the images API
 type Image struct {
