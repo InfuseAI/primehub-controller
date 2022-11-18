@@ -53,6 +53,7 @@ const (
 //+kubebuilder:rbac:groups=primehub.io,resources=imagespecjobs,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=primehub.io,resources=imagespecjobs/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=primehub.io,resources=imagespecjobs/finalizers,verbs=update
+//+kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;create;update;delete
 
 func (r *ImageSpecJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("imagespecjob", req.NamespacedName)
