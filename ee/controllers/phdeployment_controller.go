@@ -1533,6 +1533,7 @@ func (r *PhDeploymentReconciler) createIngress(ctx context.Context, phDeployment
 	annotations := r.Ingress.Annotations
 	hosts := r.Ingress.Hosts
 	ingressTLS := r.Ingress.TLS
+	pathTypeImplementationSpecific := networkv1.PathTypeImplementationSpecific
 
 	annotations["nginx.ingress.kubernetes.io/rewrite-target"] = "/$1"
 	if isPrivateAccess(phDeployment) {
@@ -1568,6 +1569,7 @@ func (r *PhDeploymentReconciler) createIngress(ctx context.Context, phDeployment
 											},
 										},
 									},
+									PathType: &pathTypeImplementationSpecific,
 								},
 							},
 						},
