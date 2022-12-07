@@ -1,28 +1,40 @@
+/*
+Copyright 2022.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package controllers
 
 import (
 	"context"
 	"encoding/json"
+	"github.com/go-logr/logr"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	phcache "primehub-controller/pkg/cache"
+	"primehub-controller/pkg/escapism"
 	"primehub-controller/pkg/graphql"
 	"strings"
 	"time"
 
-	"k8s.io/apimachinery/pkg/api/resource"
-
-	"primehub-controller/pkg/escapism"
-
-	"github.com/go-logr/logr"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/runtime"
+	primehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	primehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
-
-	corev1 "k8s.io/api/core/v1"
-	apiequality "k8s.io/apimachinery/pkg/api/equality"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var (
@@ -55,9 +67,10 @@ type PhJobReconciler struct {
 	PrimeHubCache                  *phcache.PrimeHubCache
 }
 
-// +kubebuilder:rbac:groups=primehub.io,resources=phjobs,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=primehub.io,resources=phjobs/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups="",resources=jobs,verbs=get;list;watch;create;update;delete
+//+kubebuilder:rbac:groups=primehub.io,resources=phjobs,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=primehub.io,resources=phjobs/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=primehub.io,resources=phjobs/finalizers,verbs=update
+//+kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;create;update;patch;delete
 
 func (r *PhJobReconciler) buildAnnotationsWithUsageMetadata(phJob *primehubv1alpha1.PhJob) map[string]string {
 	annotations := make(map[string]string)
@@ -236,8 +249,8 @@ func (r *PhJobReconciler) attachMonitoringAgent(phJob *primehubv1alpha1.PhJob, p
 	})
 }
 
-func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx := context.Background()
+func (r *PhJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+
 	log := r.Log.WithValues("phjob", req.NamespacedName)
 	podkey := client.ObjectKey{
 		Namespace: req.Namespace,
@@ -416,19 +429,25 @@ func (r *PhJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		log.Info("phJob has finished, reconcile it after ttl.", "ttlDuration", ttlDuration)
 		return ctrl.Result{RequeueAfter: ttlDuration}, nil
 	} else if phJob.Status.StartTime != nil && *phJob.Spec.ActiveDeadlineSeconds != int64(0) { // Job in Running
-		activeDeadlineSeconds := time.Second * time.Duration(*phJob.Spec.ActiveDeadlineSeconds)
-		next := phJob.Status.StartTime.Add(activeDeadlineSeconds).Sub(time.Now())
-		log.Info("phJob is still running, reconcile it after for active deadline", "next", next)
-		return ctrl.Result{RequeueAfter: next}, nil
+		//activeDeadlineSeconds := time.Second * time.Duration(*phJob.Spec.ActiveDeadlineSeconds)
+		//next := phJob.Status.StartTime.Add(activeDeadlineSeconds).Sub(time.Now())
+		//log.Info("phJob is still running, reconcile it after for active deadline", "next", next)
+
+		// NOTE: we disable the long requeue after upgrade for 1.24
+
+		// There is no other way to make a running job switch to the next phase in this execution branch,
+		// so we need the frequent checking the state for the running job.
+		log.Info("phJob is still running, reconcile it after next-check", "next", nextCheck)
+		return ctrl.Result{RequeueAfter: nextCheck}, nil
 	}
 
 	return ctrl.Result{RequeueAfter: nextCheck}, nil
 }
 
+// SetupWithManager sets up the controller with the Manager.
 func (r *PhJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&primehubv1alpha1.PhJob{}).
-		Owns(&corev1.Pod{}).
 		Complete(r)
 }
 

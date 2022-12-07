@@ -9,6 +9,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"primehub-controller/api/v1alpha1"
 	"reflect"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -23,12 +24,13 @@ func Test_createImageSpecJob(t *testing.T) {
 	var namespace string
 	var imageCreateTime time.Time
 	ctx := context.Background()
-	logger := log.NullLogger{}
+	logger := log.NewTestLogger(t)
 	scheme := runtime.NewScheme()
 	_ = v1alpha1.AddToScheme(scheme)
 	_ = v1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
-	fakeClient := fake.NewFakeClientWithScheme(scheme)
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+
 	name = "create-custom-image"
 	namespace = "hub"
 	imageCreateTime = time.Date(2020, time.December, 31, 23, 59, 59, 0, time.Local)
@@ -133,7 +135,7 @@ func Test_cancelImageSpecJob(t *testing.T) {
 	var namespace string
 	var imageCreateTime time.Time
 	ctx := context.Background()
-	logger := log.NullLogger{}
+	logger := log.NewTestLogger(t)
 	scheme := runtime.NewScheme()
 	_ = v1alpha1.AddToScheme(scheme)
 	_ = v1.AddToScheme(scheme)
@@ -181,7 +183,7 @@ func Test_cancelImageSpecJob(t *testing.T) {
 		},
 	}
 
-	fakeClient := fake.NewFakeClientWithScheme(scheme, []runtime.Object{customImageSpecJob, customImage}...)
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(customImageSpecJob, customImage).Build()
 
 	type args struct {
 		r            *ImageReconciler
@@ -221,7 +223,7 @@ func Test_rebuildImageSpecJob(t *testing.T) {
 	var namespace string
 	var imageCreateTime time.Time
 	ctx := context.Background()
-	logger := log.NullLogger{}
+	logger := log.NewTestLogger(t)
 	scheme := runtime.NewScheme()
 	_ = v1alpha1.AddToScheme(scheme)
 	_ = v1.AddToScheme(scheme)
@@ -302,21 +304,22 @@ func Test_rebuildImageSpecJob(t *testing.T) {
 }
 
 func Test_updateImageStatus(t *testing.T) {
-	var name string
 	var namespace string
 	var imageCreateTime time.Time
 	ctx := context.Background()
-	logger := log.NullLogger{}
+	logger := log.NewTestLogger(t)
 	scheme := runtime.NewScheme()
 	_ = v1alpha1.AddToScheme(scheme)
 	_ = v1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
 
-	name = "update-custom-image"
 	namespace = "hub"
 	imageCreateTime = time.Date(2020, time.December, 31, 23, 59, 59, 0, time.Local)
+	customImage1 := createCustomImage("update-custom-image-1", namespace, imageCreateTime)
+	customImage2 := createCustomImage("update-custom-image-2", namespace, imageCreateTime)
+
 	customImageSpecJobRunning := &v1alpha1.ImageSpecJob{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		ObjectMeta: metav1.ObjectMeta{Name: customImage1.Name, Namespace: namespace},
 		Spec: v1alpha1.ImageSpecJobSpec{
 			BaseImage:   "unit-test/base-image",
 			PullSecret:  "",
@@ -330,17 +333,17 @@ func Test_updateImageStatus(t *testing.T) {
 			Phase:      "Running",
 			StartTime:  &metav1.Time{Time: imageCreateTime},
 			FinishTime: nil,
-			PodName:    name,
+			PodName:    customImage1.Name,
 		},
 	}
 
 	customImageSpecJobSuccesseded := &v1alpha1.ImageSpecJob{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		ObjectMeta: metav1.ObjectMeta{Name: customImage2.Name, Namespace: namespace},
 		Spec: v1alpha1.ImageSpecJobSpec{
 			BaseImage:   "unit-test/base-image",
 			PullSecret:  "",
 			Packages:    v1alpha1.ImageSpecSpecPackages{},
-			TargetImage: name + ":1234",
+			TargetImage: customImage2.Name + ":1234",
 			PushSecret:  "test-secret",
 			RepoPrefix:  "infuseai",
 			UpdateTime:  &metav1.Time{Time: imageCreateTime},
@@ -349,9 +352,75 @@ func Test_updateImageStatus(t *testing.T) {
 			Phase:      CustomImageJobStatusSucceeded,
 			StartTime:  &metav1.Time{Time: imageCreateTime},
 			FinishTime: nil,
-			PodName:    name,
+			PodName:    customImage2.Name,
 		},
 	}
+
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(customImage1, customImage2).Build()
+
+	type args struct {
+		r            *ImageReconciler
+		image        *v1alpha1.Image
+		imageSpecJob *v1alpha1.ImageSpecJob
+	}
+	tests := []struct {
+		name           string
+		args           args
+		wantErr        bool
+		wantPhase      string
+		wantURL        string
+		wantPullSecret string
+	}{
+		{
+			name: "Update Custom Image - Phase Running",
+			args: args{
+				r:            &ImageReconciler{fakeClient, logger, scheme},
+				image:        customImage1,
+				imageSpecJob: customImageSpecJobRunning,
+			},
+			wantErr:   false,
+			wantPhase: "Running",
+		},
+		{
+			name: "Update Custom Image - Phase Successeded",
+			args: args{
+				r:            &ImageReconciler{fakeClient, logger, scheme},
+				image:        customImage2,
+				imageSpecJob: customImageSpecJobSuccesseded,
+			},
+			wantErr:        false,
+			wantPhase:      CustomImageJobStatusSucceeded,
+			wantURL:        "infuseai/" + customImage2.Name + ":1234",
+			wantPullSecret: customImageSpecJobSuccesseded.Spec.PushSecret,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := updateImageStatus(tt.args.r, ctx, tt.args.image, tt.args.imageSpecJob); (err != nil) != tt.wantErr {
+				t.Errorf("updateImageStatus() error = %v, wantErr %v", err, tt.wantErr)
+			}
+
+			updatedImage := &v1alpha1.Image{}
+			err := tt.args.r.Get(ctx, client.ObjectKey{Namespace: tt.args.image.Namespace, Name: tt.args.image.Name}, updatedImage)
+			if err != nil {
+				t.Errorf("r.Get() err = %v", err)
+			}
+			if updatedImage.Status.JobCondiction.Phase != tt.wantPhase {
+				t.Errorf("updateImageStatus() phase = %v, wantPhase %v", updatedImage.Status.JobCondiction.Phase, tt.wantPhase)
+			}
+
+			if tt.wantURL != "" && tt.wantURL != updatedImage.Spec.Url && tt.wantURL != updatedImage.Spec.UrlForGpu {
+				t.Errorf("updateImageStatus() URL = %v, wantURL %v", updatedImage.Spec.Url, tt.wantURL)
+			}
+
+			if tt.wantPullSecret != "" && tt.wantPullSecret != updatedImage.Spec.PullSecret {
+				t.Errorf("updateImageStatus() PullSecret = %v, wantPullSecret %v", updatedImage.Spec.PullSecret, tt.wantPullSecret)
+			}
+		})
+	}
+}
+
+func createCustomImage(name string, namespace string, imageCreateTime time.Time) *v1alpha1.Image {
 	customImage := &v1alpha1.Image{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 		Spec: v1alpha1.ImageCrdSpec{
@@ -378,66 +447,7 @@ func Test_updateImageStatus(t *testing.T) {
 			},
 		},
 	}
-
-	fakeClient := fake.NewFakeClientWithScheme(scheme, []runtime.Object{customImage}...)
-
-	type args struct {
-		r            *ImageReconciler
-		image        *v1alpha1.Image
-		imageSpecJob *v1alpha1.ImageSpecJob
-	}
-	tests := []struct {
-		name           string
-		args           args
-		wantErr        bool
-		wantPhase      string
-		wantURL        string
-		wantPullSecret string
-	}{
-		{
-			name: "Update Custom Image - Phase Running",
-			args: args{
-				r:            &ImageReconciler{fakeClient, logger, scheme},
-				image:        customImage,
-				imageSpecJob: customImageSpecJobRunning,
-			},
-			wantErr:   false,
-			wantPhase: "Running",
-		},
-		{
-			name: "Update Custom Image - Phase Successeded",
-			args: args{
-				r:            &ImageReconciler{fakeClient, logger, scheme},
-				image:        customImage,
-				imageSpecJob: customImageSpecJobSuccesseded,
-			},
-			wantErr:        false,
-			wantPhase:      CustomImageJobStatusSucceeded,
-			wantURL:        "infuseai/" + customImage.Name + ":1234",
-			wantPullSecret: customImageSpecJobSuccesseded.Spec.PushSecret,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if err := updateImageStatus(tt.args.r, ctx, tt.args.image, tt.args.imageSpecJob); (err != nil) != tt.wantErr {
-				t.Errorf("updateImageStatus() error = %v, wantErr %v", err, tt.wantErr)
-			}
-
-			updatedImage := &v1alpha1.Image{}
-			_ = tt.args.r.Get(ctx, client.ObjectKey{Namespace: customImage.Namespace, Name: customImage.Name}, updatedImage)
-			if updatedImage.Status.JobCondiction.Phase != tt.wantPhase {
-				t.Errorf("updateImageStatus() phase = %v, wantPhase %v", updatedImage.Status.JobCondiction.Phase, tt.wantPhase)
-			}
-
-			if tt.wantURL != "" && tt.wantURL != updatedImage.Spec.Url && tt.wantURL != updatedImage.Spec.UrlForGpu {
-				t.Errorf("updateImageStatus() URL = %v, wantURL %v", updatedImage.Spec.Url, tt.wantURL)
-			}
-
-			if tt.wantPullSecret != "" && tt.wantPullSecret != updatedImage.Spec.PullSecret {
-				t.Errorf("updateImageStatus() PullSecret = %v, wantPullSecret %v", updatedImage.Spec.PullSecret, tt.wantPullSecret)
-			}
-		})
-	}
+	return customImage
 }
 
 func Test_isImageCustomBuild(t *testing.T) {
@@ -495,7 +505,7 @@ func Test_isImageCustomBuild(t *testing.T) {
 
 func Test_makeImageControllerAction(t *testing.T) {
 	ctx := context.Background()
-	logger := log.NullLogger{}
+	logger := log.NewTestLogger(t)
 	scheme := runtime.NewScheme()
 	_ = v1alpha1.AddToScheme(scheme)
 	_ = v1.AddToScheme(scheme)
@@ -533,6 +543,10 @@ func Test_makeImageControllerAction(t *testing.T) {
 	namespace = "hub"
 	imageCreateTime = time.Date(2020, time.December, 31, 23, 59, 59, 0, time.Local)
 	mockCancelImageSpecJob := &v1alpha1.ImageSpecJob{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ImageSpecJob",
+			APIVersion: "primehub.io/v1alpha1",
+		},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 		Spec: v1alpha1.ImageSpecJobSpec{
 			BaseImage:   "unit-test/base-image",
@@ -576,6 +590,10 @@ func Test_makeImageControllerAction(t *testing.T) {
 	namespace = "hub"
 	imageCreateTime = time.Date(2020, time.December, 31, 23, 59, 59, 0, time.Local)
 	mockRebuildImageSpecJob := &v1alpha1.ImageSpecJob{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ImageSpecJob",
+			APIVersion: "primehub.io/v1alpha1",
+		},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 		Spec: v1alpha1.ImageSpecJobSpec{
 			BaseImage:   "unit-test/base-image",
@@ -622,6 +640,10 @@ func Test_makeImageControllerAction(t *testing.T) {
 	namespace = "hub"
 	imageCreateTime = time.Date(2020, time.December, 31, 23, 59, 59, 0, time.Local)
 	mockUpdateImageSpecJob := &v1alpha1.ImageSpecJob{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ImageSpecJob",
+			APIVersion: "primehub.io/v1alpha1",
+		},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 		Spec: v1alpha1.ImageSpecJobSpec{
 			BaseImage:   "unit-test/base-image",
@@ -715,12 +737,12 @@ func Test_makeImageControllerAction(t *testing.T) {
 	}
 
 	// For fake client
-	fakeClientForCreate := fake.NewFakeClientWithScheme(scheme)
-	fakeClientForCancel := fake.NewFakeClientWithScheme(scheme, []runtime.Object{mockCancelImageSpecJob}...)
-	fakeClientForRebuild := fake.NewFakeClientWithScheme(scheme, []runtime.Object{mockRebuildImageSpecJob}...)
-	fakeClientForUpdate := fake.NewFakeClientWithScheme(scheme, []runtime.Object{mockUpdateImageSpecJob}...)
-	fakeClientForUnknown := fake.NewFakeClientWithScheme(scheme)
-	fakeClientForSkip := fake.NewFakeClientWithScheme(scheme)
+	fakeClientForCreate := fake.NewClientBuilder().WithScheme(scheme).Build()
+	fakeClientForCancel := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(mockCancelImageSpecJob).Build()
+	fakeClientForRebuild := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(mockRebuildImageSpecJob).Build()
+	fakeClientForUpdate := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(mockUpdateImageSpecJob).Build()
+	fakeClientForUnknown := fake.NewClientBuilder().WithScheme(scheme).Build()
+	fakeClientForSkip := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	type args struct {
 		r     *ImageReconciler
@@ -802,7 +824,7 @@ func Test_makeImageControllerAction(t *testing.T) {
 
 func TestImageReconciler_Reconcile(t *testing.T) {
 	ctx := context.Background()
-	logger := log.NullLogger{}
+	logger := log.NewTestLogger(t)
 	scheme := runtime.NewScheme()
 	_ = v1alpha1.AddToScheme(scheme)
 	_ = v1.AddToScheme(scheme)
@@ -839,9 +861,14 @@ func TestImageReconciler_Reconcile(t *testing.T) {
 		},
 	}
 
-	fakeClient := fake.NewFakeClientWithScheme(scheme, []runtime.Object{image}...)
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(image).Build()
 	r := &ImageReconciler{fakeClient, logger, scheme}
-	req := ctrl.Request{}
+	req := ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Namespace: namespace,
+			Name:      name,
+		},
+	}
 
 	pushSecret := "test-secret"
 	prefix := "infuseai"
@@ -852,14 +879,14 @@ func TestImageReconciler_Reconcile(t *testing.T) {
 	var targetImage string
 	t.Run("Create Image Build", func(t *testing.T) {
 		var err error
-		_, err = r.Reconcile(req)
+		_, err = r.Reconcile(ctx, req)
 		if err != nil {
 			t.Errorf("ImageReconciler should create without error")
 		}
 
 		err = r.Get(ctx, client.ObjectKey{Name: image.Name, Namespace: image.Namespace}, createdImageSpecJob)
 		if err != nil {
-			t.Errorf("ImageReconciler should create ImageSpecJob without error")
+			t.Errorf("ImageReconciler should create ImageSpecJob without error: %v", err)
 		}
 
 		if createdImageSpecJob.Name != image.Name {
@@ -881,7 +908,7 @@ func TestImageReconciler_Reconcile(t *testing.T) {
 
 		createdImageSpecJob.Status.Phase = "Running"
 		_ = r.Update(ctx, createdImageSpecJob)
-		_, err = r.Reconcile(req)
+		_, err = r.Reconcile(ctx, req)
 		if err != nil {
 			t.Errorf("ImageReconciler should update without error")
 		}
@@ -895,7 +922,7 @@ func TestImageReconciler_Reconcile(t *testing.T) {
 		// Update Successeded status with URL
 		createdImageSpecJob.Status.Phase = CustomImageJobStatusSucceeded
 		_ = r.Update(ctx, createdImageSpecJob)
-		_, err = r.Reconcile(req)
+		_, err = r.Reconcile(ctx, req)
 		if err != nil {
 			t.Errorf("ImageReconciler should update without error")
 		}
@@ -924,7 +951,7 @@ func TestImageReconciler_Reconcile(t *testing.T) {
 		updatedImage.Spec.ImageSpec.UpdateTime = &metav1.Time{Time: imageCreateTime}
 		_ = r.Update(ctx, updatedImage)
 
-		_, err = r.Reconcile(req)
+		_, err = r.Reconcile(ctx, req)
 		if err != nil {
 			t.Errorf("ImageReconciler should rebuild without error")
 		}
@@ -942,7 +969,7 @@ func TestImageReconciler_Reconcile(t *testing.T) {
 		updatedImage.Spec.ImageSpec.Cancel = true
 		_ = r.Update(ctx, updatedImage)
 
-		_, err = r.Reconcile(req)
+		_, err = r.Reconcile(ctx, req)
 		if err != nil {
 			t.Errorf("ImageReconciler should cancel without error")
 		}
@@ -956,7 +983,7 @@ func TestImageReconciler_Reconcile(t *testing.T) {
 	// Skip
 	t.Run("Skip Image Build if Already Cancelled", func(t *testing.T) {
 		var err error
-		_, err = r.Reconcile(req)
+		_, err = r.Reconcile(ctx, req)
 		if err != nil {
 			t.Errorf("ImageReconciler should do skip without error")
 		}

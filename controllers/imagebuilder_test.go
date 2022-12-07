@@ -19,13 +19,10 @@ import (
 )
 
 var _ = Context("Inside of a new namespace", func() {
-	ctx := context.TODO()
+	ctx, cancel := context.WithCancel(context.TODO())
 	ns := &core.Namespace{}
 
-	var stopCh chan struct{}
-
 	BeforeEach(func() {
-		stopCh = make(chan struct{})
 		*ns = core.Namespace{
 			ObjectMeta: metav1.ObjectMeta{Name: "testns-" + randStringRunes(5)},
 		}
@@ -45,13 +42,13 @@ var _ = Context("Inside of a new namespace", func() {
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
 
 		go func() {
-			err := mgr.Start(stopCh)
+			err := mgr.Start(ctx)
 			Expect(err).NotTo(HaveOccurred(), "failed to start manager")
 		}()
 	})
 
 	AfterEach(func() {
-		close(stopCh)
+		cancel()
 
 		err := k8sClient.Delete(ctx, ns)
 		Expect(err).NotTo(HaveOccurred(), "failed to delete test namespace")

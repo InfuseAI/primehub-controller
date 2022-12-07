@@ -1,7 +1,43 @@
 domain: io
+layout:
+- go.kubebuilder.io/v4-alpha
+projectName: primehub-controller-ee
 repo: primehub-controller/ee
 resources:
-- group: primehub
-  kind: License
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: io
+  group: primehub
+  kind: PhJob
+  path: primehub-controller/ee/api/v1alpha1
   version: v1alpha1
-version: "2"
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: io
+  group: primehub
+  kind: PhSchedule
+  path: primehub-controller/ee/api/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: io
+  group: primehub
+  kind: PhDeployment
+  path: primehub-controller/ee/api/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: io
+  group: primehub
+  kind: License
+  path: primehub-controller/ee/api/v1alpha1
+  version: v1alpha1
+version: "3"

@@ -1,21 +1,36 @@
+/*
+Copyright 2022.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package controllers
 
 import (
 	"context"
-	"time"
-
 	"github.com/go-logr/logr"
 	cron "github.com/robfig/cron/v3"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	primehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"primehub-controller/pkg/escapism"
 	"primehub-controller/pkg/graphql"
 	"primehub-controller/pkg/random"
+	"time"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	primehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type PhScheduleCron struct {
@@ -29,6 +44,7 @@ type PhScheduleCron struct {
 // PhScheduleReconciler reconciles a PhSchedule object
 type PhScheduleReconciler struct {
 	client.Client
+	Scheme            *runtime.Scheme
 	Log               logr.Logger
 	PhScheduleCronMap map[string]*PhScheduleCron
 	GraphqlClient     graphql.AbstractGraphqlClient
@@ -71,11 +87,11 @@ func (r *PhScheduleReconciler) buildPhJob(phSchedule *primehubv1alpha1.PhSchedul
 
 }
 
-// +kubebuilder:rbac:groups=primehub.io,resources=phschedules,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=primehub.io,resources=phschedules/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=primehub.io,resources=phschedules,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=primehub.io,resources=phschedules/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=primehub.io,resources=phschedules/finalizers,verbs=update
 
-func (r *PhScheduleReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx := context.Background()
+func (r *PhScheduleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("phschedule", req.Name)
 
 	phSchedule := &primehubv1alpha1.PhSchedule{}
@@ -270,6 +286,7 @@ func (r *PhScheduleReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 	return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 }
 
+// SetupWithManager sets up the controller with the Manager.
 func (r *PhScheduleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&primehubv1alpha1.PhSchedule{}).

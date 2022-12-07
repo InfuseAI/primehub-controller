@@ -1,37 +1,54 @@
+/*
+Copyright 2022.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package main
 
 import (
 	"flag"
 	"fmt"
-	"os"
-	primehubv1alpha1 "primehub-controller/api/v1alpha1"
-	"primehub-controller/controllers"
-	phcache "primehub-controller/pkg/cache"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"strings"
-
-	eeprimehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
-	"primehub-controller/pkg/graphql"
-	"time"
-
-	"k8s.io/apimachinery/pkg/util/wait"
-
-	//"primehub-controller/controllers"
-	eecontrollers "primehub-controller/ee/controllers"
-
-	"go.uber.org/zap"
-	"k8s.io/apimachinery/pkg/api/resource"
-	"k8s.io/apimachinery/pkg/runtime"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
-	ctrl "sigs.k8s.io/controller-runtime"
-	ctrlzap "sigs.k8s.io/controller-runtime/pkg/log/zap"
-
+	"github.com/spf13/viper"
+	"go.uber.org/zap/zapcore"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"os"
+	eecontrollers "primehub-controller/ee/controllers"
+	phcache "primehub-controller/pkg/cache"
+	"primehub-controller/pkg/graphql"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"strings"
+	"time"
 
-	// +kubebuilder:scaffold:imports
-	"github.com/spf13/viper"
+	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
+	// to ensure that exec-entrypoint and run can make use of them.
+	_ "k8s.io/client-go/plugin/pkg/client/auth"
+
+	"go.uber.org/zap"
+	"k8s.io/apimachinery/pkg/runtime"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	primehubv1alpha1 "primehub-controller/api/v1alpha1"
+	"primehub-controller/controllers"
+	eeprimehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/healthz"
+
+	ctrlzap "sigs.k8s.io/controller-runtime/pkg/log/zap"
+	//+kubebuilder:scaffold:imports
 )
 
 var (
@@ -40,23 +57,26 @@ var (
 )
 
 func init() {
-	_ = clientgoscheme.AddToScheme(scheme)
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(primehubv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(eeprimehubv1alpha1.AddToScheme(scheme))
 
-	_ = primehubv1alpha1.AddToScheme(scheme)
-	_ = eeprimehubv1alpha1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
 	_ = batchv1.AddToScheme(scheme)
-	// +kubebuilder:scaffold:scheme
+	//+kubebuilder:scaffold:scheme
 }
 
 func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
+	var probeAddr string
 	var debug bool
 
-	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
-	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
-		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
+	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
+	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
+	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
+		"Enable leader election for controller manager. "+
+			"Enabling this will ensure there is only one active controller manager.")
 	flag.BoolVar(&debug, "debug", false, "enables debug logs")
 	flag.Parse()
 
@@ -75,17 +95,36 @@ func main() {
 	ctrl.SetLogger(ctrlzap.New(func(o *ctrlzap.Options) {
 		o.Development = true
 		o.Level = &l
+		o.TimeEncoder = zapcore.ISO8601TimeEncoder
 	}))
 
-	loadConfig()
+	opts := ctrlzap.Options{
+		Development: true,
+	}
+	opts.BindFlags(flag.CommandLine)
 
-	stopChan := ctrl.SetupSignalHandler()
+	loadConfig()
+	//stopChan := ctrl.SetupSignalHandler()
+	stopChan := make(chan struct{})
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:             scheme,
-		MetricsBindAddress: metricsAddr,
-		LeaderElection:     enableLeaderElection,
-		Port:               9443,
+		Scheme:                 scheme,
+		MetricsBindAddress:     metricsAddr,
+		Port:                   9443,
+		HealthProbeBindAddress: probeAddr,
+		LeaderElection:         enableLeaderElection,
+		LeaderElectionID:       "7cf7afed.io",
+		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
+		// when the Manager ends. This requires the binary to immediately end when the
+		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly
+		// speeds up voluntary leader transitions as the new leader don't have to wait
+		// LeaseDuration time first.
+		//
+		// In the default scaffold provided, the program ends immediately after
+		// the manager stops, so would be fine to enable this option. However,
+		// if you are doing or is intended to do any operation such as perform cleanups
+		// after the manager stops then its usage might be unsafe.
+		// LeaderElectionReleaseOnCancel: true,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
@@ -123,7 +162,6 @@ func main() {
 		viper.GetString("graphqlSecret"))
 
 	primehubCache := phcache.NewPrimeHubCache(graphqlClient)
-
 	nodeSelector := viper.GetStringMapString("jobSubmission.nodeSelector")
 
 	var tolerationsSlice []corev1.Toleration
@@ -210,7 +248,8 @@ func main() {
 
 	createDeploymentReconciler(err, mgr, graphqlClient, phfsEnabled, phfsPVC)
 
-	// +kubebuilder:scaffold:builder
+	//+kubebuilder:scaffold:builder
+
 	phJobScheduler := eecontrollers.PHJobScheduler{
 		Client:        mgr.GetClient(),
 		Log:           ctrl.Log.WithName("scheduler").WithName("PhJob"),
@@ -233,11 +272,21 @@ func main() {
 		}
 	}()
 
+	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
+		setupLog.Error(err, "unable to set up health check")
+		os.Exit(1)
+	}
+	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+		setupLog.Error(err, "unable to set up ready check")
+		os.Exit(1)
+	}
+
 	setupLog.Info("starting manager")
-	if err := mgr.Start(stopChan); err != nil {
+	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+	stopChan <- struct{}{}
 }
 
 func createDeploymentReconciler(err error, mgr manager.Manager, graphqlClient graphql.AbstractGraphqlClient, phfsEnabled bool, phfsPVC string) {

@@ -1,0 +1,20 @@
+# permissions for end users to view phschedules.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: phschedule-viewer-role
+rules:
+- apiGroups:
+  - primehub.io
+  resources:
+  - phschedules
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - primehub.io
+  resources:
+  - phschedules/status
+  verbs:
+  - get

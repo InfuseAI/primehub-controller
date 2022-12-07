@@ -1,0 +1,6 @@
+apiVersion: primehub.io/v1alpha1
+kind: XDXImage
+metadata:
+  name: image-sample
+spec:
+  # TODO(user): Add fields here

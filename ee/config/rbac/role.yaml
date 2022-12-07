@@ -1,4 +1,3 @@
-
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -9,11 +8,31 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - jobs
+  - pods
   verbs:
   - create
   - delete
   - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses
+  verbs:
+  - create
   - list
   - update
   - watch
@@ -29,6 +48,12 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - primehub.io
+  resources:
+  - licenses/finalizers
+  verbs:
+  - update
 - apiGroups:
   - primehub.io
   resources:
@@ -52,6 +77,12 @@ rules:
 - apiGroups:
   - primehub.io
   resources:
+  - phdeployments/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - primehub.io
+  resources:
   - phdeployments/status
   verbs:
   - get
@@ -72,6 +103,12 @@ rules:
 - apiGroups:
   - primehub.io
   resources:
+  - phjobs/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - primehub.io
+  resources:
   - phjobs/status
   verbs:
   - get
@@ -89,6 +126,12 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - primehub.io
+  resources:
+  - phschedules/finalizers
+  verbs:
+  - update
 - apiGroups:
   - primehub.io
   resources:

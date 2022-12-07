@@ -1,25 +1,39 @@
+/*
+Copyright 2022.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package controllers
 
 import (
 	"context"
 	"errors"
+	"github.com/go-logr/logr"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"os"
+	"primehub-controller/ee/pkg/license"
 	"reflect"
 	"strconv"
 	"time"
 
-	"github.com/go-logr/logr"
+	"github.com/fatih/structtag"
 	"k8s.io/apimachinery/pkg/runtime"
-	"primehub-controller/ee/pkg/license"
+	primehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	primehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
-
-	"github.com/fatih/structtag"
 )
 
 // LicenseReconciler reconciles a License object
@@ -132,11 +146,12 @@ func (r *LicenseReconciler) createDefaultLicense() (lic primehubv1alpha1.License
 	return defaultLic, nil
 }
 
-// +kubebuilder:rbac:groups=primehub.io,resources=licenses,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=primehub.io,resources=licenses/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=primehub.io,resources=licenses,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=primehub.io,resources=licenses/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=primehub.io,resources=licenses/finalizers,verbs=update
+//+kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update
 
-func (r *LicenseReconciler) Reconcile(req ctrl.Request) (result ctrl.Result, err error) {
-	ctx := context.Background()
+func (r *LicenseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
 	log := r.Log.WithValues("license", req.NamespacedName)
 
 	// Skip if it's not in the same namespace
@@ -191,13 +206,10 @@ func (r *LicenseReconciler) EnsureLicense(mgr ctrl.Manager) (err error) {
 	ctx := context.Background()
 	log := r.Log.WithValues("license", "ensure license")
 
-	// ref: https://github.com/kubernetes/test-infra/pull/15489/files
-	// Wait for cachesync then ensure license installed
-	mgrSyncCtx, mgrSyncCtxCancel := context.WithTimeout(context.Background(), 10*60*time.Second)
+	mgrSyncCtx, mgrSyncCtxCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer mgrSyncCtxCancel()
-
-	if synced := mgr.GetCache().WaitForCacheSync(mgrSyncCtx.Done()); !synced {
-		return errors.New("timed out waiting for cachesync")
+	if synced := mgr.GetCache().WaitForCacheSync(mgrSyncCtx); !synced {
+		log.Error(errors.New("non-sync-cached"), "Timed out waiting for cachesync")
 	}
 
 	lic := &primehubv1alpha1.License{}
@@ -208,7 +220,11 @@ func (r *LicenseReconciler) EnsureLicense(mgr ctrl.Manager) (err error) {
 			if err := r.Create(ctx, &defaultLic); err != nil {
 				return errors.New("failed to create default License")
 			}
+		} else {
+			log.Error(err, "Get errors when EnsureLicense")
 		}
+		// make the controller panic and restart
+		return err
 	}
 
 	return

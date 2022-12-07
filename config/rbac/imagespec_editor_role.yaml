@@ -1,0 +1,24 @@
+# permissions for end users to edit imagespecs.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: imagespec-editor-role
+rules:
+- apiGroups:
+  - primehub.io
+  resources:
+  - imagespecs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - primehub.io
+  resources:
+  - imagespecs/status
+  verbs:
+  - get

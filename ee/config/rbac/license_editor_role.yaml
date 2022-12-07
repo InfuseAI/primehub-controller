@@ -1,4 +1,4 @@
-# permissions to do edit licenses.
+# permissions for end users to edit licenses.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -22,5 +22,3 @@ rules:
   - licenses/status
   verbs:
   - get
-  - patch
-  - update

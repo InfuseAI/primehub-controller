@@ -1,24 +1,38 @@
+/*
+Copyright 2022.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package controllers
 
 import (
 	"bytes"
 	"context"
 	"fmt"
-	"primehub-controller/api/v1alpha1"
-	"primehub-controller/pkg/random"
-	"regexp"
-	"text/template"
-
 	"github.com/go-logr/logr"
 	"github.com/spf13/viper"
-	"k8s.io/apimachinery/pkg/runtime"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"primehub-controller/api/v1alpha1"
+	"primehub-controller/pkg/random"
+	"regexp"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"text/template"
 )
 
 // ImageSpecJobReconciler reconciles a ImageSpecJob object
@@ -36,12 +50,12 @@ const (
 	CustomImageJobStatusFailed    = "Failed"
 )
 
-// +kubebuilder:rbac:groups=primehub.io,resources=imagespecjobs,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=primehub.io,resources=imagespecjobs/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;create;update;delete
+//+kubebuilder:rbac:groups=primehub.io,resources=imagespecjobs,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=primehub.io,resources=imagespecjobs/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=primehub.io,resources=imagespecjobs/finalizers,verbs=update
+//+kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;create;update;delete
 
-func (r *ImageSpecJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx := context.Background()
+func (r *ImageSpecJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("imagespecjob", req.NamespacedName)
 
 	var imageSpecJob v1alpha1.ImageSpecJob
@@ -131,34 +145,6 @@ func (r *ImageSpecJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 	return ctrl.Result{}, nil
 }
 
-func (r *ImageSpecJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1alpha1.ImageSpecJob{}).
-		Owns(&corev1.Pod{}).
-		Complete(r)
-}
-
-func filterIllegalPackages(packages v1alpha1.ImageSpecSpecPackages) v1alpha1.ImageSpecSpecPackages {
-	re := regexp.MustCompile(`^[a-zA-Z0-9-_:=\.]+$`)
-	legalPackages := v1alpha1.ImageSpecSpecPackages{}
-	for _, s := range packages.Apt {
-		if re.MatchString(s) {
-			legalPackages.Apt = append(legalPackages.Apt, s)
-		}
-	}
-	for _, s := range packages.Conda {
-		if re.MatchString(s) {
-			legalPackages.Conda = append(legalPackages.Conda, s)
-		}
-	}
-	for _, s := range packages.Pip {
-		if re.MatchString(s) {
-			legalPackages.Pip = append(legalPackages.Pip, s)
-		}
-	}
-	return legalPackages
-}
-
 func generateDockerfile(imageSpecJob v1alpha1.ImageSpecJob) string {
 	spec := imageSpecJob.Spec.DeepCopy()
 	spec.Packages = filterIllegalPackages(spec.Packages)
@@ -196,6 +182,27 @@ RUN pip install --no-cache-dir
 	_ = tmpl.Execute(&res, spec)
 
 	return res.String()
+}
+
+func filterIllegalPackages(packages v1alpha1.ImageSpecSpecPackages) v1alpha1.ImageSpecSpecPackages {
+	re := regexp.MustCompile(`^[a-zA-Z0-9-_:=\.]+$`)
+	legalPackages := v1alpha1.ImageSpecSpecPackages{}
+	for _, s := range packages.Apt {
+		if re.MatchString(s) {
+			legalPackages.Apt = append(legalPackages.Apt, s)
+		}
+	}
+	for _, s := range packages.Conda {
+		if re.MatchString(s) {
+			legalPackages.Conda = append(legalPackages.Conda, s)
+		}
+	}
+	for _, s := range packages.Pip {
+		if re.MatchString(s) {
+			legalPackages.Pip = append(legalPackages.Pip, s)
+		}
+	}
+	return legalPackages
 }
 
 func (r *ImageSpecJobReconciler) buildPod(imageSpecJob v1alpha1.ImageSpecJob, podName string, dockerfile string) *corev1.Pod {
@@ -320,4 +327,11 @@ func (r *ImageSpecJobReconciler) buildPod(imageSpecJob v1alpha1.ImageSpecJob, po
 	}
 
 	return &pod
+}
+
+// SetupWithManager sets up the controller with the Manager.
+func (r *ImageSpecJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&v1alpha1.ImageSpecJob{}).
+		Complete(r)
 }
