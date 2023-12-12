@@ -19,20 +19,24 @@ package controllers
 import (
 	"context"
 	"encoding/json"
-	"github.com/go-logr/logr"
-	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"fmt"
 	phcache "primehub-controller/pkg/cache"
+	"primehub-controller/pkg/email"
 	"primehub-controller/pkg/escapism"
 	"primehub-controller/pkg/graphql"
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	primehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
+
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/runtime"
-	primehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -48,6 +52,8 @@ type PhJobReconciler struct {
 	Log                            logr.Logger
 	Scheme                         *runtime.Scheme
 	GraphqlClient                  graphql.AbstractGraphqlClient
+	EmailClient                    *email.EmailClient
+	SmtpEnabled                    bool
 	WorkingDirSize                 resource.Quantity
 	DefaultActiveDeadlineSeconds   int64
 	DefaultTTLSecondsAfterFinished int32
@@ -550,6 +556,9 @@ func (r *PhJobReconciler) updateStatus(
 		phJob.Status.Reason = primehubv1alpha1.JobReasonPodSucceeded
 		phJob.Status.Message = "Job completed"
 		r.GraphqlClient.NotifyPhJobEvent(phJob.Name, string(phJob.Status.Phase))
+		if r.SmtpEnabled {
+			r.notifyUser(phJob)
+		}
 	}
 
 	if pod.Status.Phase == corev1.PodFailed {
@@ -563,6 +572,9 @@ func (r *PhJobReconciler) updateStatus(
 			phJob.Status.Message = "Job failed due to " + pod.Status.ContainerStatuses[0].State.Terminated.Reason + ": " + pod.Status.ContainerStatuses[0].State.Terminated.Message
 		}
 		r.GraphqlClient.NotifyPhJobEvent(phJob.Name, string(phJob.Status.Phase))
+		if r.SmtpEnabled {
+			r.notifyUser(phJob)
+		}
 	}
 
 	if pod.Status.Phase == corev1.PodUnknown {
@@ -576,6 +588,9 @@ func (r *PhJobReconciler) updateStatus(
 			phJob.Status.Message = "[" + pod.Status.Conditions[0].Reason + "] " + pod.Status.Conditions[0].Message
 		}
 		r.GraphqlClient.NotifyPhJobEvent(phJob.Name, string(phJob.Status.Phase))
+		if r.SmtpEnabled {
+			r.notifyUser(phJob)
+		}
 	}
 
 	if pod.Status.Phase == corev1.PodPending {
@@ -723,6 +738,38 @@ func (r *PhJobReconciler) deletePod(ctx context.Context, podkey client.ObjectKey
 		return err
 	}
 	return nil
+}
+
+func (r *PhJobReconciler) notifyUser(phJob *primehubv1alpha1.PhJob) {
+	log := r.Log.WithValues("phjob", phJob.Namespace)
+
+	var email string
+	var err error
+	if email, err = r.GraphqlClient.FetchEmailByUserId(phJob.Spec.UserId); err != nil {
+		log.Error(err, "Failed to fetch user by id")
+		return
+	}
+
+	subject := fmt.Sprintf("PrimeHub Job %s", phJob.Status.Phase)
+	bodyTemplate := `Job Name: %s
+Display Name: %s
+User Name: %s
+Group Name: %s
+Phase: %s
+Reason: %s
+Message:
+%s`
+	body := fmt.Sprintf(bodyTemplate,
+		phJob.ObjectMeta.Name, phJob.Spec.DisplayName,
+		phJob.Spec.UserName, phJob.Spec.GroupName,
+		phJob.Status.Phase, phJob.Status.Reason, phJob.Status.Message)
+
+	if err = r.EmailClient.SendEmail(email, subject, body); err != nil {
+		log.Error(err, "Failed to send email")
+		return
+	}
+
+	log.Info("Email sent successfully!")
 }
 
 func inFinalPhase(phase primehubv1alpha1.PhJobPhase) bool {

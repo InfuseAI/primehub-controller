@@ -19,31 +19,34 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
+	eecontrollers "primehub-controller/ee/controllers"
+	phcache "primehub-controller/pkg/cache"
+	"primehub-controller/pkg/email"
+	"primehub-controller/pkg/graphql"
+	"strings"
+	"time"
+
 	"github.com/spf13/viper"
 	"go.uber.org/zap/zapcore"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"os"
-	eecontrollers "primehub-controller/ee/controllers"
-	phcache "primehub-controller/pkg/cache"
-	"primehub-controller/pkg/graphql"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"strings"
-	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	primehubv1alpha1 "primehub-controller/api/v1alpha1"
+	"primehub-controller/controllers"
+	eeprimehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
+
 	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	primehubv1alpha1 "primehub-controller/api/v1alpha1"
-	"primehub-controller/controllers"
-	eeprimehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 
@@ -161,6 +164,15 @@ func main() {
 		viper.GetString("graphqlEndpoint"),
 		viper.GetString("graphqlSecret"))
 
+	emailClient := email.NewEmailClient(
+		viper.GetString("jobSubmission.smtp.host"),
+		viper.GetString("jobSubmission.smtp.port"),
+		viper.GetString("jobSubmission.smtp.from"),
+		viper.GetString("jobSubmission.smtp.fromDisplayName"),
+		viper.GetString("jobSubmission.smtp.username"),
+		viper.GetString("jobSubmission.smtp.password"))
+	jobSmtpEnabled := viper.GetBool("jobSubmission.smtp.enabled")
+
 	primehubCache := phcache.NewPrimeHubCache(graphqlClient)
 	nodeSelector := viper.GetStringMapString("jobSubmission.nodeSelector")
 
@@ -204,6 +216,8 @@ func main() {
 		Log:                            ctrl.Log.WithName("controllers").WithName("PhJob"),
 		Scheme:                         mgr.GetScheme(),
 		GraphqlClient:                  graphqlClient,
+		EmailClient:                    emailClient,
+		SmtpEnabled:                    jobSmtpEnabled,
 		WorkingDirSize:                 resource.MustParse(viper.GetString("jobSubmission.workingDirSize")),
 		DefaultActiveDeadlineSeconds:   viper.GetInt64("jobSubmission.defaultActiveDeadlineSeconds"),
 		DefaultTTLSecondsAfterFinished: viper.GetInt32("jobSubmission.defaultTTLSecondsAfterFinished"),
