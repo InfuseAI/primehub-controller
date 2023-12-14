@@ -19,15 +19,16 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"primehub-controller/api/v1alpha1"
+	"time"
+
 	"github.com/go-logr/logr"
 	"github.com/spf13/viper"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"primehub-controller/api/v1alpha1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"time"
 )
 
 // ImageReconciler reconciles a Image object
@@ -96,12 +97,12 @@ func getImageSpecJobName(image *v1alpha1.Image) string {
 	if image.Spec.ImageSpec.BaseImage == "" {
 		return ""
 	}
-	return image.Name
+	return image.ObjectMeta.Name
 }
 
 func createImageSpecJob(r *ImageReconciler, ctx context.Context, image *v1alpha1.Image) error {
 	if !isImageCustomBuild(image) {
-		return fmt.Errorf("creiateImageSpecJob do not provide correct image")
+		return fmt.Errorf("createImageSpecJob do not provide correct image")
 	}
 
 	pushSecretName := viper.GetString("customImage.pushSecretName")
