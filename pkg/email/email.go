@@ -6,27 +6,41 @@ import (
 )
 
 type EmailClient struct {
-	smtpHost        string
-	smtpPort        string
-	from            string
-	fromDisplayName string
-	username        string
-	password        string
+	smtpHost           string
+	smtpPort           string
+	from               string
+	fromDisplayName    string
+	replyTo            string
+	replyToDisplayName string
+	username           string
+	password           string
 }
 
-func NewEmailClient(smtpHost, smtpPort, from, fromDisplayName, username, password string) (ec *EmailClient) {
+func NewEmailClient(smtpHost, smtpPort, from, fromDisplayName, replyTo, replyToDisplayName, username, password string) (ec *EmailClient) {
 	return &EmailClient{
-		smtpHost:        smtpHost,
-		smtpPort:        smtpPort,
-		from:            from,
-		fromDisplayName: fromDisplayName,
-		username:        username,
-		password:        password,
+		smtpHost:           smtpHost,
+		smtpPort:           smtpPort,
+		from:               from,
+		fromDisplayName:    fromDisplayName,
+		replyTo:            replyTo,
+		replyToDisplayName: replyToDisplayName,
+		username:           username,
+		password:           password,
 	}
 }
 
 func (ec *EmailClient) SendEmail(to, subject, body string) error {
+	var replyTo string
+	if ec.replyTo != "" {
+		if ec.replyToDisplayName != "" {
+			replyTo = "Reply-To: " + ec.replyToDisplayName + " <" + ec.replyTo + ">\r\n"
+		} else {
+			replyTo = "Reply-To: " + ec.replyTo + "\r\n"
+		}
+	}
+
 	message := []byte("From: " + ec.fromDisplayName + " <" + ec.from + ">\r\n" +
+		replyTo +
 		"To: " + to + "\r\n" +
 		"Subject: " + subject + "\r\n" +
 		"\r\n" +

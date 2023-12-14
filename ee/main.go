@@ -169,6 +169,8 @@ func main() {
 		viper.GetString("jobSubmission.smtp.port"),
 		viper.GetString("jobSubmission.smtp.from"),
 		viper.GetString("jobSubmission.smtp.fromDisplayName"),
+		viper.GetString("jobSubmission.smtp.replyTo"),
+		viper.GetString("jobSubmission.smtp.replyToDisplayName"),
 		viper.GetString("jobSubmission.smtp.username"),
 		viper.GetString("jobSubmission.smtp.password"))
 	jobSmtpEnabled := viper.GetBool("jobSubmission.smtp.enabled")
