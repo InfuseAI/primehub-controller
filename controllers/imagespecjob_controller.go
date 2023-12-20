@@ -20,6 +20,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"primehub-controller/api/v1alpha1"
+	"primehub-controller/pkg/random"
+	"regexp"
+	"text/template"
+	"time"
+
 	"github.com/go-logr/logr"
 	"github.com/spf13/viper"
 	corev1 "k8s.io/api/core/v1"
@@ -27,12 +33,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"primehub-controller/api/v1alpha1"
-	"primehub-controller/pkg/random"
-	"regexp"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"text/template"
 )
 
 // ImageSpecJobReconciler reconciles a ImageSpecJob object
@@ -82,11 +84,6 @@ func (r *ImageSpecJobReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			return ctrl.Result{}, err
 		}
 		podName = "image-" + imageSpecJobClone.ObjectMeta.Name + "-" + hash
-		imageSpecJobClone.Status.PodName = podName
-		if err := r.Status().Update(ctx, imageSpecJobClone); err != nil {
-			log.Error(err, "failed to update ImageSpecJob status")
-			return ctrl.Result{}, err
-		}
 	}
 
 	pod := corev1.Pod{}
@@ -114,7 +111,14 @@ func (r *ImageSpecJobReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 
 		log.Info("created Pod resource for ImageSpecJob")
-		return ctrl.Result{}, nil
+
+		imageSpecJobClone.Status.PodName = podName
+		if err := r.Status().Update(ctx, imageSpecJobClone); err != nil {
+			log.Error(err, "failed to update ImageSpecJob status")
+			return ctrl.Result{}, err
+		}
+
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	if err != nil {
@@ -142,7 +146,7 @@ func (r *ImageSpecJobReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	log.Info("resource status synced")
 
-	return ctrl.Result{}, nil
+	return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 }
 
 func generateDockerfile(imageSpecJob v1alpha1.ImageSpecJob) string {
