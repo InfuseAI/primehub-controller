@@ -435,16 +435,10 @@ func (r *PhJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		log.Info("phJob has finished, reconcile it after ttl.", "ttlDuration", ttlDuration)
 		return ctrl.Result{RequeueAfter: ttlDuration}, nil
 	} else if phJob.Status.StartTime != nil && *phJob.Spec.ActiveDeadlineSeconds != int64(0) { // Job in Running
-		//activeDeadlineSeconds := time.Second * time.Duration(*phJob.Spec.ActiveDeadlineSeconds)
-		//next := phJob.Status.StartTime.Add(activeDeadlineSeconds).Sub(time.Now())
-		//log.Info("phJob is still running, reconcile it after for active deadline", "next", next)
-
-		// NOTE: we disable the long requeue after upgrade for 1.24
-
-		// There is no other way to make a running job switch to the next phase in this execution branch,
-		// so we need the frequent checking the state for the running job.
-		log.Info("phJob is still running, reconcile it after next-check", "next", nextCheck)
-		return ctrl.Result{RequeueAfter: nextCheck}, nil
+		activeDeadlineSeconds := time.Second * time.Duration(*phJob.Spec.ActiveDeadlineSeconds)
+		next := phJob.Status.StartTime.Add(activeDeadlineSeconds).Sub(time.Now())
+		log.Info("phJob is still running, reconcile it after for active deadline", "next", next)
+		return ctrl.Result{RequeueAfter: next}, nil
 	}
 
 	return ctrl.Result{RequeueAfter: nextCheck}, nil
@@ -454,6 +448,7 @@ func (r *PhJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 func (r *PhJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&primehubv1alpha1.PhJob{}).
+		Owns(&corev1.Pod{}).
 		Complete(r)
 }
 
