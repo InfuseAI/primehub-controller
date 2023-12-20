@@ -22,6 +22,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
+	primehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
+	"primehub-controller/pkg/airgap"
+	"primehub-controller/pkg/escapism"
+	"primehub-controller/pkg/graphql"
+	"reflect"
+	"regexp"
+	"sort"
+	"strings"
+	"time"
+
 	"github.com/go-logr/logr"
 	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -32,18 +43,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"math"
-	primehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
-	"primehub-controller/pkg/airgap"
-	"primehub-controller/pkg/escapism"
-	"primehub-controller/pkg/graphql"
-	"reflect"
-	"regexp"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sort"
-	"strings"
-	"time"
 )
 
 // PhDeploymentReconciler reconciles a PhDeployment object
@@ -523,8 +524,10 @@ func (r *PhDeploymentReconciler) updateStatus(phDeployment *primehubv1alpha1.PhD
 		// - because request exceeds quota and is denied by admission webhook
 		for _, c := range deployment.Status.Conditions {
 			if c.Type == v1.DeploymentReplicaFailure && c.Status == corev1.ConditionTrue && c.Reason == "FailedCreate" {
-				phDeployment.Status.Message = strings.Split(c.Message, "denied the request: ")[1]
-				return nil
+				if strings.Contains(c.Message, "denied the request: ") {
+					phDeployment.Status.Message = strings.Split(c.Message, "denied the request: ")[1]
+					return nil
+				}
 			}
 		}
 
@@ -1296,7 +1299,7 @@ func (r PhDeploymentReconciler) buildModelContainer(phDeployment *primehubv1alph
 	// build mode container
 	modelContainer := &corev1.Container{
 		Name:  "model",
-		Image: phDeployment.Spec.Predictors[0].ModelImage,
+		Image: strings.TrimSpace(phDeployment.Spec.Predictors[0].ModelImage),
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler:        corev1.ProbeHandler{TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromString("http")}},
 			InitialDelaySeconds: 20,
