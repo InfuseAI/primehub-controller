@@ -746,18 +746,26 @@ func (r *PhJobReconciler) notifyUser(phJob *primehubv1alpha1.PhJob) {
 	}
 
 	subject := fmt.Sprintf("PrimeHub Job %s", phJob.Status.Phase)
-	bodyTemplate := `Job Name: %s
-Display Name: %s
-User Name: %s
-Group Name: %s
-Phase: %s
-Reason: %s
+	bodyTemplate := `Hey %s,
+
+Your job '%s' %s!
+
 Message:
-%s`
-	body := fmt.Sprintf(bodyTemplate,
+%s
+
+Job ID: %s
+Job Name: %s
+Start Time: %s
+Finish Time: %s
+Group: %s`
+
+	timeFormat := "2006-01-02 15:04:05"
+	body := fmt.Sprintf(bodyTemplate, phJob.Spec.UserName,
+		phJob.Spec.DisplayName, strings.ToLower(string(phJob.Status.Phase)),
+		phJob.Status.Message,
 		phJob.ObjectMeta.Name, phJob.Spec.DisplayName,
-		phJob.Spec.UserName, phJob.Spec.GroupName,
-		phJob.Status.Phase, phJob.Status.Reason, phJob.Status.Message)
+		phJob.Status.StartTime.Format(timeFormat), phJob.Status.FinishTime.Format(timeFormat),
+		phJob.Spec.GroupName)
 
 	if err = r.EmailClient.SendEmail(email, subject, body); err != nil {
 		log.Error(err, "Failed to send email")
