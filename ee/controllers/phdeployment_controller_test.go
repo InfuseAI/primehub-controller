@@ -785,6 +785,10 @@ func (FakeGraphQLForModelContainer) FetchByUserId(s string) (*graphql.DtoResult,
 	}, nil
 }
 
+func (FakeGraphQLForModelContainer) FetchEmailByUserId(s string) (string, error) {
+	return "test@example.com", nil
+}
+
 func (FakeGraphQLForModelContainer) QueryServer(m map[string]interface{}) ([]byte, error) {
 	panic("implement me")
 }
