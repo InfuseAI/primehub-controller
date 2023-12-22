@@ -19,20 +19,24 @@ package controllers
 import (
 	"context"
 	"encoding/json"
-	"github.com/go-logr/logr"
-	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"fmt"
 	phcache "primehub-controller/pkg/cache"
+	"primehub-controller/pkg/email"
 	"primehub-controller/pkg/escapism"
 	"primehub-controller/pkg/graphql"
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	primehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
+
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/runtime"
-	primehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -48,6 +52,8 @@ type PhJobReconciler struct {
 	Log                            logr.Logger
 	Scheme                         *runtime.Scheme
 	GraphqlClient                  graphql.AbstractGraphqlClient
+	EmailClient                    *email.EmailClient
+	SmtpEnabled                    bool
 	WorkingDirSize                 resource.Quantity
 	DefaultActiveDeadlineSeconds   int64
 	DefaultTTLSecondsAfterFinished int32
@@ -429,16 +435,10 @@ func (r *PhJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		log.Info("phJob has finished, reconcile it after ttl.", "ttlDuration", ttlDuration)
 		return ctrl.Result{RequeueAfter: ttlDuration}, nil
 	} else if phJob.Status.StartTime != nil && *phJob.Spec.ActiveDeadlineSeconds != int64(0) { // Job in Running
-		//activeDeadlineSeconds := time.Second * time.Duration(*phJob.Spec.ActiveDeadlineSeconds)
-		//next := phJob.Status.StartTime.Add(activeDeadlineSeconds).Sub(time.Now())
-		//log.Info("phJob is still running, reconcile it after for active deadline", "next", next)
-
-		// NOTE: we disable the long requeue after upgrade for 1.24
-
-		// There is no other way to make a running job switch to the next phase in this execution branch,
-		// so we need the frequent checking the state for the running job.
-		log.Info("phJob is still running, reconcile it after next-check", "next", nextCheck)
-		return ctrl.Result{RequeueAfter: nextCheck}, nil
+		activeDeadlineSeconds := time.Second * time.Duration(*phJob.Spec.ActiveDeadlineSeconds)
+		next := phJob.Status.StartTime.Add(activeDeadlineSeconds).Sub(time.Now())
+		log.Info("phJob is still running, reconcile it after for active deadline", "next", next)
+		return ctrl.Result{RequeueAfter: next}, nil
 	}
 
 	return ctrl.Result{RequeueAfter: nextCheck}, nil
@@ -448,6 +448,7 @@ func (r *PhJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 func (r *PhJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&primehubv1alpha1.PhJob{}).
+		Owns(&corev1.Pod{}).
 		Complete(r)
 }
 
@@ -550,6 +551,9 @@ func (r *PhJobReconciler) updateStatus(
 		phJob.Status.Reason = primehubv1alpha1.JobReasonPodSucceeded
 		phJob.Status.Message = "Job completed"
 		r.GraphqlClient.NotifyPhJobEvent(phJob.Name, string(phJob.Status.Phase))
+		if r.SmtpEnabled {
+			r.notifyUser(phJob)
+		}
 	}
 
 	if pod.Status.Phase == corev1.PodFailed {
@@ -563,6 +567,9 @@ func (r *PhJobReconciler) updateStatus(
 			phJob.Status.Message = "Job failed due to " + pod.Status.ContainerStatuses[0].State.Terminated.Reason + ": " + pod.Status.ContainerStatuses[0].State.Terminated.Message
 		}
 		r.GraphqlClient.NotifyPhJobEvent(phJob.Name, string(phJob.Status.Phase))
+		if r.SmtpEnabled {
+			r.notifyUser(phJob)
+		}
 	}
 
 	if pod.Status.Phase == corev1.PodUnknown {
@@ -576,6 +583,9 @@ func (r *PhJobReconciler) updateStatus(
 			phJob.Status.Message = "[" + pod.Status.Conditions[0].Reason + "] " + pod.Status.Conditions[0].Message
 		}
 		r.GraphqlClient.NotifyPhJobEvent(phJob.Name, string(phJob.Status.Phase))
+		if r.SmtpEnabled {
+			r.notifyUser(phJob)
+		}
 	}
 
 	if pod.Status.Phase == corev1.PodPending {
@@ -723,6 +733,46 @@ func (r *PhJobReconciler) deletePod(ctx context.Context, podkey client.ObjectKey
 		return err
 	}
 	return nil
+}
+
+func (r *PhJobReconciler) notifyUser(phJob *primehubv1alpha1.PhJob) {
+	log := r.Log.WithValues("phjob", phJob.Namespace)
+
+	var email string
+	var err error
+	if email, err = r.GraphqlClient.FetchEmailByUserId(phJob.Spec.UserId); err != nil {
+		log.Error(err, "Failed to fetch user by id")
+		return
+	}
+
+	subject := fmt.Sprintf("PrimeHub Job %s", phJob.Status.Phase)
+	bodyTemplate := `Hey %s,
+
+Your job '%s' %s!
+
+Message:
+%s
+
+Job ID: %s
+Job Name: %s
+Start Time: %s
+Finish Time: %s
+Group: %s`
+
+	timeFormat := "2006-01-02 15:04:05"
+	body := fmt.Sprintf(bodyTemplate, phJob.Spec.UserName,
+		phJob.Spec.DisplayName, strings.ToLower(string(phJob.Status.Phase)),
+		phJob.Status.Message,
+		phJob.ObjectMeta.Name, phJob.Spec.DisplayName,
+		phJob.Status.StartTime.Format(timeFormat), phJob.Status.FinishTime.Format(timeFormat),
+		phJob.Spec.GroupName)
+
+	if err = r.EmailClient.SendEmail(email, subject, body); err != nil {
+		log.Error(err, "Failed to send email")
+		return
+	}
+
+	log.Info("Email sent successfully!")
 }
 
 func inFinalPhase(phase primehubv1alpha1.PhJobPhase) bool {
