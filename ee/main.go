@@ -7,10 +7,12 @@ import (
 	primehubv1alpha1 "primehub-controller/api/v1alpha1"
 	"primehub-controller/controllers"
 	phcache "primehub-controller/pkg/cache"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"strings"
 
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+
 	eeprimehubv1alpha1 "primehub-controller/ee/api/v1alpha1"
+	"primehub-controller/pkg/email"
 	"primehub-controller/pkg/graphql"
 	"time"
 
@@ -122,6 +124,17 @@ func main() {
 		viper.GetString("graphqlEndpoint"),
 		viper.GetString("graphqlSecret"))
 
+	emailClient := email.NewEmailClient(
+		viper.GetString("jobSubmission.smtp.host"),
+		viper.GetString("jobSubmission.smtp.port"),
+		viper.GetString("jobSubmission.smtp.from"),
+		viper.GetString("jobSubmission.smtp.fromDisplayName"),
+		viper.GetString("jobSubmission.smtp.replyTo"),
+		viper.GetString("jobSubmission.smtp.replyToDisplayName"),
+		viper.GetString("jobSubmission.smtp.username"),
+		viper.GetString("jobSubmission.smtp.password"))
+	jobSmtpEnabled := viper.GetBool("jobSubmission.smtp.enabled")
+
 	primehubCache := phcache.NewPrimeHubCache(graphqlClient)
 
 	nodeSelector := viper.GetStringMapString("jobSubmission.nodeSelector")
@@ -166,6 +179,8 @@ func main() {
 		Log:                            ctrl.Log.WithName("controllers").WithName("PhJob"),
 		Scheme:                         mgr.GetScheme(),
 		GraphqlClient:                  graphqlClient,
+		EmailClient:                    emailClient,
+		SmtpEnabled:                    jobSmtpEnabled,
 		WorkingDirSize:                 resource.MustParse(viper.GetString("jobSubmission.workingDirSize")),
 		DefaultActiveDeadlineSeconds:   viper.GetInt64("jobSubmission.defaultActiveDeadlineSeconds"),
 		DefaultTTLSecondsAfterFinished: viper.GetInt32("jobSubmission.defaultTTLSecondsAfterFinished"),

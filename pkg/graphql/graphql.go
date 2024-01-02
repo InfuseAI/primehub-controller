@@ -47,6 +47,7 @@ type DtoUser struct {
 	Username       string
 	IsAdmin        bool
 	VolumeCapacity string
+	Email          string
 	Groups         []DtoGroup
 }
 
@@ -158,6 +159,7 @@ type DtoDatasetSpecPv struct {
 
 type AbstractGraphqlClient interface {
 	FetchByUserId(string) (*DtoResult, error)
+	FetchEmailByUserId(string) (string, error)
 	QueryServer(map[string]interface{}) ([]byte, error)
 	FetchGroupEnableModelDeployment(string) (bool, error)
 	FetchGroupInfo(string) (*DtoGroup, error)
@@ -244,6 +246,54 @@ func (c GraphqlClient) FetchByUserId(userId string) (*DtoResult, error) {
 	}
 
 	return &result, nil
+}
+
+func (c GraphqlClient) FetchEmailByUserId(userId string) (string, error) {
+	query := `
+	query ($id: ID!) {
+		user (where: { id: $id  }) { id username email }
+	}
+	`
+
+	requestData := map[string]interface{}{
+		"query": query,
+		"variables": map[string]interface{}{
+			"id": userId,
+		},
+	}
+
+	requestJson, _ := json.Marshal(requestData)
+
+	request, err := http.NewRequest(http.MethodPost, c.graphqlEndpoint, strings.NewReader(string(requestJson)))
+	if err != nil {
+		return "", err
+	}
+
+	request.Header.Add("Content-Type", "application/json")
+	request.Header.Add("Authorization", "Bearer "+c.graphqlSecret)
+	client := &http.Client{}
+	response, err := client.Do(request)
+	if err != nil {
+		return "", err
+	}
+
+	if response.StatusCode != 200 {
+		return "", errors.New("graphql query failed: " + response.Status)
+	}
+
+	defer response.Body.Close()
+	body, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		return "", err
+	}
+	var result DtoResult
+	json.Unmarshal(body, &result)
+
+	if result.Data.User.Id == "" {
+		return "", errors.New("User not found")
+	}
+
+	return result.Data.User.Email, nil
 }
 
 func (c GraphqlClient) QueryServer(requestData map[string]interface{}) ([]byte, error) {
