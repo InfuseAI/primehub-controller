@@ -174,7 +174,7 @@ func NewSpawnerForModelDeployment(data DtoData, groupName string, instanceTypeNa
 	}
 
 	spawner.applyResourceForInstanceType(instanceType)
-	spawner.image = imageUrl
+	spawner.image = strings.TrimSpace(imageUrl)
 
 	spawner.container.Name = "model"
 

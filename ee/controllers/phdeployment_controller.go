@@ -513,8 +513,10 @@ func (r *PhDeploymentReconciler) updateStatus(phDeployment *primehubv1alpha1.PhD
 		// - because request exceeds quota and is denied by admission webhook
 		for _, c := range deployment.Status.Conditions {
 			if c.Type == v1.DeploymentReplicaFailure && c.Status == corev1.ConditionTrue && c.Reason == "FailedCreate" {
-				phDeployment.Status.Message = strings.Split(c.Message, "denied the request: ")[1]
-				return nil
+				if strings.Contains(c.Message, "denied the request: ") {
+					phDeployment.Status.Message = strings.Split(c.Message, "denied the request: ")[1]
+					return nil
+				}
 			}
 		}
 
@@ -1286,7 +1288,7 @@ func (r PhDeploymentReconciler) buildModelContainer(phDeployment *primehubv1alph
 	// build mode container
 	modelContainer := &corev1.Container{
 		Name:  "model",
-		Image: phDeployment.Spec.Predictors[0].ModelImage,
+		Image: strings.TrimSpace(phDeployment.Spec.Predictors[0].ModelImage),
 		ReadinessProbe: &corev1.Probe{
 			Handler:             corev1.Handler{TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromString("http")}},
 			InitialDelaySeconds: 20,
