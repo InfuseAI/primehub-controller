@@ -1,6 +1,6 @@
 module primehub-controller/ee
 
-go 1.18
+go 1.21
 
 require (
 	github.com/fatih/structtag v1.2.0

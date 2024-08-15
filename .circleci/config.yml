@@ -5,7 +5,7 @@ jobs:
   unit_test_ce:
     docker: # run the steps with Docker
       # CircleCI Go images available at: https://hub.docker.com/r/circleci/golang/
-      - image: cimg/go:1.19.3
+      - image: cimg/go:1.21.13
     steps:
       - checkout
       - run:
@@ -40,7 +40,7 @@ jobs:
     working_directory: ~/primehub-controller/ee
     docker: # run the steps with Docker
       # CircleCI Go images available at: https://hub.docker.com/r/circleci/golang/
-      - image: cimg/go:1.19.3
+      - image: cimg/go:1.21.13
     steps:
       - checkout:
           path: ~/primehub-controller
@@ -78,7 +78,7 @@ jobs:
   build_ce:
     docker: # run the steps with Docker
       # CircleCI Go images available at: https://hub.docker.com/r/circleci/golang/
-      - image: cimg/go:1.19.3
+      - image: cimg/go:1.21.13
     steps:
       - checkout
       - run:
@@ -149,7 +149,7 @@ jobs:
   build_ee:
     docker: # run the steps with Docker
       # CircleCI Go images available at: https://hub.docker.com/r/circleci/golang/
-      - image: cimg/go:1.19.3
+      - image: cimg/go:1.21.13
     steps:
       - checkout
       - run:
