@@ -1725,7 +1725,7 @@ func GetLastApplied(obj metav1.Object) (*primehubv1alpha1.PhDeploymentSpec, erro
 //		Complete(r)
 //}
 
-func getGpuFromLimits(limits corev1.ResourceList) (corev1.resourceName, resource.Quantity, bool) {
+func getGpuFromLimits(limits corev1.ResourceList) (corev1.ResourceName, resource.Quantity, bool) {
 	if _, ok := limits["nvidia.com/gpu"]; ok {
 		return "nvidia.com/gpu", limits["nvidia.com/gpu"], ok
 	}
