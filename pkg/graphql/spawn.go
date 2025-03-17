@@ -52,14 +52,15 @@ type Spawner struct {
 	Affinity           corev1.Affinity
 
 	// main container: resources requests and limits for
-	requestsCpu    resource.Quantity
-	limitsCpu      resource.Quantity
-	requestsMemory resource.Quantity
-	limitsMemory   resource.Quantity
-	requestsGpu    resource.Quantity
-	limitsGpu      resource.Quantity
-	container      corev1.Container // main container
-	initContainer  corev1.Container // init container
+	requestsCpu     resource.Quantity
+	limitsCpu       resource.Quantity
+	requestsMemory  resource.Quantity
+	limitsMemory    resource.Quantity
+	requestsGpu     resource.Quantity
+	limitsGpu       resource.Quantity
+	gpuResourceName corev1.ResourceName
+	container       corev1.Container // main container
+	initContainer   corev1.Container // init container
 }
 
 type ContainerResource struct {
@@ -76,7 +77,7 @@ type ContainerResourceType string
 const (
 	RESOURCE_CPU ContainerResourceType = "cpu"
 	RESOURCE_MEM ContainerResourceType = "memory"
-	RESOURCE_GPU ContainerResourceType = "nvidia.com/gpu"
+	RESOURCE_GPU ContainerResourceType = "gpu"
 )
 
 // Set spanwer by graphql response data
@@ -788,6 +789,10 @@ func (spawner *Spawner) applyResourceForInstanceType(instanceType DtoInstanceTyp
 		spawner.limitsGpu.Set(int64(instanceType.Spec.LimitsGpu))
 	}
 
+	if instanceType.Spec.GpuResourceName != "" {
+		spawner.gpuResourceName = instanceType.Spec.GpuResourceName
+	}
+
 	if instanceType.Spec.RequestsMemory != "" {
 		quantity, e := resource.ParseQuantity(ConvertMemoryUnit(instanceType.Spec.RequestsMemory))
 		if e == nil {
@@ -930,8 +935,8 @@ func (spawner *Spawner) configContainerResource(container *corev1.Container, res
 		}
 	case RESOURCE_GPU:
 		// we never set GPU to the Requests
-		if !spawner.limitsGpu.IsZero() {
-			container.Resources.Limits["nvidia.com/gpu"] = spawner.limitsGpu
+		if !spawner.limitsGpu.IsZero() && (spawner.gpuResourceName != "") {
+			container.Resources.Limits[spawner.gpuResourceName] = spawner.limitsGpu
 		}
 	}
 }
