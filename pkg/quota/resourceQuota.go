@@ -2,13 +2,14 @@ package quota
 
 import (
 	"context"
+	"primehub-controller/pkg/escapism"
+	"primehub-controller/pkg/graphql"
+	"strings"
+
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"primehub-controller/pkg/escapism"
-	"primehub-controller/pkg/graphql"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"strings"
 )
 
 type ResourceQuota struct {
@@ -81,8 +82,8 @@ func CurrentResourceUsage(cgo client.Client, namespace string, matchingLabels cl
 		if pod.Status.Phase == corev1.PodPending || pod.Status.Phase == corev1.PodRunning {
 			for _, container := range pod.Spec.Containers {
 				resourceUsage.Cpu.Add(*container.Resources.Limits.Cpu())
-				if _, ok := container.Resources.Limits["nvidia.com/gpu"]; ok {
-					resourceUsage.Gpu.Add(container.Resources.Limits["nvidia.com/gpu"])
+				if value, ok := getGpuFromLimits(container.Resources.Limits); ok {
+					resourceUsage.Gpu.Add(value)
 				}
 				resourceUsage.Memory.Add(*container.Resources.Limits.Memory())
 			}
@@ -193,4 +194,19 @@ func CalculateUserRemainingResourceQuota(cgo client.Client, namespace string, gr
 		userRemainingQuota.Memory.Sub(*userUsage.Memory)
 	}
 	return userRemainingQuota, nil
+}
+
+func getGpuFromLimits(limits corev1.ResourceList) (resource.Quantity, bool) {
+	if _, ok := limits["nvidia.com/gpu"]; ok {
+		return limits["nvidia.com/gpu"], ok
+	}
+	if _, ok := limits["amd.com/gpu"]; ok {
+		return limits["amd.com/gpu"], ok
+	}
+	for key, _ := range limits {
+		if strings.HasPrefix(string(key), "gpu.intel.com/") {
+			return limits[key], true
+		}
+	}
+	return resource.Quantity{}, false
 }

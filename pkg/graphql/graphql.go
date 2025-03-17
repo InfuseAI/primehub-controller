@@ -92,14 +92,15 @@ type DtoInstanceType struct {
 
 // https://gitlab.com/infuseai/canner-admin-ui/blob/master/packages/graphql-server/src/graphql/instanceType.graphql
 type DtoInstanceTypeSpec struct {
-	LimitsCpu      float32 `json:"limits.cpu"`
-	RequestsCpu    float32 `json:"requests.cpu"`
-	RequestsMemory string  `json:"requests.memory"`
-	LimitsMemory   string  `json:"limits.memory"`
-	RequestsGpu    int     `json:"requests.nvidia.com/gpu"`
-	LimitsGpu      int     `json:"limits.nvidia.com/gpu"`
-	NodeSelector   map[string]string
-	Tolerations    []corev1.Toleration
+	LimitsCpu       float32 `json:"limits.cpu"`
+	RequestsCpu     float32 `json:"requests.cpu"`
+	RequestsMemory  string  `json:"requests.memory"`
+	LimitsMemory    string  `json:"limits.memory"`
+	RequestsGpu     int     `json:"requests.gpu"`
+	LimitsGpu       int     `json:"limits.gpu"`
+	GpuResourceName string  `json:"gpuResourceName"`
+	NodeSelector    map[string]string
+	Tolerations     []corev1.Toleration
 }
 
 type DtoImage struct {
