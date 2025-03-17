@@ -790,7 +790,7 @@ func (spawner *Spawner) applyResourceForInstanceType(instanceType DtoInstanceTyp
 	}
 
 	if instanceType.Spec.GpuResourceName != "" {
-		spawner.gpuResourceName = instanceType.Spec.GpuResourceName
+		spawner.gpuResourceName = corev1.ResourceName(instanceType.Spec.GpuResourceName)
 	}
 
 	if instanceType.Spec.RequestsMemory != "" {
