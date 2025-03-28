@@ -78,7 +78,6 @@ type FailedPodStatus struct {
 
 const (
 	lastAppliedAnnotation       = "phdeployment.primehub.io/last-applied-configuration"
-	GPUResourceName             = "nvidia.com/gpu"
 	ModelStorageInitializerName = "model-storage-initializer"
 )
 
@@ -1095,8 +1094,9 @@ func (r *PhDeploymentReconciler) adjustResourcesToFitConstraint(engineContainer 
 		corev1.ResourceName(corev1.ResourceCPU):    *resource.NewMilliQuantity(modelCpu, resource.DecimalSI),
 		corev1.ResourceName(corev1.ResourceMemory): *resource.NewQuantity(modelMemory, resource.DecimalSI),
 	}
-	if value, ok := modelContainer.Resources.Limits[GPUResourceName]; ok {
-		modelResources[corev1.ResourceName(GPUResourceName)] = value
+
+	if name, value, ok := getGpuFromLimits(modelContainer.Resources.Limits); ok {
+		modelResources[corev1.ResourceName(name)] = value
 	}
 
 	engineContainer.Resources = corev1.ResourceRequirements{
@@ -1724,3 +1724,18 @@ func GetLastApplied(obj metav1.Object) (*primehubv1alpha1.PhDeploymentSpec, erro
 //		For(&primehubv1alpha1.PhDeployment{}).
 //		Complete(r)
 //}
+
+func getGpuFromLimits(limits corev1.ResourceList) (corev1.ResourceName, resource.Quantity, bool) {
+	if _, ok := limits["nvidia.com/gpu"]; ok {
+		return "nvidia.com/gpu", limits["nvidia.com/gpu"], ok
+	}
+	if _, ok := limits["amd.com/gpu"]; ok {
+		return "amd.com/gpu", limits["amd.com/gpu"], ok
+	}
+	for key, _ := range limits {
+		if strings.HasPrefix(string(key), "gpu.intel.com/") {
+			return key, limits[key], true
+		}
+	}
+	return "", resource.Quantity{}, false
+}
