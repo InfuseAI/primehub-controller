@@ -2,6 +2,11 @@ package controllers
 
 import (
 	"context"
+	"primehub-controller/api/v1alpha1"
+	phcache "primehub-controller/pkg/cache"
+	"primehub-controller/pkg/graphql"
+	"testing"
+
 	log "github.com/go-logr/logr/testing"
 	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -10,13 +15,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"primehub-controller/api/v1alpha1"
-	phcache "primehub-controller/pkg/cache"
-	"primehub-controller/pkg/graphql"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"testing"
 )
 
 func TestPhApplicationReconciler_Reconcile(t *testing.T) {
@@ -88,7 +89,7 @@ func TestPhApplicationReconciler_Reconcile(t *testing.T) {
 			HTTPPort: &httpPort,
 		},
 	}
-	fakeClient := fake.NewFakeClientWithScheme(scheme, []runtime.Object{phApplication}...)
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects([]runtime.Object{phApplication}...).Build()
 	primehubCache := phcache.NewPrimeHubCache(nil)
 	r := &PhApplicationReconciler{fakeClient, logger, scheme, primehubCache, false, "primehub-store", "http://example.primehub.io", ""}
 	req := controllerruntime.Request{

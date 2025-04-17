@@ -2,6 +2,11 @@ package controllers
 
 import (
 	"context"
+	"primehub-controller/api/v1alpha1"
+	"reflect"
+	"testing"
+	"time"
+
 	log "github.com/go-logr/logr/testing"
 	"github.com/spf13/viper"
 	v1 "k8s.io/api/apps/v1"
@@ -10,13 +15,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"primehub-controller/api/v1alpha1"
-	"reflect"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"testing"
-	"time"
 )
 
 func Test_createImageSpecJob(t *testing.T) {
@@ -272,7 +273,7 @@ func Test_rebuildImageSpecJob(t *testing.T) {
 		},
 	}
 
-	fakeClient := fake.NewFakeClientWithScheme(scheme, []runtime.Object{customImageSpecJob, customImage}...)
+	fakeClient := fake.NewClientBuilder().WithRuntimeObjects([]runtime.Object{customImageSpecJob, customImage}...).WithScheme(scheme).Build()
 
 	type args struct {
 		r            *ImageReconciler
