@@ -19,15 +19,17 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
+	phcache "primehub-controller/pkg/cache"
+	"primehub-controller/pkg/graphql"
+	"strings"
+
 	"github.com/spf13/viper"
 	"go.uber.org/zap/zapcore"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"os"
-	phcache "primehub-controller/pkg/cache"
-	"primehub-controller/pkg/graphql"
 	ctrlzap "sigs.k8s.io/controller-runtime/pkg/log/zap"
-	"strings"
+	ctrlmetricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -40,9 +42,10 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 
-	batchv1 "k8s.io/api/batch/v1"
 	primehubv1alpha1 "primehub-controller/api/v1alpha1"
 	"primehub-controller/controllers"
+
+	batchv1 "k8s.io/api/batch/v1"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -100,8 +103,7 @@ func main() {
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
-		MetricsBindAddress:     metricsAddr,
-		Port:                   9443,
+		Metrics:                ctrlmetricsserver.Options{BindAddress: metricsAddr},
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "8af5f5b6.io",

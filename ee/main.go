@@ -51,6 +51,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 
 	ctrlzap "sigs.k8s.io/controller-runtime/pkg/log/zap"
+	ctrlmetricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -112,8 +113,7 @@ func main() {
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
-		MetricsBindAddress:     metricsAddr,
-		Port:                   9443,
+		Metrics:                ctrlmetricsserver.Options{BindAddress: metricsAddr},
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "7cf7afed.io",

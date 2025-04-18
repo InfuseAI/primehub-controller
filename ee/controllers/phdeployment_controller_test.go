@@ -26,7 +26,7 @@ func TestConfigurationError(t *testing.T) {
 	_ = primehubv1alpha1.AddToScheme(scheme)
 	_ = v1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
-	fakeClient := fake.NewFakeClientWithScheme(scheme)
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	type fields struct {
 		Client                client.Client
@@ -176,7 +176,7 @@ func TestRuntimeError(t *testing.T) {
 	_ = primehubv1alpha1.AddToScheme(scheme)
 	_ = v1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
-	fakeClient := fake.NewFakeClientWithScheme(scheme)
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	type fields struct {
 		Client                client.Client
@@ -324,7 +324,7 @@ func TestQuotaNotEnough(t *testing.T) {
 	_ = primehubv1alpha1.AddToScheme(scheme)
 	_ = v1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
-	fakeClient := fake.NewFakeClientWithScheme(scheme)
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	type fields struct {
 		Client                client.Client
@@ -455,7 +455,7 @@ func TestPhDeploymentReconciler_reconcileSecret(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = primehubv1alpha1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
-	fakeClient := fake.NewFakeClientWithScheme(scheme)
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	phdeploymentPrivate := &primehubv1alpha1.PhDeployment{}
 	phdeploymentPrivate.Namespace = "Unit-Test"
@@ -561,7 +561,7 @@ func TestPhDeployment_BuildModelContainer(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = primehubv1alpha1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
-	fakeClient := fake.NewFakeClientWithScheme(scheme)
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	type fields struct {
 		Client                client.Client
