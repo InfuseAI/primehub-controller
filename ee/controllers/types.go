@@ -11,6 +11,7 @@ type PhIngress struct {
 	Annotations map[string]string
 	Hosts       []string
 	TLS         []networkv1.IngressTLS
+	ClassName   string
 }
 
 type PredictiveUnitType string

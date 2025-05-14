@@ -1536,6 +1536,7 @@ func (r *PhDeploymentReconciler) createIngress(ctx context.Context, phDeployment
 	annotations := r.Ingress.Annotations
 	hosts := r.Ingress.Hosts
 	ingressTLS := r.Ingress.TLS
+	className := r.Ingress.ClassName
 	pathTypeImplementationSpecific := networkv1.PathTypeImplementationSpecific
 
 	annotations["nginx.ingress.kubernetes.io/rewrite-target"] = "/$1"
@@ -1555,7 +1556,8 @@ func (r *PhDeploymentReconciler) createIngress(ctx context.Context, phDeployment
 			Annotations: annotations, // from config
 		},
 		Spec: networkv1.IngressSpec{
-			TLS: ingressTLS, // from config
+			IngressClassName: &className,
+			TLS:              ingressTLS, // from config
 			Rules: []networkv1.IngressRule{
 				{
 					Host: hosts[0], // from config
